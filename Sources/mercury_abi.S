@@ -69,6 +69,52 @@ _uhid_connected_services_description_abi:
     ldp x20, x30, [sp], #16
     ret
 
+.macro hid_static_getter_shim cname, swift_symbol
+.globl \cname
+.p2align 2
+\cname:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    mov x8, x0
+    bl \swift_symbol
+    ldp x29, x30, [sp], #16
+    ret
+.endmacro
+
+.macro hid_value_getter_shim cname, swift_symbol
+.globl \cname
+.p2align 2
+\cname:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    mov x8, x0
+    mov x0, x1
+    bl \swift_symbol
+    ldp x29, x30, [sp], #16
+    ret
+.endmacro
+
+hid_static_getter_shim _hid_service_id_main_touchscreen_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE15mainTouchscreenACvgZ
+hid_value_getter_shim _hid_service_id_touchscreen_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE11touchscreen07displayD0ACs6UInt32V_tFZ
+hid_static_getter_shim _hid_service_id_main_keyboard_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE12mainKeyboardACvgZ
+hid_value_getter_shim _hid_service_id_keyboard_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE8keyboard10identifierACs6UInt64V_tFZ
+hid_static_getter_shim _hid_service_id_main_pointer_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE11mainPointerACvgZ
+hid_value_getter_shim _hid_service_id_pointer_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE7pointer10identifierACs6UInt64V_tFZ
+hid_static_getter_shim _hid_service_id_main_screen_buttons_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE17mainScreenButtonsACvgZ
+hid_static_getter_shim _hid_service_id_touchscreen_gesture_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE18touchscreenGestureACvgZ
+hid_static_getter_shim _hid_service_id_digital_crown_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE12digitalCrownACvgZ
+hid_static_getter_shim _hid_service_id_dial_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE4dialACvgZ
+hid_static_getter_shim _hid_service_id_avp_custom_abi, _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE9avpCustomACvgZ
+
+.globl _hid_service_id_user_defined_base_abi
+.p2align 2
+_hid_service_id_user_defined_base_abi:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    bl _$s10CoreDevice12HIDServiceIDV0aB9UtilitiesE15userDefinedBases6UInt64VvgZ
+    ldp x29, x30, [sp], #16
+    ret
+
 .globl _coredevice_universalhid_send_dispatch_abi
 .p2align 2
 _coredevice_universalhid_send_dispatch_abi:

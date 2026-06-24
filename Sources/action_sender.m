@@ -38,6 +38,7 @@ extern int coredevice_send_hid_button_custom(xpc_remote_connection_t connection,
 extern int coredevice_send_hid_button_barrier(xpc_remote_connection_t connection) __attribute__((weak_import));
 extern int coredevice_send_hid_digitizer_cgpoint(xpc_remote_connection_t connection, double point_one_x, double point_one_y, double point_two_x, double point_two_y, uint64_t point_two_optional_tag, uint64_t event_type, uint64_t edge, uint64_t target_low, uint64_t target_high) __attribute__((weak_import));
 extern int coredevice_print_connected_services(xpc_remote_connection_t connection) __attribute__((weak_import));
+extern int coredevice_print_hid_service_ids(void) __attribute__((weak_import));
 extern int uhid_make_digitizer_report(double x, double y, int touching, int in_range, uint8_t *output, int output_capacity) __attribute__((weak_import));
 extern int uhid_make_digitizer_hid_report(double x, double y, int touching, int in_range, void *output) __attribute__((weak_import));
 extern int uhid_make_digitizer_swipe_hid_report(double x, double y, int touching, int in_range, int swipe_pending, int swipe_locked, int swipe_up, void *output) __attribute__((weak_import));
@@ -885,6 +886,15 @@ int main(int argc, const char *argv[]) {
 
     @autoreleasepool {
         add_coredevice_registration();
+
+        const char *early_kind = argc > 5 ? argv[5] : NULL;
+        if (early_kind && strcmp(early_kind, "cd_hid_service_ids") == 0) {
+            if (!coredevice_print_hid_service_ids) {
+                fprintf(stderr, "HID service ID printer is not linked\n");
+                exit(2);
+            }
+            return coredevice_print_hid_service_ids();
+        }
 
         dispatch_queue_t queue = dispatch_queue_create("action-sender", DISPATCH_QUEUE_SERIAL);
         xpc_connection_t conn = xpc_connection_create("com.apple.CoreDevice.CoreDeviceService", queue);

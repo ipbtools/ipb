@@ -74,7 +74,45 @@ The verified main touchscreen service is:
 mainTouchscreen(0x101)
 ```
 
-The CLI exposes this as `UHID_SERVICE_ID`, defaulting to `0x101`.
+The CLI exposes this as `UHID_SERVICE_ID`, defaulting to `0x101`. The value is now verified by calling CoreDeviceUtilities `HIDServiceID` static getters through an indirect-return ABI shim:
+
+```sh
+bin/devicehubctl service-ids
+```
+
+Observed output:
+
+```text
+mainTouchscreen              0x101 (257)
+touchscreen(displayID:1)     0x101 (257)
+touchscreen(displayID:2)     0x102 (258)
+touchscreenGesture           0x501 (1281)
+mainKeyboard                 0x200 (512)
+keyboard(identifier:1)       0x201 (513)
+mainPointer                  0x300 (768)
+pointer(identifier:1)        0x301 (769)
+mainScreenButtons            0x402 (1026)
+digitalCrown                 0x400 (1024)
+dial                         0x401 (1025)
+avpCustom                    0x500 (1280)
+userDefinedBase              0xff0000 (16711680)
+```
+
+Encoding inferred from disassembly and verified by the getters:
+
+| Kind | Encoding |
+| --- | --- |
+| Touchscreen display `n` | `0x100 + n` |
+| Keyboard identifier `n` | `0x200 + n` |
+| Pointer identifier `n` | `0x300 + n` |
+| Digital Crown | `0x400` |
+| Dial | `0x401` |
+| Main screen buttons | `0x402` |
+| AVP custom | `0x500` |
+| Touchscreen gesture | `0x501` |
+| User-defined base | `0xff0000` |
+
+The getter ABI is indirect for resilient Swift structs: the caller provides an output buffer in `x8`, and the getter writes the 64-bit id into that buffer.
 
 ## UniversalHID Requests
 

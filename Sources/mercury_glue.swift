@@ -21,6 +21,10 @@ struct UHIDRequestWords {
     var word3: UInt64 = 0
 }
 
+struct CoreDeviceHIDServiceIDWords {
+    var id: UInt64 = 0
+}
+
 var retainedCoreDeviceStrings: [String] = []
 
 @_silgen_name("$s7Mercury19RemoteXPCConnectionC10unsafePeer4fromAA17XPCPeerConnection_pSo24OS_xpc_remote_connectionC_tFZ")
@@ -71,6 +75,42 @@ func uhidRequestDescriptionABI(_ request: UnsafeRawPointer) -> String
 
 @_silgen_name("uhid_connected_services_description_abi")
 func uhidConnectedServicesDescriptionABI(_ connectedServices: UnsafeRawPointer) -> String
+
+@_silgen_name("hid_service_id_main_touchscreen_abi")
+func hidServiceIDMainTouchscreenABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>)
+
+@_silgen_name("hid_service_id_touchscreen_abi")
+func hidServiceIDTouchscreenABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>, _ displayID: UInt32)
+
+@_silgen_name("hid_service_id_main_keyboard_abi")
+func hidServiceIDMainKeyboardABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>)
+
+@_silgen_name("hid_service_id_keyboard_abi")
+func hidServiceIDKeyboardABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>, _ identifier: UInt64)
+
+@_silgen_name("hid_service_id_main_pointer_abi")
+func hidServiceIDMainPointerABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>)
+
+@_silgen_name("hid_service_id_pointer_abi")
+func hidServiceIDPointerABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>, _ identifier: UInt64)
+
+@_silgen_name("hid_service_id_main_screen_buttons_abi")
+func hidServiceIDMainScreenButtonsABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>)
+
+@_silgen_name("hid_service_id_touchscreen_gesture_abi")
+func hidServiceIDTouchscreenGestureABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>)
+
+@_silgen_name("hid_service_id_digital_crown_abi")
+func hidServiceIDDigitalCrownABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>)
+
+@_silgen_name("hid_service_id_dial_abi")
+func hidServiceIDDialABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>)
+
+@_silgen_name("hid_service_id_avp_custom_abi")
+func hidServiceIDAVPCustomABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>)
+
+@_silgen_name("hid_service_id_user_defined_base_abi")
+func hidServiceIDUserDefinedBaseABI() -> UInt64
 
 @_silgen_name("coredevice_universalhid_send_dispatch_abi")
 func coredeviceUniversalHIDSendDispatchABI(
@@ -167,6 +207,49 @@ func uhidConnectedServicesMetadataAndCodableWitnesses() -> (UnsafeRawPointer, Un
         "$s19CoreDeviceUtilities29DDIUniversalHIDServicePayloadO17ConnectedServicesVMa",
         label: "DDIUniversalHIDServicePayload.ConnectedServices"
     )
+}
+
+func printHIDServiceID(_ name: String, _ serviceID: CoreDeviceHIDServiceIDWords) {
+    let paddedName = name.padding(toLength: 28, withPad: " ", startingAt: 0)
+    print("\(paddedName) 0x\(String(serviceID.id, radix: 16)) (\(serviceID.id))")
+}
+
+func hidServiceID(_ fill: (UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>) -> Void) -> CoreDeviceHIDServiceIDWords {
+    var serviceID = CoreDeviceHIDServiceIDWords()
+    fill(&serviceID)
+    return serviceID
+}
+
+func hidServiceID(_ value: UInt64, _ fill: (UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>, UInt64) -> Void) -> CoreDeviceHIDServiceIDWords {
+    var serviceID = CoreDeviceHIDServiceIDWords()
+    fill(&serviceID, value)
+    return serviceID
+}
+
+func hidServiceID(_ value: UInt32, _ fill: (UnsafeMutablePointer<CoreDeviceHIDServiceIDWords>, UInt32) -> Void) -> CoreDeviceHIDServiceIDWords {
+    var serviceID = CoreDeviceHIDServiceIDWords()
+    fill(&serviceID, value)
+    return serviceID
+}
+
+@_cdecl("coredevice_print_hid_service_ids")
+public func coredevicePrintHIDServiceIDs() -> Int32 {
+    printHIDServiceID("mainTouchscreen", hidServiceID(hidServiceIDMainTouchscreenABI))
+    printHIDServiceID("touchscreen(displayID:1)", hidServiceID(1, hidServiceIDTouchscreenABI))
+    printHIDServiceID("touchscreen(displayID:2)", hidServiceID(2, hidServiceIDTouchscreenABI))
+    printHIDServiceID("touchscreenGesture", hidServiceID(hidServiceIDTouchscreenGestureABI))
+    printHIDServiceID("mainKeyboard", hidServiceID(hidServiceIDMainKeyboardABI))
+    printHIDServiceID("keyboard(identifier:1)", hidServiceID(1, hidServiceIDKeyboardABI))
+    printHIDServiceID("mainPointer", hidServiceID(hidServiceIDMainPointerABI))
+    printHIDServiceID("pointer(identifier:1)", hidServiceID(1, hidServiceIDPointerABI))
+    printHIDServiceID("mainScreenButtons", hidServiceID(hidServiceIDMainScreenButtonsABI))
+    printHIDServiceID("digitalCrown", hidServiceID(hidServiceIDDigitalCrownABI))
+    printHIDServiceID("dial", hidServiceID(hidServiceIDDialABI))
+    printHIDServiceID("avpCustom", hidServiceID(hidServiceIDAVPCustomABI))
+    let userDefinedBase = hidServiceIDUserDefinedBaseABI()
+    let paddedName = "userDefinedBase".padding(toLength: 28, withPad: " ", startingAt: 0)
+    print("\(paddedName) 0x\(String(userDefinedBase, radix: 16)) (\(userDefinedBase))")
+    return 0
 }
 
 func makeUHIDSendRequest(data: Data, serviceID: UInt64) -> UHIDRequestWords {

@@ -43,6 +43,7 @@ bin/devicehubctl swipe 0.5 0.75 0.5 0.35
 bin/devicehubctl home
 bin/devicehubctl recents
 bin/devicehubctl screenshot build/current.png
+bin/devicehubctl service-ids
 bin/devicehubctl services
 bin/devicehubctl reset-gesture 0x101
 bin/devicehubctl button 0x0c 0x40
@@ -65,7 +66,7 @@ DEVICEHUBCTL_BIN=/path/to/action_sender_mercury
 HIDCTL_WAIT_MS=700
 ```
 
-`UHID_SERVICE_ID` defaults to `0x101`, which CoreDevice describes as `mainTouchscreen(0x101)` on the verified iPhone 13 Pro.
+`UHID_SERVICE_ID` defaults to `0x101`, which CoreDeviceUtilities returns for `HIDServiceID.mainTouchscreen`.
 
 ## Interaction Backends
 

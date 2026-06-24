@@ -24,6 +24,7 @@ usage:
   devicehubctl home
   devicehubctl recents
   devicehubctl screenshot <path>
+  devicehubctl service-ids
   devicehubctl services
   devicehubctl reset-gesture [service_id]
   devicehubctl button <usage_page> <usage_code> [hold_seconds]
@@ -89,6 +90,10 @@ case "$cmd" in
   services|probe-services)
     [[ $# -eq 0 ]] || { usage; exit 2; }
     run_uhid cd_connected_services
+    ;;
+  service-ids|ids)
+    [[ $# -eq 0 ]] || { usage; exit 2; }
+    env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$UHID_FEATURE" 0 cd_hid_service_ids
     ;;
   reset-gesture)
     [[ $# -le 1 ]] || { usage; exit 2; }
