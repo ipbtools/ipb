@@ -43,6 +43,10 @@ bin/devicehubctl swipe 0.5 0.75 0.5 0.35
 bin/devicehubctl home
 bin/devicehubctl recents
 bin/devicehubctl screenshot build/current.png
+bin/devicehubctl services
+bin/devicehubctl reset-gesture 0x101
+bin/devicehubctl button 0x0c 0x40
+bin/devicehubctl raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
 ```
 
 Set `DEVICE_ID` when more than one device is connected:
@@ -55,10 +59,13 @@ Useful runtime overrides:
 
 ```sh
 DEVICE_ID=<device-uuid>
+UHID_SERVICE_ID=0x101
 DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.2.app
 DEVICEHUBCTL_BIN=/path/to/action_sender_mercury
 HIDCTL_WAIT_MS=700
 ```
+
+`UHID_SERVICE_ID` defaults to `0x101`, which CoreDevice describes as `mainTouchscreen(0x101)` on the verified iPhone 13 Pro.
 
 ## Interaction Backends
 
@@ -81,3 +88,5 @@ The current build has been manually verified against an iPhone 13 Pro on iOS 27.
 - Recents opens App Switcher
 
 See [docs/verification.md](docs/verification.md) for the exact command set used.
+
+See [docs/protocol.md](docs/protocol.md) for the current protocol map, symbol evidence, and known gaps.
