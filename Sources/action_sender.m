@@ -3,6 +3,7 @@
 #include <uuid/uuid.h>
 #include <execinfo.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -36,6 +37,8 @@ extern int coredevice_reset_universalhid_gesture(xpc_remote_connection_t connect
 extern int coredevice_send_universalhid_barrier(xpc_remote_connection_t connection) __attribute__((weak_import));
 extern int coredevice_send_hid_button_custom(xpc_remote_connection_t connection, uint64_t usage_page, uint64_t usage_code, uint8_t state) __attribute__((weak_import));
 extern int coredevice_send_hid_button_barrier(xpc_remote_connection_t connection) __attribute__((weak_import));
+extern int coredevice_send_hid_scroll(xpc_remote_connection_t connection, double x, double y, double z, uint16_t phase, uint8_t momentum, uint8_t target) __attribute__((weak_import));
+extern int coredevice_send_hid_scroll_barrier(xpc_remote_connection_t connection) __attribute__((weak_import));
 extern int coredevice_send_hid_digitizer_cgpoint(xpc_remote_connection_t connection, double point_one_x, double point_one_y, double point_two_x, double point_two_y, uint64_t point_two_optional_tag, uint64_t event_type, uint64_t edge, uint64_t target_low, uint64_t target_high) __attribute__((weak_import));
 extern int coredevice_print_connected_services(xpc_remote_connection_t connection) __attribute__((weak_import));
 extern int coredevice_print_connected_descriptors_async_raw(xpc_remote_connection_t connection) __attribute__((weak_import));
@@ -838,6 +841,39 @@ static void send_coredevice_button_barrier(xpc_remote_connection_t remote, useco
     }
 }
 
+static void send_coredevice_scroll_event(xpc_remote_connection_t remote, double x, double y, double z, uint16_t phase, uint8_t momentum, uint8_t target, useconds_t delay_after) {
+    if (!coredevice_send_hid_scroll) {
+        fprintf(stderr, "CoreDevice HIDScroll sender is not linked\n");
+        exit(2);
+    }
+    int result = coredevice_send_hid_scroll(remote, x, y, z, phase, momentum, target);
+    if (!g_quiet) {
+        printf("coredevice scroll-event result=%d point=(%g,%g,%g) phase=0x%x momentum=0x%x target=0x%x\n",
+               result,
+               x,
+               y,
+               z,
+               phase,
+               momentum,
+               target);
+    }
+    if (delay_after) {
+        usleep(delay_after);
+    }
+}
+
+static void send_coredevice_scroll_barrier(xpc_remote_connection_t remote, useconds_t delay_after) {
+    if (coredevice_send_hid_scroll_barrier) {
+        int result = coredevice_send_hid_scroll_barrier(remote);
+        if (!g_quiet) {
+            printf("coredevice scroll barrier result=%d\n", result);
+        }
+    }
+    if (delay_after) {
+        usleep(delay_after);
+    }
+}
+
 static void send_coredevice_button_click(xpc_remote_connection_t remote, uint64_t usage_page, uint64_t usage_code, useconds_t hold) {
     send_coredevice_button_event(remote, usage_page, usage_code, 0, hold);
     send_coredevice_button_event(remote, usage_page, usage_code, 1, 120000);
@@ -1112,6 +1148,25 @@ int main(int argc, const char *argv[]) {
                         send_coredevice_button_click(remote, 0xff01, 0x100, 80000);
                     } else if (strcmp(kind, "cd_home_double_button") == 0) {
                         send_coredevice_button_double_click(remote, 0x0c, 0x40);
+                    } else if (strcmp(kind, "cd_scroll_event") == 0) {
+                        double x = argc > 6 ? strtod(argv[6], NULL) : 0.0;
+                        double y = argc > 7 ? strtod(argv[7], NULL) : 0.0;
+                        double z = argc > 8 ? strtod(argv[8], NULL) : 0.0;
+                        unsigned long phase_raw = argc > 9 ? strtoul(argv[9], NULL, 0) : 0;
+                        unsigned long momentum_raw = argc > 10 ? strtoul(argv[10], NULL, 0) : 0;
+                        unsigned long target_raw = argc > 11 ? strtoul(argv[11], NULL, 0) : 0;
+                        if (phase_raw > UINT16_MAX || momentum_raw > UINT8_MAX || target_raw > UINT8_MAX) {
+                            fprintf(stderr, "HIDScroll raw values out of range: phase=0x%lx momentum=0x%lx target=0x%lx\n",
+                                    phase_raw,
+                                    momentum_raw,
+                                    target_raw);
+                            exit(2);
+                        }
+                        uint16_t phase = (uint16_t)phase_raw;
+                        uint8_t momentum = (uint8_t)momentum_raw;
+                        uint8_t target = (uint8_t)target_raw;
+                        send_coredevice_scroll_event(remote, x, y, z, phase, momentum, target, 120000);
+                        send_coredevice_scroll_barrier(remote, 100000);
                     } else if (strcmp(kind, "cd_connected_services") == 0) {
                         if (!coredevice_print_connected_services) {
                             fprintf(stderr, "Connected-services printer is not linked\n");

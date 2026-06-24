@@ -2,7 +2,7 @@
 
 `devicehubctl` is a small CLI for driving basic iOS 27 device interactions through CoreDevice private services, without XCUITest or WebDriverAgent.
 
-It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, keyboard keys, pointer reports, scroll reports, Home, App Switcher, screenshots, and descriptor-based HID service discovery.
+It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, keyboard keys, pointer reports, scroll reports, raw scroll events, Home, App Switcher, screenshots, and descriptor-based HID service discovery.
 
 The basic interaction path is verified, and the CLI now uses DeviceHub's async descriptor-discovery path to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
 
@@ -51,6 +51,7 @@ bin/devicehubctl service-id touchscreen
 bin/devicehubctl reset-gesture
 bin/devicehubctl pointer 0 0
 bin/devicehubctl scroll-report 0x501 0 0
+bin/devicehubctl scroll-event 0 0 0
 bin/devicehubctl key escape
 bin/devicehubctl button 0x0c 0x40
 bin/devicehubctl raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
@@ -91,6 +92,7 @@ bin/devicehubctl service-id avp
 - `scroll`: UniversalHID service
 - `pointer`: UniversalHID pointer report to the `gesture`/trackpad service
 - `scroll-report`: UniversalHID scroll report to the `gesture`/trackpad service
+- `scroll-event`: CoreDevice HIDScroll event to the standalone scroll feature
 - `key`: UniversalHID keyboard report to the `keyboard` service
 - `long`: CoreDevice HID digitizer with repeated hold pulses
 - `home`: CoreDevice HID button service
@@ -108,6 +110,7 @@ The current build has been manually verified against an iPhone 13 Pro on iOS 27.
 - key sends a UniversalHID keyboard report to `CoreDevice keyboard`
 - pointer sends a zero-movement UniversalHID pointer report to `CoreDevice touchscreenGesture`
 - scroll-report sends a zero-movement UniversalHID scroll report to `CoreDevice touchscreenGesture`
+- scroll-event sends a zero-movement `CoreDevice.HIDScroll` event through `IndigoHIDScroll`
 - Home returns to SpringBoard
 - Recents opens App Switcher
 - descriptors returns five CoreDevice HID services on the verified device

@@ -229,6 +229,50 @@ _coredevice_hidbutton_barrier_dispatch_abi:
     ldp x20, x30, [sp], #32
     ret
 
+.globl _coredevice_hidscroll_dispatch_abi
+.p2align 2
+_coredevice_hidscroll_dispatch_abi:
+    stp x20, x21, [sp, #-32]!
+    stp x22, x30, [sp, #16]
+    sub sp, sp, #64
+    str x0, [sp]
+    mov x9, x1
+    str d0, [sp, #16]
+    str d1, [sp, #24]
+    str d2, [sp, #32]
+    strh w2, [sp, #40]
+    strb w3, [sp, #42]
+    strb w4, [sp, #43]
+    add x0, sp, #16
+    add x1, sp, #40
+    add x2, sp, #42
+    add x3, sp, #43
+    mov x5, x9
+    add x20, sp, #0
+    mov x21, #0
+    bl _$s10CoreDevice9HIDScrollP4send5point5phase8momentum6targetyAA11ScrollPointV_AA0I5PhaseVAA0I8MomentumVAA0I6TargetOtKFTj
+    cmp x21, #0
+    cset w0, ne
+    add sp, sp, #64
+    ldp x22, x30, [sp, #16]
+    ldp x20, x21, [sp], #32
+    ret
+
+.globl _coredevice_hidscroll_barrier_dispatch_abi
+.p2align 2
+_coredevice_hidscroll_barrier_dispatch_abi:
+    stp x20, x30, [sp, #-32]!
+    str x21, [sp, #16]
+    sub sp, sp, #16
+    str x0, [sp]
+    add x20, sp, #0
+    bl _$s10CoreDevice9HIDScrollP11sendBarrieryyFTj
+    mov w0, #0
+    add sp, sp, #16
+    ldr x21, [sp, #16]
+    ldp x20, x30, [sp], #32
+    ret
+
 .globl _coredevice_hiddigitizer_cgpoint_dispatch_abi
 .p2align 2
 _coredevice_hiddigitizer_cgpoint_dispatch_abi:

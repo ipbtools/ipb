@@ -34,13 +34,13 @@ Verified features:
 | `com.apple.coredevice.feature.remote.universalhidservice` | `CoreDevice.UniversalHIDService` / `DDIUniversalHIDService` | touch, keyboard, pointer, swipe, scroll, gesture reset |
 | `com.apple.coredevice.feature.remote.hid.button` | `CoreDevice.HIDButton` / `IndigoHIDButton` | Home and generic button clicks |
 | `com.apple.coredevice.feature.remote.hid.digitizer` | `CoreDevice.HIDDigitizer` / `IndigoHIDDigitizer` | long press and bottom-edge App Switcher gesture |
+| `com.apple.coredevice.feature.remote.hid.scroll` | `CoreDevice.HIDScroll` / `IndigoHIDScroll` | raw scroll event probes |
 
 Additional feature strings present in CoreDevice but not yet wired in this CLI:
 
 ```text
 com.apple.coredevice.feature.remote.hid.keyboard
 com.apple.coredevice.feature.remote.hid.pointer
-com.apple.coredevice.feature.remote.hid.scroll
 com.apple.coredevice.feature.remote.hid.vendordefined
 com.apple.coredevice.feature.remote.devicecontrol.orientation
 com.apple.coredevice.feature.remote.universalhid
@@ -332,12 +332,68 @@ bin/devicehubctl uhid-swipe-report 0x101 0.5 0.5 1 1 0 0 0
 bin/devicehubctl keyboard-report 0x200 escape 1
 bin/devicehubctl pointer-report 0x501 0 0 0
 bin/devicehubctl scroll-report 0x501 0 0
+bin/devicehubctl scroll-event 0 0 0
 bin/devicehubctl key-up
 bin/devicehubctl nav-report 0x101 1 1 0x0d 5 0.0 0.5 0.99
 bin/devicehubctl dock-report 0x101 1 1 0x0d 3 0.0 0.5 0.99
 ```
 
-## HID Scroll
+## CoreDevice HID Scroll Feature
+
+The standalone scroll feature is implemented through the typed CoreDevice protocol path:
+
+```text
+feature = com.apple.coredevice.feature.remote.hid.scroll
+class = CoreDevice.IndigoHIDScroll
+protocol = CoreDevice.HIDScroll
+send(point: CoreDevice.ScrollPoint, phase: CoreDevice.ScrollPhase, momentum: CoreDevice.ScrollMomentum, target: CoreDevice.ScrollTarget)
+sendBarrier()
+```
+
+The CLI opens the scroll feature socket, builds an `IndigoHIDScroll` object around the Mercury peer, and dispatches the protocol method directly. This is a different path from `UniversalHID.ScrollReport`; it is closer to DeviceKit's Codable event model.
+
+`CoreDeviceUtilities.IndigoScrollEvent` confirms the event layout:
+
+| Offset | Field | Type |
+| --- | --- | --- |
+| `0x00` | `point.x` | `Double` |
+| `0x08` | `point.y` | `Double` |
+| `0x10` | `point.z` | `Double` |
+| `0x18` | `phase` | `CoreDevice.ScrollPhase`, raw `UInt16` |
+| `0x1a` | `momentum` | `CoreDevice.ScrollMomentum`, raw `UInt8` |
+| `0x1b` | `target` | `CoreDevice.ScrollTarget`, single-byte enum payload |
+
+Raw values confirmed from `CoreDeviceUtilities.framework` disassembly:
+
+| Type | Name | Raw value |
+| --- | --- | --- |
+| `ScrollPhase` | `undefined` | `0x00` |
+| `ScrollPhase` | `began` | `0x01` |
+| `ScrollPhase` | `changed` | `0x02` |
+| `ScrollPhase` | `ended` | `0x04` |
+| `ScrollPhase` | `cancelled` | `0x08` |
+| `ScrollPhase` | `mayBegin` | `0x80` |
+| `ScrollMomentum` | `undefined` | `0x00` |
+| `ScrollMomentum` | `continue` | `0x01` |
+| `ScrollMomentum` | `start` | `0x02` |
+| `ScrollMomentum` | `end` | `0x04` |
+| `ScrollMomentum` | `willBegin` | `0x08` |
+| `ScrollMomentum` | `interrupted` | `0x10` |
+| `ScrollTarget` | `digitalCrown` | `0x00` |
+| `ScrollTarget` | `dial` | `0x01` |
+
+Verified non-destructive sequence:
+
+```sh
+bin/devicehubctl scroll-event 0 0 0 undefined undefined digital-crown
+bin/devicehubctl scroll-event 0 0 0 impossible
+```
+
+The first command sends a zero-movement event through `CoreDevice.HIDScroll` and follows it with `sendBarrier()`. The second command verifies shell-side name validation before a socket is opened.
+
+Non-zero behavior is not fully enumerated yet. The point values are native `Double` scroll deltas, not normalized touchscreen coordinates.
+
+## UniversalHID Scroll Report
 
 Native scroll report construction is implemented through the verified UniversalHID service report path. The high-level `scroll` command still uses the older touch-swipe implementation; `scroll-report` exposes the lower-level `UniversalHID.ScrollReport` path directly.
 
@@ -485,7 +541,7 @@ Verified high-level use:
 - `connectedServices` and `connectedServiceIDs` remain symbol-mapped but are not exposed because the verified DeviceHub path is `connectedServiceDescriptors()`.
 - `createService` and `removeService` request cases are identified but not verified.
 - The UniversalHID `PointerReport` base fields are implemented, but `PointerReport.Flags` and the standalone `CoreDevice.HIDPointer` feature socket still need full ABI mapping and behavior verification.
-- The UniversalHID `ScrollReport` base fields are implemented and zero-report delivery is verified, but non-zero scroll behavior, momentum semantics, and the standalone `CoreDevice.HIDScroll` feature socket still need full behavior verification.
+- The UniversalHID `ScrollReport` base fields and standalone `CoreDevice.HIDScroll` zero-event path are implemented and verified, but non-zero scroll behavior, momentum semantics, and target behavior still need full behavior verification.
 - Vendor-defined HID feature protocols are symbol-mapped but not implemented.
 - The standalone `CoreDevice.HIDKeyboard` feature protocol is symbol-mapped, but the CLI uses the lower-level verified `UniversalHID.KeyboardReport` path instead.
 - Multi-touch second point, `DigitizerTarget`, and `DigitizerEdge` values need systematic enumeration.

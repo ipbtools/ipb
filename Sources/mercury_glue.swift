@@ -159,6 +159,24 @@ func coredeviceHIDButtonBarrierDispatchABI(
     _ witness: UnsafeRawPointer
 ) -> Int32
 
+@_silgen_name("coredevice_hidscroll_dispatch_abi")
+func coredeviceHIDScrollDispatchABI(
+    _ scroll: UnsafeMutableRawPointer,
+    _ witness: UnsafeRawPointer,
+    _ x: Double,
+    _ y: Double,
+    _ z: Double,
+    _ phase: UInt16,
+    _ momentum: UInt8,
+    _ target: UInt8
+) -> Int32
+
+@_silgen_name("coredevice_hidscroll_barrier_dispatch_abi")
+func coredeviceHIDScrollBarrierDispatchABI(
+    _ scroll: UnsafeMutableRawPointer,
+    _ witness: UnsafeRawPointer
+) -> Int32
+
 @_silgen_name("coredevice_hiddigitizer_cgpoint_dispatch_abi")
 func coredeviceHIDDigitizerCGPointDispatchABI(
     _ digitizer: UnsafeMutableRawPointer,
@@ -770,6 +788,53 @@ func makeIndigoHIDButton(_ connection: UnsafeMutableRawPointer?) -> (UnsafeMutab
     return (buttonPointer, buttonWitness)
 }
 
+func makeIndigoHIDScroll(_ connection: UnsafeMutableRawPointer?) -> (UnsafeMutableRawPointer, UnsafeRawPointer) {
+    let serviceName = ProcessInfo.processInfo.environment["HIDCTL_SCROLL_MERCURY_SERVICE"]
+    let featureIdentifier = ProcessInfo.processInfo.environment["HIDCTL_SCROLL_FEATURE_ID"] ?? "com.apple.coredevice.feature.remote.hid.scroll"
+
+    let peer: AnyObject
+    if let serviceName, !serviceName.isEmpty {
+        peer = mercuryUnsafePeerForService(connection, serviceName)
+    } else {
+        peer = mercuryUnsafePeer(connection)
+    }
+
+    guard let peerClass = object_getClass(peer) else {
+        fatalError("unable to get Mercury peer class")
+    }
+    let peerWitness = swiftProtocolWitness(
+        for: peerClass,
+        protocolSymbol: "$s7Mercury17XPCPeerConnectionMp"
+    )
+
+    guard let scrollClass = objc_getClass("_TtC10CoreDevice15IndigoHIDScroll") as? AnyClass else {
+        fatalError("missing CoreDevice.IndigoHIDScroll")
+    }
+    guard let scrollObject = class_createInstance(scrollClass, 0) else {
+        fatalError("unable to create IndigoHIDScroll")
+    }
+
+    let peerPointer = Unmanaged.passRetained(peer).toOpaque()
+    let scrollPointer = Unmanaged.passRetained(scrollObject as AnyObject).toOpaque()
+
+    storePointer(scrollPointer, offset: 16, UnsafeRawPointer(peerPointer))
+    storePointer(scrollPointer, offset: 24, peerWitness)
+    var retainedFeatureIdentifier = featureIdentifier
+    storeString(scrollPointer, offset: 32, &retainedFeatureIdentifier)
+    retainedCoreDeviceStrings.append(retainedFeatureIdentifier)
+
+    let scrollWitness = swiftProtocolWitness(
+        for: scrollClass,
+        protocolSymbol: "$s10CoreDevice9HIDScrollMp"
+    )
+
+    if ProcessInfo.processInfo.environment["HIDCTL_QUIET"] == nil {
+        fputs("coredevice scroll: peer=\(type(of: peer)) serviceName=\(serviceName ?? "<base>") feature=\(featureIdentifier)\n", stderr)
+        fputs("coredevice scroll: peerWitness=\(peerWitness) scrollWitness=\(scrollWitness)\n", stderr)
+    }
+    return (scrollPointer, scrollWitness)
+}
+
 func makeIndigoHIDDigitizer(_ connection: UnsafeMutableRawPointer?) -> (UnsafeMutableRawPointer, UnsafeRawPointer) {
     let serviceName = ProcessInfo.processInfo.environment["HIDCTL_DIGITIZER_MERCURY_SERVICE"]
     let featureIdentifier = ProcessInfo.processInfo.environment["HIDCTL_DIGITIZER_FEATURE_ID"] ?? "com.apple.coredevice.feature.remote.hid.digitizer"
@@ -815,6 +880,34 @@ func makeIndigoHIDDigitizer(_ connection: UnsafeMutableRawPointer?) -> (UnsafeMu
         fputs("coredevice digitizer: peerWitness=\(peerWitness) digitizerWitness=\(digitizerWitness)\n", stderr)
     }
     return (digitizerPointer, digitizerWitness)
+}
+
+@_cdecl("coredevice_send_hid_scroll")
+public func coredeviceSendHIDScroll(
+    _ connection: UnsafeMutableRawPointer?,
+    _ x: Double,
+    _ y: Double,
+    _ z: Double,
+    _ phase: UInt16,
+    _ momentum: UInt8,
+    _ target: UInt8
+) -> Int32 {
+    guard connection != nil else {
+        fputs("coredevice scroll: remote connection is null\n", stderr)
+        return 2
+    }
+    let (scroll, witness) = makeIndigoHIDScroll(connection)
+    return coredeviceHIDScrollDispatchABI(scroll, witness, x, y, z, phase, momentum, target)
+}
+
+@_cdecl("coredevice_send_hid_scroll_barrier")
+public func coredeviceSendHIDScrollBarrier(_ connection: UnsafeMutableRawPointer?) -> Int32 {
+    guard connection != nil else {
+        fputs("coredevice scroll: remote connection is null\n", stderr)
+        return 2
+    }
+    let (scroll, witness) = makeIndigoHIDScroll(connection)
+    return coredeviceHIDScrollBarrierDispatchABI(scroll, witness)
 }
 
 @_cdecl("mercury_send_xpc_message")

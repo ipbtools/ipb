@@ -33,6 +33,7 @@ bin/devicehubctl service-id keyboard
 bin/devicehubctl pointer-report 0x501 0 0 0
 bin/devicehubctl pointer 0 0
 bin/devicehubctl scroll-report 0x501 0 0
+bin/devicehubctl scroll-event 0 0 0 undefined undefined digital-crown
 bin/devicehubctl key-up
 bin/devicehubctl key escape 0.02
 ```
@@ -49,6 +50,7 @@ bin/devicehubctl button 0x0c 0x40
 bin/devicehubctl keyboard-report 0x200 escape 1
 bin/devicehubctl pointer-report 0x501 0 0 0
 bin/devicehubctl scroll-report 0x501 0 0
+bin/devicehubctl scroll-event 0 0 0
 bin/devicehubctl uhid-report 0x101 0.5 0.5 0 0
 bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 2 0
 ```
@@ -131,6 +133,16 @@ bin/devicehubctl scroll-report 0x501 0 0 256 -> Unable to build UniversalHID scr
 ```
 
 The zero-movement scroll report is a non-destructive smoke test for construction and delivery of `UniversalHID.ScrollReport` plus `ScrollCollection` to the `CoreDevice touchscreenGesture` service. The `phase=256` probe verifies local `UInt8` raw-value validation.
+
+Standalone HIDScroll verification:
+
+```text
+bin/devicehubctl scroll-event 0 0 0 undefined undefined digital-crown
+bin/devicehubctl scroll-event 0 0 0 impossible -> unknown scroll phase: impossible
+bin/devicehubctl scroll-event 0 0 0 0x10000 -> HIDScroll raw values out of range
+```
+
+The zero-movement scroll event is a non-destructive smoke test for opening `com.apple.coredevice.feature.remote.hid.scroll`, dispatching `CoreDevice.HIDScroll.send(point:phase:momentum:target:)`, and following with `sendBarrier()`. The invalid phase probe verifies shell-side enum-name validation; the out-of-range probe verifies C-side raw-width validation.
 
 DeviceHub / DeviceKit checks performed:
 

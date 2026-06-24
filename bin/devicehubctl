@@ -12,6 +12,7 @@ ACTION="com.apple.coredevice.action.createservicesocket"
 UHID_FEATURE="com.apple.coredevice.feature.remote.universalhidservice"
 BUTTON_FEATURE="com.apple.coredevice.feature.remote.hid.button"
 DIGITIZER_FEATURE="com.apple.coredevice.feature.remote.hid.digitizer"
+SCROLL_FEATURE="com.apple.coredevice.feature.remote.hid.scroll"
 
 quiet_env=(HIDCTL_QUIET=1 HIDCTL_WAIT_MS="${HIDCTL_WAIT_MS:-700}")
 
@@ -35,6 +36,7 @@ usage:
   devicehubctl key-down <usage_or_name> [service_id]
   devicehubctl key-up [usage_or_name] [service_id]
   devicehubctl button <usage_page> <usage_code> [hold_seconds]
+  devicehubctl scroll-event <x> <y> <z> [phase] [momentum] [target]
   devicehubctl pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
   devicehubctl scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
   devicehubctl keyboard-report <service_id> <usage_or_name> <pressed>
@@ -65,6 +67,10 @@ run_button() {
 
 run_digitizer() {
   env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$DIGITIZER_FEATURE" 0 "$@"
+}
+
+run_scroll() {
+  env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$SCROLL_FEATURE" 0 "$@"
 }
 
 descriptor_output() {
@@ -215,6 +221,53 @@ keyboard_usage() {
   esac
 }
 
+scroll_phase() {
+  local phase="${1:l}"
+  case "$phase" in
+    ""|undefined|none) print -r -- "0x0" ;;
+    began|begin|start) print -r -- "0x1" ;;
+    changed|change|move|moved) print -r -- "0x2" ;;
+    ended|end) print -r -- "0x4" ;;
+    cancelled|canceled|cancel) print -r -- "0x8" ;;
+    may-begin|maybegin) print -r -- "0x80" ;;
+    <->|0x*) print -r -- "$phase" ;;
+    *)
+      print -u2 "unknown scroll phase: $1"
+      return 2
+      ;;
+  esac
+}
+
+scroll_momentum() {
+  local momentum="${1:l}"
+  case "$momentum" in
+    ""|undefined|none) print -r -- "0x0" ;;
+    continue|continued) print -r -- "0x1" ;;
+    start|began|begin) print -r -- "0x2" ;;
+    end|ended) print -r -- "0x4" ;;
+    will-begin|willbegin) print -r -- "0x8" ;;
+    interrupted|interrupt) print -r -- "0x10" ;;
+    <->|0x*) print -r -- "$momentum" ;;
+    *)
+      print -u2 "unknown scroll momentum: $1"
+      return 2
+      ;;
+  esac
+}
+
+scroll_target() {
+  local target="${1:l}"
+  case "$target" in
+    ""|digital-crown|digitalcrown|crown) print -r -- "0x0" ;;
+    dial) print -r -- "0x1" ;;
+    <->|0x*) print -r -- "$target" ;;
+    *)
+      print -u2 "unknown scroll target: $1"
+      return 2
+      ;;
+  esac
+}
+
 cmd="${1:-}"
 [[ -n "$cmd" ]] || { usage; exit 2; }
 shift || true
@@ -298,6 +351,13 @@ case "$cmd" in
   button)
     [[ $# -eq 2 || $# -eq 3 ]] || { usage; exit 2; }
     run_button cd_button_click "$1" "$2" "${3:-0.08}"
+    ;;
+  scroll-event)
+    [[ $# -ge 3 && $# -le 6 ]] || { usage; exit 2; }
+    phase="$(scroll_phase "${4:-undefined}")"
+    momentum="$(scroll_momentum "${5:-undefined}")"
+    target="$(scroll_target "${6:-digital-crown}")"
+    run_scroll cd_scroll_event "$1" "$2" "$3" "$phase" "$momentum" "$target"
     ;;
   keyboard-report)
     [[ $# -eq 3 ]] || { usage; exit 2; }
