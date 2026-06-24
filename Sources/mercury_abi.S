@@ -273,6 +273,44 @@ _coredevice_hidscroll_barrier_dispatch_abi:
     ldp x20, x30, [sp], #32
     ret
 
+.globl _coredevice_hidvendor_dispatch_abi
+.p2align 2
+_coredevice_hidvendor_dispatch_abi:
+    stp x20, x21, [sp, #-32]!
+    stp x22, x30, [sp, #16]
+    sub sp, sp, #32
+    str x0, [sp]
+    mov x7, x1
+    and w0, w2, #0xffff
+    and w1, w3, #0xffff
+    mov w2, w4
+    ldr x3, [x5]
+    ldr x4, [x5, #8]
+    add x20, sp, #0
+    mov x21, #0
+    bl _$s10CoreDevice16HIDVendorDefinedP4send9usagePage0F07version4datays6UInt16V_AJs6UInt32V10Foundation4DataVtAA0aB5ErrorVYKFTj
+    cmp x21, #0
+    cset w0, ne
+    add sp, sp, #32
+    ldp x22, x30, [sp, #16]
+    ldp x20, x21, [sp], #32
+    ret
+
+.globl _coredevice_hidvendor_barrier_dispatch_abi
+.p2align 2
+_coredevice_hidvendor_barrier_dispatch_abi:
+    stp x20, x30, [sp, #-32]!
+    str x21, [sp, #16]
+    sub sp, sp, #16
+    str x0, [sp]
+    add x20, sp, #0
+    bl _$s10CoreDevice16HIDVendorDefinedP11sendBarrieryyFTj
+    mov w0, #0
+    add sp, sp, #16
+    ldr x21, [sp, #16]
+    ldp x20, x30, [sp], #32
+    ret
+
 .globl _coredevice_hiddigitizer_cgpoint_dispatch_abi
 .p2align 2
 _coredevice_hiddigitizer_cgpoint_dispatch_abi:

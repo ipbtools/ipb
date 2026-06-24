@@ -13,6 +13,7 @@ UHID_FEATURE="com.apple.coredevice.feature.remote.universalhidservice"
 BUTTON_FEATURE="com.apple.coredevice.feature.remote.hid.button"
 DIGITIZER_FEATURE="com.apple.coredevice.feature.remote.hid.digitizer"
 SCROLL_FEATURE="com.apple.coredevice.feature.remote.hid.scroll"
+VENDOR_FEATURE="com.apple.coredevice.feature.remote.hid.vendordefined"
 
 quiet_env=(HIDCTL_QUIET=1 HIDCTL_WAIT_MS="${HIDCTL_WAIT_MS:-700}")
 
@@ -37,6 +38,7 @@ usage:
   devicehubctl key-up [usage_or_name] [service_id]
   devicehubctl button <usage_page> <usage_code> [hold_seconds]
   devicehubctl scroll-event <x> <y> <z> [phase] [momentum] [target]
+  devicehubctl vendor-defined <usage_page> <usage> <version> [hex_payload]
   devicehubctl pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
   devicehubctl scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
   devicehubctl keyboard-report <service_id> <usage_or_name> <pressed>
@@ -71,6 +73,10 @@ run_digitizer() {
 
 run_scroll() {
   env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$SCROLL_FEATURE" 0 "$@"
+}
+
+run_vendor() {
+  env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$VENDOR_FEATURE" 0 "$@"
 }
 
 descriptor_output() {
@@ -358,6 +364,10 @@ case "$cmd" in
     momentum="$(scroll_momentum "${5:-undefined}")"
     target="$(scroll_target "${6:-digital-crown}")"
     run_scroll cd_scroll_event "$1" "$2" "$3" "$phase" "$momentum" "$target"
+    ;;
+  vendor-defined)
+    [[ $# -ge 3 && $# -le 4 ]] || { usage; exit 2; }
+    run_vendor cd_vendor_defined "$1" "$2" "$3" "${4:-}"
     ;;
   keyboard-report)
     [[ $# -eq 3 ]] || { usage; exit 2; }

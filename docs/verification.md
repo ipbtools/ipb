@@ -34,6 +34,7 @@ bin/devicehubctl pointer-report 0x501 0 0 0
 bin/devicehubctl pointer 0 0
 bin/devicehubctl scroll-report 0x501 0 0
 bin/devicehubctl scroll-event 0 0 0 undefined undefined digital-crown
+bin/devicehubctl vendor-defined 0 0 0
 bin/devicehubctl key-up
 bin/devicehubctl key escape 0.02
 ```
@@ -51,6 +52,7 @@ bin/devicehubctl keyboard-report 0x200 escape 1
 bin/devicehubctl pointer-report 0x501 0 0 0
 bin/devicehubctl scroll-report 0x501 0 0
 bin/devicehubctl scroll-event 0 0 0
+bin/devicehubctl vendor-defined 0 0 0
 bin/devicehubctl uhid-report 0x101 0.5 0.5 0 0
 bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 2 0
 ```
@@ -143,6 +145,16 @@ bin/devicehubctl scroll-event 0 0 0 0x10000 -> HIDScroll raw values out of range
 ```
 
 The zero-movement scroll event is a non-destructive smoke test for opening `com.apple.coredevice.feature.remote.hid.scroll`, dispatching `CoreDevice.HIDScroll.send(point:phase:momentum:target:)`, and following with `sendBarrier()`. The invalid phase probe verifies shell-side enum-name validation; the out-of-range probe verifies C-side raw-width validation.
+
+Standalone HIDVendorDefined verification:
+
+```text
+bin/devicehubctl vendor-defined 0 0 0
+bin/devicehubctl vendor-defined 0 0 0 abc -> coredevice vendor-defined: invalid hex payload
+bin/devicehubctl vendor-defined 0x10000 0 0 -> HIDVendorDefined raw values out of range
+```
+
+The zero-length vendor-defined event is a non-destructive smoke test for opening `com.apple.coredevice.feature.remote.hid.vendordefined`, dispatching `CoreDevice.HIDVendorDefined.send(usagePage:usage:version:data:)`, and following with `sendBarrier()`. The other probes verify payload and raw-width validation before send.
 
 DeviceHub / DeviceKit checks performed:
 

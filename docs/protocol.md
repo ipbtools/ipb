@@ -35,13 +35,13 @@ Verified features:
 | `com.apple.coredevice.feature.remote.hid.button` | `CoreDevice.HIDButton` / `IndigoHIDButton` | Home and generic button clicks |
 | `com.apple.coredevice.feature.remote.hid.digitizer` | `CoreDevice.HIDDigitizer` / `IndigoHIDDigitizer` | long press and bottom-edge App Switcher gesture |
 | `com.apple.coredevice.feature.remote.hid.scroll` | `CoreDevice.HIDScroll` / `IndigoHIDScroll` | raw scroll event probes |
+| `com.apple.coredevice.feature.remote.hid.vendordefined` | `CoreDevice.HIDVendorDefined` / `IndigoHIDVendorDefined` | raw vendor-defined event probes |
 
 Additional feature strings present in CoreDevice but not yet wired in this CLI:
 
 ```text
 com.apple.coredevice.feature.remote.hid.keyboard
 com.apple.coredevice.feature.remote.hid.pointer
-com.apple.coredevice.feature.remote.hid.vendordefined
 com.apple.coredevice.feature.remote.devicecontrol.orientation
 com.apple.coredevice.feature.remote.universalhid
 ```
@@ -333,10 +333,61 @@ bin/devicehubctl keyboard-report 0x200 escape 1
 bin/devicehubctl pointer-report 0x501 0 0 0
 bin/devicehubctl scroll-report 0x501 0 0
 bin/devicehubctl scroll-event 0 0 0
+bin/devicehubctl vendor-defined 0 0 0
 bin/devicehubctl key-up
 bin/devicehubctl nav-report 0x101 1 1 0x0d 5 0.0 0.5 0.99
 bin/devicehubctl dock-report 0x101 1 1 0x0d 3 0.0 0.5 0.99
 ```
+
+## CoreDevice HID Vendor-Defined Feature
+
+The standalone vendor-defined feature is implemented through the typed CoreDevice protocol path:
+
+```text
+feature = com.apple.coredevice.feature.remote.hid.vendordefined
+class = CoreDevice.IndigoHIDVendorDefined
+protocol = CoreDevice.HIDVendorDefined
+send(usagePage: UInt16, usage: UInt16, version: UInt32, data: Foundation.Data)
+sendBarrier()
+```
+
+Runtime metadata shows `IndigoHIDVendorDefined` stores the normal HIDXPC service fields plus a `deviceIdentifier` Swift string:
+
+| Offset | Field |
+| --- | --- |
+| `0x10` | Mercury peer object |
+| `0x18` | `Mercury.XPCPeerConnection` witness |
+| `0x20` | feature identifier Swift string |
+| `0x30` | device identifier Swift string |
+
+`CoreDeviceUtilities.IndigoVendorDefinedEvent` confirms the event layout:
+
+| Offset | Field | Type |
+| --- | --- | --- |
+| `0x00` | `usagePage` | `UInt16` |
+| `0x02` | `usage` | `UInt16` |
+| `0x04` | `version` | `UInt32` |
+| `0x08` | `data` | `Foundation.Data`, 16-byte Swift value |
+
+CLI usage:
+
+```sh
+bin/devicehubctl vendor-defined <usage_page> <usage> <version> [hex_payload]
+```
+
+The optional payload is a hex string. Separators ` `, `:`, `_`, and `-` are accepted; odd-length or non-hex payloads are rejected before send.
+
+Verified non-destructive sequence:
+
+```sh
+bin/devicehubctl vendor-defined 0 0 0
+bin/devicehubctl vendor-defined 0 0 0 abc
+bin/devicehubctl vendor-defined 0x10000 0 0
+```
+
+The first command sends an empty vendor-defined event and follows it with `sendBarrier()`. The latter two commands verify invalid payload and raw-width validation.
+
+Non-empty payload behavior is intentionally not interpreted by the CLI; callers must know the device/vendor usage they are targeting.
 
 ## CoreDevice HID Scroll Feature
 
@@ -542,7 +593,7 @@ Verified high-level use:
 - `createService` and `removeService` request cases are identified but not verified.
 - The UniversalHID `PointerReport` base fields are implemented, but `PointerReport.Flags` and the standalone `CoreDevice.HIDPointer` feature socket still need full ABI mapping and behavior verification.
 - The UniversalHID `ScrollReport` base fields and standalone `CoreDevice.HIDScroll` zero-event path are implemented and verified, but non-zero scroll behavior, momentum semantics, and target behavior still need full behavior verification.
-- Vendor-defined HID feature protocols are symbol-mapped but not implemented.
+- The standalone `CoreDevice.HIDVendorDefined` feature is implemented for raw hex payload dispatch, but vendor-specific non-empty payload semantics are not enumerated.
 - The standalone `CoreDevice.HIDKeyboard` feature protocol is symbol-mapped, but the CLI uses the lower-level verified `UniversalHID.KeyboardReport` path instead.
 - Multi-touch second point, `DigitizerTarget`, and `DigitizerEdge` values need systematic enumeration.
 - The current implementation still relies on private Swift framework ABI and can break across Xcode 27 beta seeds.

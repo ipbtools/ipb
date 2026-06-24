@@ -30,6 +30,7 @@ final class AsyncProbeState: @unchecked Sendable {
 }
 
 var retainedCoreDeviceStrings: [String] = []
+var retainedCoreDeviceData: [Data] = []
 
 @_silgen_name("$s7Mercury19RemoteXPCConnectionC10unsafePeer4fromAA17XPCPeerConnection_pSo24OS_xpc_remote_connectionC_tFZ")
 func mercuryUnsafePeer(_ connection: UnsafeMutableRawPointer?) -> AnyObject
@@ -174,6 +175,22 @@ func coredeviceHIDScrollDispatchABI(
 @_silgen_name("coredevice_hidscroll_barrier_dispatch_abi")
 func coredeviceHIDScrollBarrierDispatchABI(
     _ scroll: UnsafeMutableRawPointer,
+    _ witness: UnsafeRawPointer
+) -> Int32
+
+@_silgen_name("coredevice_hidvendor_dispatch_abi")
+func coredeviceHIDVendorDefinedDispatchABI(
+    _ vendorDefined: UnsafeMutableRawPointer,
+    _ witness: UnsafeRawPointer,
+    _ usagePage: UInt16,
+    _ usage: UInt16,
+    _ version: UInt32,
+    _ data: UnsafeRawPointer
+) -> Int32
+
+@_silgen_name("coredevice_hidvendor_barrier_dispatch_abi")
+func coredeviceHIDVendorDefinedBarrierDispatchABI(
+    _ vendorDefined: UnsafeMutableRawPointer,
     _ witness: UnsafeRawPointer
 ) -> Int32
 
@@ -835,6 +852,57 @@ func makeIndigoHIDScroll(_ connection: UnsafeMutableRawPointer?) -> (UnsafeMutab
     return (scrollPointer, scrollWitness)
 }
 
+func makeIndigoHIDVendorDefined(_ connection: UnsafeMutableRawPointer?, deviceIdentifier: String) -> (UnsafeMutableRawPointer, UnsafeRawPointer) {
+    let serviceName = ProcessInfo.processInfo.environment["HIDCTL_VENDOR_MERCURY_SERVICE"]
+    let featureIdentifier = ProcessInfo.processInfo.environment["HIDCTL_VENDOR_FEATURE_ID"] ?? "com.apple.coredevice.feature.remote.hid.vendordefined"
+
+    let peer: AnyObject
+    if let serviceName, !serviceName.isEmpty {
+        peer = mercuryUnsafePeerForService(connection, serviceName)
+    } else {
+        peer = mercuryUnsafePeer(connection)
+    }
+
+    guard let peerClass = object_getClass(peer) else {
+        fatalError("unable to get Mercury peer class")
+    }
+    let peerWitness = swiftProtocolWitness(
+        for: peerClass,
+        protocolSymbol: "$s7Mercury17XPCPeerConnectionMp"
+    )
+
+    guard let vendorClass = objc_getClass("_TtC10CoreDevice22IndigoHIDVendorDefined") as? AnyClass else {
+        fatalError("missing CoreDevice.IndigoHIDVendorDefined")
+    }
+    guard let vendorObject = class_createInstance(vendorClass, 0) else {
+        fatalError("unable to create IndigoHIDVendorDefined")
+    }
+
+    let peerPointer = Unmanaged.passRetained(peer).toOpaque()
+    let vendorPointer = Unmanaged.passRetained(vendorObject as AnyObject).toOpaque()
+
+    storePointer(vendorPointer, offset: 16, UnsafeRawPointer(peerPointer))
+    storePointer(vendorPointer, offset: 24, peerWitness)
+    var retainedFeatureIdentifier = featureIdentifier
+    storeString(vendorPointer, offset: 32, &retainedFeatureIdentifier)
+    retainedCoreDeviceStrings.append(retainedFeatureIdentifier)
+
+    var retainedDeviceIdentifier = deviceIdentifier
+    storeString(vendorPointer, offset: 48, &retainedDeviceIdentifier)
+    retainedCoreDeviceStrings.append(retainedDeviceIdentifier)
+
+    let vendorWitness = swiftProtocolWitness(
+        for: vendorClass,
+        protocolSymbol: "$s10CoreDevice16HIDVendorDefinedMp"
+    )
+
+    if ProcessInfo.processInfo.environment["HIDCTL_QUIET"] == nil {
+        fputs("coredevice vendor-defined: peer=\(type(of: peer)) serviceName=\(serviceName ?? "<base>") feature=\(featureIdentifier) device=\(deviceIdentifier)\n", stderr)
+        fputs("coredevice vendor-defined: peerWitness=\(peerWitness) vendorWitness=\(vendorWitness)\n", stderr)
+    }
+    return (vendorPointer, vendorWitness)
+}
+
 func makeIndigoHIDDigitizer(_ connection: UnsafeMutableRawPointer?) -> (UnsafeMutableRawPointer, UnsafeRawPointer) {
     let serviceName = ProcessInfo.processInfo.environment["HIDCTL_DIGITIZER_MERCURY_SERVICE"]
     let featureIdentifier = ProcessInfo.processInfo.environment["HIDCTL_DIGITIZER_FEATURE_ID"] ?? "com.apple.coredevice.feature.remote.hid.digitizer"
@@ -908,6 +976,85 @@ public func coredeviceSendHIDScrollBarrier(_ connection: UnsafeMutableRawPointer
     }
     let (scroll, witness) = makeIndigoHIDScroll(connection)
     return coredeviceHIDScrollBarrierDispatchABI(scroll, witness)
+}
+
+func parseHexPayload(_ cString: UnsafePointer<CChar>?) -> Data? {
+    guard let cString else {
+        return Data()
+    }
+    var text = String(cString: cString)
+    if text.hasPrefix("0x") || text.hasPrefix("0X") {
+        text.removeFirst(2)
+    }
+    let filtered = text.filter { character in
+        character != " " && character != ":" && character != "_" && character != "-"
+    }
+    guard filtered.count % 2 == 0 else {
+        return nil
+    }
+
+    var data = Data()
+    var index = filtered.startIndex
+    while index < filtered.endIndex {
+        let next = filtered.index(index, offsetBy: 2)
+        guard let byte = UInt8(filtered[index..<next], radix: 16) else {
+            return nil
+        }
+        data.append(byte)
+        index = next
+    }
+    return data
+}
+
+@_cdecl("coredevice_send_hid_vendor_defined_hex")
+public func coredeviceSendHIDVendorDefinedHex(
+    _ connection: UnsafeMutableRawPointer?,
+    _ usagePage: UInt32,
+    _ usage: UInt32,
+    _ version: UInt32,
+    _ hexPayload: UnsafePointer<CChar>?,
+    _ deviceIdentifier: UnsafePointer<CChar>?
+) -> Int32 {
+    guard connection != nil else {
+        fputs("coredevice vendor-defined: remote connection is null\n", stderr)
+        return 2
+    }
+    guard usagePage <= UInt16.max, usage <= UInt16.max else {
+        fputs(String(format: "coredevice vendor-defined: usage values out of range page=0x%x usage=0x%x\n", usagePage, usage), stderr)
+        return 2
+    }
+    guard var data = parseHexPayload(hexPayload) else {
+        fputs("coredevice vendor-defined: invalid hex payload\n", stderr)
+        return 2
+    }
+
+    retainedCoreDeviceData.append(data)
+    let device = deviceIdentifier.map { String(cString: $0) } ?? ""
+    let (vendor, witness) = makeIndigoHIDVendorDefined(connection, deviceIdentifier: device)
+    return withUnsafeBytes(of: &data) { dataBytes in
+        coredeviceHIDVendorDefinedDispatchABI(
+            vendor,
+            witness,
+            UInt16(usagePage),
+            UInt16(usage),
+            version,
+            dataBytes.baseAddress!
+        )
+    }
+}
+
+@_cdecl("coredevice_send_hid_vendor_defined_barrier")
+public func coredeviceSendHIDVendorDefinedBarrier(
+    _ connection: UnsafeMutableRawPointer?,
+    _ deviceIdentifier: UnsafePointer<CChar>?
+) -> Int32 {
+    guard connection != nil else {
+        fputs("coredevice vendor-defined: remote connection is null\n", stderr)
+        return 2
+    }
+    let device = deviceIdentifier.map { String(cString: $0) } ?? ""
+    let (vendor, witness) = makeIndigoHIDVendorDefined(connection, deviceIdentifier: device)
+    return coredeviceHIDVendorDefinedBarrierDispatchABI(vendor, witness)
 }
 
 @_cdecl("mercury_send_xpc_message")

@@ -39,6 +39,8 @@ extern int coredevice_send_hid_button_custom(xpc_remote_connection_t connection,
 extern int coredevice_send_hid_button_barrier(xpc_remote_connection_t connection) __attribute__((weak_import));
 extern int coredevice_send_hid_scroll(xpc_remote_connection_t connection, double x, double y, double z, uint16_t phase, uint8_t momentum, uint8_t target) __attribute__((weak_import));
 extern int coredevice_send_hid_scroll_barrier(xpc_remote_connection_t connection) __attribute__((weak_import));
+extern int coredevice_send_hid_vendor_defined_hex(xpc_remote_connection_t connection, uint32_t usage_page, uint32_t usage, uint32_t version, const char *hex_payload, const char *device_identifier) __attribute__((weak_import));
+extern int coredevice_send_hid_vendor_defined_barrier(xpc_remote_connection_t connection, const char *device_identifier) __attribute__((weak_import));
 extern int coredevice_send_hid_digitizer_cgpoint(xpc_remote_connection_t connection, double point_one_x, double point_one_y, double point_two_x, double point_two_y, uint64_t point_two_optional_tag, uint64_t event_type, uint64_t edge, uint64_t target_low, uint64_t target_high) __attribute__((weak_import));
 extern int coredevice_print_connected_services(xpc_remote_connection_t connection) __attribute__((weak_import));
 extern int coredevice_print_connected_descriptors_async_raw(xpc_remote_connection_t connection) __attribute__((weak_import));
@@ -874,6 +876,43 @@ static void send_coredevice_scroll_barrier(xpc_remote_connection_t remote, useco
     }
 }
 
+static void send_coredevice_vendor_defined_event(xpc_remote_connection_t remote, const char *device, uint32_t usage_page, uint32_t usage, uint32_t version, const char *hex_payload, useconds_t delay_after) {
+    if (!coredevice_send_hid_vendor_defined_hex) {
+        fprintf(stderr, "CoreDevice HIDVendorDefined sender is not linked\n");
+        exit(2);
+    }
+    int result = coredevice_send_hid_vendor_defined_hex(remote, usage_page, usage, version, hex_payload, device);
+    if (!g_quiet) {
+        printf("coredevice vendor-defined result=%d page=0x%x usage=0x%x version=0x%x hex=%s\n",
+               result,
+               usage_page,
+               usage,
+               version,
+               hex_payload ? hex_payload : "");
+    }
+    if (result != 0) {
+        exit(result);
+    }
+    if (delay_after) {
+        usleep(delay_after);
+    }
+}
+
+static void send_coredevice_vendor_defined_barrier(xpc_remote_connection_t remote, const char *device, useconds_t delay_after) {
+    if (coredevice_send_hid_vendor_defined_barrier) {
+        int result = coredevice_send_hid_vendor_defined_barrier(remote, device);
+        if (!g_quiet) {
+            printf("coredevice vendor-defined barrier result=%d\n", result);
+        }
+        if (result != 0) {
+            exit(result);
+        }
+    }
+    if (delay_after) {
+        usleep(delay_after);
+    }
+}
+
 static void send_coredevice_button_click(xpc_remote_connection_t remote, uint64_t usage_page, uint64_t usage_code, useconds_t hold) {
     send_coredevice_button_event(remote, usage_page, usage_code, 0, hold);
     send_coredevice_button_event(remote, usage_page, usage_code, 1, 120000);
@@ -1167,6 +1206,20 @@ int main(int argc, const char *argv[]) {
                         uint8_t target = (uint8_t)target_raw;
                         send_coredevice_scroll_event(remote, x, y, z, phase, momentum, target, 120000);
                         send_coredevice_scroll_barrier(remote, 100000);
+                    } else if (strcmp(kind, "cd_vendor_defined") == 0) {
+                        unsigned long usage_page_raw = argc > 6 ? strtoul(argv[6], NULL, 0) : 0;
+                        unsigned long usage_raw = argc > 7 ? strtoul(argv[7], NULL, 0) : 0;
+                        unsigned long version_raw = argc > 8 ? strtoul(argv[8], NULL, 0) : 0;
+                        const char *hex_payload = argc > 9 ? argv[9] : "";
+                        if (usage_page_raw > UINT16_MAX || usage_raw > UINT16_MAX || version_raw > UINT32_MAX) {
+                            fprintf(stderr, "HIDVendorDefined raw values out of range: page=0x%lx usage=0x%lx version=0x%lx\n",
+                                    usage_page_raw,
+                                    usage_raw,
+                                    version_raw);
+                            exit(2);
+                        }
+                        send_coredevice_vendor_defined_event(remote, device, (uint32_t)usage_page_raw, (uint32_t)usage_raw, (uint32_t)version_raw, hex_payload, 120000);
+                        send_coredevice_vendor_defined_barrier(remote, device, 100000);
                     } else if (strcmp(kind, "cd_connected_services") == 0) {
                         if (!coredevice_print_connected_services) {
                             fprintf(stderr, "Connected-services printer is not linked\n");
