@@ -241,7 +241,19 @@ CoreDeviceUtilities.DDIUniversalHIDServicePayload.ConnectedServices
 
 The raw enum layout observed for `Request.connectedServices` is a 32-byte value with tag byte `4` at offset `24`; its description prints `{connectedServices}`.
 
-`connectedServices` / `connectedServiceDescriptors` are the next important gap. The Swift async protocol methods are visible, and the typed payload layout is known, but the current generic `sendSync(value:)` shim still gets a remote `Connection invalid` for the connected-services probe. DeviceHub appears to use the async CoreDevice path for descriptor discovery rather than a synchronous Mercury typed request.
+`connectedServices` / `connectedServiceDescriptors` are the next important gap. The Swift async protocol methods are visible, and the typed payload layout is known, but the current probes have not decoded the original DeviceHub descriptor-discovery reply.
+
+Current descriptor-discovery probe matrix:
+
+| Probe | Result | Interpretation |
+| --- | --- | --- |
+| Raw RemoteXPC async wrapper carrying `{connectedServices}` | Remote `Connection invalid` | Not the wrapper shape used by DeviceHub |
+| Raw Mercury one-way XPC dictionary | Remote `Connection invalid` | The UniversalHID peer expects typed CoreDevice/Mercury values |
+| Mercury `sendSync(value:)` with `Request.connectedServices` | Reaches the peer, but reply is currently zero/empty and the remote event is `Connection invalid` | Synchronous typed request is not the DeviceHub path, or still misses a session/metadata detail |
+| Mercury `send(value:replyQueue:replyHandler:)` hand-written ABI experiment | Removed from the public CLI after an ABI crash | Crash was local Swift generic/closure ABI misuse, not a valid protocol result |
+| `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` | Symbol and dispatch thunk identified; not safely invoked yet | This appears to be DeviceHub's real async descriptor path |
+
+The `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` dispatch thunk is a Swift async protocol dispatch path. It allocates a task frame, stores the async continuation, loads the concrete implementation from the witness table, and tail-jumps into that implementation. A safe CLI implementation probably needs a real Swift async shim that calls the CoreDevice API from Swift concurrency, rather than a C/assembly call into the Mercury generic reply-handler overload.
 
 The current `sendSync(value:)` ABI shim was corrected during this analysis. The short generic overload orders arguments as:
 

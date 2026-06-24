@@ -503,6 +503,10 @@ public func mercurySendXPCMessageSync(_ connection: UnsafeMutableRawPointer?, _ 
         }
     }
     fputs(String(format: "mercury sync: reply words=%016llx %016llx\n", reply.word0, reply.word1), stderr)
+    if reply.word0 == 0 && reply.word1 == 0 {
+        fputs("mercury sync reply NSDictionary: <empty>\n", stderr)
+        return 1
+    }
     if let nsDictionary = mercuryXPCDictionaryToNSDictionary(reply) {
         fputs("mercury sync reply NSDictionary: \(nsDictionary)\n", stderr)
     } else {

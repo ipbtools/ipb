@@ -41,7 +41,7 @@ bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 2 0
 
 `services` currently reaches the UniversalHID Mercury peer but does not yet decode `connectedServices` successfully; this is tracked in `docs/protocol.md`.
 
-After correcting the Mercury `sendSync(value:)` generic argument order, the `services` probe no longer hits the previous illegal-instruction crash path. The remaining result is a remote-level `Connection invalid`, which matches the current hypothesis that DeviceHub uses the async `UniversalHIDService.connectedServiceDescriptors()` path for dynamic descriptor discovery rather than the synchronous typed Mercury path currently exposed by the CLI.
+After correcting the Mercury `sendSync(value:)` generic argument order, the `services` probe no longer hits the previous illegal-instruction crash path. A later guard also prevents the raw Mercury sync probe from trying to bridge a zero-word reply into `NSDictionary`. The remaining result is a remote-level `Connection invalid`, which matches the current hypothesis that DeviceHub uses the async `UniversalHIDService.connectedServiceDescriptors()` path for dynamic descriptor discovery rather than the synchronous typed Mercury path currently exposed by the CLI.
 
 Current probe output:
 
@@ -50,6 +50,8 @@ connected services request: UniversalHIDServiceDDIPayload.Request {connectedServ
 remote event: { "XPCErrorDescription" => "Connection invalid" }
 connected services result=1 raw=0000000000000000
 ```
+
+The experimental `services-async` command was removed from the public wrapper after disassembly showed that the crash was caused by a local ABI mismatch when calling Mercury's generic `send(value:replyQueue:replyHandler:)` overload. The original DeviceHub path should be re-entered through a Swift async CoreDevice shim, not by exposing that unsafe assembly call.
 
 `service-ids` is host-side and does not require an active device socket. It is verified to return `mainTouchscreen = 0x101`, and that resolved value has been used successfully with:
 
