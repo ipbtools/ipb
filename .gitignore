@@ -1,0 +1,7 @@
+.DS_Store
+build/
+*.o
+*.dSYM/
+*.log
+*.png
+work/

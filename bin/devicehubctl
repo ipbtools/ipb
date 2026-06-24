@@ -1,0 +1,82 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+
+ROOT="${0:A:h:h}"
+BIN="${DEVICEHUBCTL_BIN:-$ROOT/build/action_sender_mercury}"
+DEVICE="${DEVICE_ID:-<device-uuid>}"
+XCODE="${DEVELOPER_DIR:-/Applications/Xcode-27.0.0-Beta.2.app}"
+
+ACTION="com.apple.coredevice.action.createservicesocket"
+UHID_FEATURE="com.apple.coredevice.feature.remote.universalhidservice"
+BUTTON_FEATURE="com.apple.coredevice.feature.remote.hid.button"
+DIGITIZER_FEATURE="com.apple.coredevice.feature.remote.hid.digitizer"
+
+quiet_env=(HIDCTL_QUIET=1 HIDCTL_WAIT_MS="${HIDCTL_WAIT_MS:-700}")
+
+usage() {
+  cat <<'EOF'
+usage:
+  devicehubctl tap <x> <y>
+  devicehubctl long <x> <y> [seconds]
+  devicehubctl swipe <x1> <y1> <x2> <y2> [seconds] [hold_seconds]
+  devicehubctl scroll <x> <y> <dx> <dy> [seconds]
+  devicehubctl home
+  devicehubctl recents
+  devicehubctl screenshot <path>
+
+coordinates are normalized: 0..1 from top-left to bottom-right.
+Set DEVICE_ID to override the default connected device.
+Set DEVICEHUBCTL_BIN to override the built helper path.
+EOF
+}
+
+run_uhid() {
+  env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$UHID_FEATURE" 0 "$@"
+}
+
+run_button() {
+  env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$BUTTON_FEATURE" 0 "$@"
+}
+
+run_digitizer() {
+  env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$DIGITIZER_FEATURE" 0 "$@"
+}
+
+cmd="${1:-}"
+[[ -n "$cmd" ]] || { usage; exit 2; }
+shift || true
+
+case "$cmd" in
+  tap|click)
+    [[ $# -eq 2 ]] || { usage; exit 2; }
+    run_uhid cd_uhid_tap 0x101 "$1" "$2"
+    ;;
+  long|press|longpress)
+    [[ $# -eq 2 || $# -eq 3 ]] || { usage; exit 2; }
+    run_digitizer cd_digitizer_long "$1" "$2" 0 0 "${3:-0.9}"
+    ;;
+  swipe|drag)
+    [[ $# -ge 4 && $# -le 6 ]] || { usage; exit 2; }
+    run_uhid cd_uhid_swipe 0x101 "$1" "$2" "$3" "$4" "${5:-0.30}" "${6:-0}"
+    ;;
+  scroll)
+    [[ $# -ge 4 && $# -le 5 ]] || { usage; exit 2; }
+    run_uhid cd_uhid_scroll 0x101 "$1" "$2" "$3" "$4" "${5:-0.35}"
+    ;;
+  home)
+    [[ $# -eq 0 ]] || { usage; exit 2; }
+    run_button cd_home_button
+    ;;
+  recents|app-switcher|switcher)
+    [[ $# -eq 0 ]] || { usage; exit 2; }
+    run_digitizer cd_digitizer_swipe 0.5 0.995 0.5 0.74 3 0 0 0.36 1.05
+    ;;
+  screenshot)
+    [[ $# -eq 1 ]] || { usage; exit 2; }
+    DEVELOPER_DIR="$XCODE" xcrun devicectl device capture screenshot --device "$DEVICE" --destination "$1" --quiet
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

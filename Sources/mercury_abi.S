@@ -1,0 +1,203 @@
+.text
+.globl _mercury_xpc_connection_send_abi
+.p2align 2
+_mercury_xpc_connection_send_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    bl _$s7Mercury13XPCConnectionC4send7messageyAA13XPCDictionaryV_tFTj
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _mercury_xpc_connection_send_sync_abi
+.p2align 2
+_mercury_xpc_connection_send_sync_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    mov x8, x2
+    bl _$s7Mercury13XPCConnectionC8sendSync7messageAA13XPCDictionaryVAG_tKFTj
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _mercury_xpc_connection_send_value_abi
+.p2align 2
+_mercury_xpc_connection_send_value_abi:
+    stp x20, x21, [sp, #-32]!
+    stp x22, x30, [sp, #16]
+    mov x20, x0
+    mov x0, x1
+    mov x1, x2
+    mov x2, x3
+    mov x3, x4
+    bl _$s7Mercury13XPCConnectionC4send5valueyx_tKSeRzSERzlF
+    mov x0, #0
+    ldp x22, x30, [sp, #16]
+    ldp x20, x21, [sp], #32
+    ret
+
+.globl _mercury_xpc_connection_send_sync_value_abi
+.p2align 2
+_mercury_xpc_connection_send_sync_value_abi:
+    stp x20, x21, [sp, #-32]!
+    stp x22, x30, [sp, #16]
+    ldr x9, [sp, #32]
+    mov x20, x0
+    mov x10, x5
+    mov x11, x6
+    mov x12, x7
+    mov x0, x1
+    mov x1, x2
+    mov x2, x10
+    mov x5, x11
+    mov x6, x12
+    mov x8, x9
+    mov x21, #0
+    bl _$s7Mercury13XPCConnectionC8sendSync5valueq_x_tKSeRzSERzSeR_SER_r0_lF
+    cmp x21, #0
+    cset w0, ne
+    ldp x22, x30, [sp, #16]
+    ldp x20, x21, [sp], #32
+    ret
+
+.globl _uhid_connected_services_description_abi
+.p2align 2
+_uhid_connected_services_description_abi:
+    stp x20, x30, [sp, #-16]!
+    ldr x0, [x0]
+    bl _$s19CoreDeviceUtilities29DDIUniversalHIDServicePayloadO17ConnectedServicesV11descriptionSSvg
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _coredevice_universalhid_send_dispatch_abi
+.p2align 2
+_coredevice_universalhid_send_dispatch_abi:
+    stp x20, x21, [sp, #-32]!
+    stp x22, x30, [sp, #16]
+    sub sp, sp, #160
+    str x0, [sp]
+    mov x5, x1
+    ldr x0, [x2]
+    ldr x1, [x2, #8]
+    str x3, [sp, #8]
+    add x2, sp, #8
+    add x3, sp, #32
+    add x20, sp, #0
+    mov x21, #0
+    bl _$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HIDReportV_AA0D2IDVtAA0aB5ErrorVYKFTj
+    cmp x21, #0
+    cset w0, ne
+    add sp, sp, #160
+    ldp x22, x30, [sp, #16]
+    ldp x20, x21, [sp], #32
+    ret
+
+.globl _coredevice_universalhid_reset_dispatch_abi
+.p2align 2
+_coredevice_universalhid_reset_dispatch_abi:
+    stp x20, x21, [sp, #-32]!
+    stp x22, x30, [sp, #16]
+    sub sp, sp, #160
+    str x0, [sp]
+    mov x3, x1
+    str x2, [sp, #8]
+    add x0, sp, #8
+    add x1, sp, #32
+    add x20, sp, #0
+    mov x21, #0
+    bl _$s10CoreDevice19UniversalHIDServiceP17resetGestureState7serviceyAA0D2IDV_tAA0aB5ErrorVYKFTj
+    cmp x21, #0
+    cset w0, ne
+    add sp, sp, #160
+    ldp x22, x30, [sp, #16]
+    ldp x20, x21, [sp], #32
+    ret
+
+.globl _coredevice_universalhid_barrier_dispatch_abi
+.p2align 2
+_coredevice_universalhid_barrier_dispatch_abi:
+    stp x20, x30, [sp, #-32]!
+    str x21, [sp, #16]
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x1, x1
+    add x20, sp, #0
+    bl _$s10CoreDevice19UniversalHIDServiceP11sendBarrieryyFTj
+    mov w0, #0
+    add sp, sp, #16
+    ldr x21, [sp, #16]
+    ldp x20, x30, [sp], #32
+    ret
+
+.globl _coredevice_hidbutton_custom_dispatch_abi
+.p2align 2
+_coredevice_hidbutton_custom_dispatch_abi:
+    stp x20, x21, [sp, #-32]!
+    stp x22, x30, [sp, #16]
+    sub sp, sp, #32
+    str x0, [sp]
+    mov x9, x1
+    mov x0, x2
+    mov x1, x3
+    and w10, w4, #0xff
+    strb w10, [sp, #8]
+    add x2, sp, #8
+    mov x4, x9
+    add x20, sp, #0
+    mov x21, #0
+    bl _$s10CoreDevice9HIDButtonP16sendCustomButton9usagePage0G4Code5stateySi_SiAA0C5StateOtKFTj
+    cmp x21, #0
+    cset w0, ne
+    add sp, sp, #32
+    ldp x22, x30, [sp, #16]
+    ldp x20, x21, [sp], #32
+    ret
+
+.globl _coredevice_hidbutton_barrier_dispatch_abi
+.p2align 2
+_coredevice_hidbutton_barrier_dispatch_abi:
+    stp x20, x30, [sp, #-32]!
+    str x21, [sp, #16]
+    sub sp, sp, #16
+    str x0, [sp]
+    add x20, sp, #0
+    bl _$s10CoreDevice9HIDButtonP11sendBarrieryyFTj
+    mov w0, #0
+    add sp, sp, #16
+    ldr x21, [sp, #16]
+    ldp x20, x30, [sp], #32
+    ret
+
+.globl _coredevice_hiddigitizer_cgpoint_dispatch_abi
+.p2align 2
+_coredevice_hiddigitizer_cgpoint_dispatch_abi:
+    stp x20, x21, [sp, #-32]!
+    stp x22, x30, [sp, #16]
+    sub sp, sp, #64
+    str x0, [sp]
+    mov x9, x1
+    mov x10, x2
+    mov x11, x3
+    mov x12, x4
+    mov x13, x5
+    mov x14, x6
+    str x11, [sp, #8]
+    str x12, [sp, #16]
+    str x13, [sp, #24]
+    fmov x0, d2
+    fmov x1, d3
+    mov x2, x10
+    add x3, sp, #8
+    add x4, sp, #16
+    add x5, sp, #24
+    mov x6, x14
+    mov x7, x9
+    add x20, sp, #0
+    mov x21, #0
+    bl _$s10CoreDevice12HIDDigitizerPAAE4send8pointOne0E3Two9eventType4edge6targetySo7CGPointV_AKSgAA014DigitizerEventI0OAA0M4EdgeOAA0M6TargetOtKF
+    cmp x21, #0
+    cset w0, ne
+    add sp, sp, #64
+    ldp x22, x30, [sp, #16]
+    ldp x20, x21, [sp], #32
+    ret
