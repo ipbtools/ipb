@@ -25,6 +25,10 @@ struct CoreDeviceHIDServiceIDWords {
     var id: UInt64 = 0
 }
 
+final class AsyncProbeState: @unchecked Sendable {
+    var result: Int32 = 2
+}
+
 var retainedCoreDeviceStrings: [String] = []
 
 @_silgen_name("$s7Mercury19RemoteXPCConnectionC10unsafePeer4fromAA17XPCPeerConnection_pSo24OS_xpc_remote_connectionC_tFZ")
@@ -112,6 +116,13 @@ func hidServiceIDAVPCustomABI(_ output: UnsafeMutablePointer<CoreDeviceHIDServic
 @_silgen_name("hid_service_id_user_defined_base_abi")
 func hidServiceIDUserDefinedBaseABI() -> UInt64
 
+@_silgen_name("coredevice_connected_descriptors_async_abi")
+func coredeviceConnectedServiceDescriptorsAsyncABI(
+    _ resultBuffer: UnsafeMutableRawPointer,
+    _ service: UnsafeMutableRawPointer,
+    _ witness: UnsafeRawPointer
+) async throws -> UnsafeRawPointer
+
 @_silgen_name("coredevice_universalhid_send_dispatch_abi")
 func coredeviceUniversalHIDSendDispatchABI(
     _ service: UnsafeMutableRawPointer,
@@ -166,6 +177,14 @@ func coredeviceHIDDigitizerCGPointDispatchABI(
 typealias SwiftMetadataAccessor = @convention(c) () -> UnsafeRawPointer
 typealias SwiftConformsToProtocol = @convention(c) (UnsafeRawPointer, UnsafeRawPointer) -> UnsafeRawPointer?
 
+struct ValueWitnessLayout {
+    let table: UnsafeRawPointer
+    let size: UInt
+    let stride: UInt
+    let flags: UInt32
+    let extraInhabitantCount: UInt32
+}
+
 func dlsymRequired<T>(_ symbol: String, as type: T.Type) -> T {
     guard let pointer = dlsym(dlopen(nil, RTLD_NOW), symbol) else {
         fatalError("missing symbol \(symbol)")
@@ -207,6 +226,227 @@ func uhidConnectedServicesMetadataAndCodableWitnesses() -> (UnsafeRawPointer, Un
         "$s19CoreDeviceUtilities29DDIUniversalHIDServicePayloadO17ConnectedServicesVMa",
         label: "DDIUniversalHIDServicePayload.ConnectedServices"
     )
+}
+
+func hidServiceDescriptorMetadata() -> UnsafeRawPointer {
+    let metadataAccessor = dlsymRequired(
+        "$s10CoreDevice20HIDServiceDescriptorVMa",
+        as: SwiftMetadataAccessor.self
+    )
+    return metadataAccessor()
+}
+
+func optionalMetadata(_ metadataSymbol: String) -> UnsafeRawPointer? {
+    guard let symbol = dlsym(dlopen(nil, RTLD_NOW), metadataSymbol) else {
+        return nil
+    }
+    let metadataAccessor = unsafeBitCast(symbol, to: SwiftMetadataAccessor.self)
+    return metadataAccessor()
+}
+
+func valueWitnessLayout(for metadata: UnsafeRawPointer) -> ValueWitnessLayout {
+    let table = metadata.load(fromByteOffset: -MemoryLayout<UInt>.stride, as: UnsafeRawPointer.self)
+    return ValueWitnessLayout(
+        table: table,
+        size: table.load(fromByteOffset: 64, as: UInt.self),
+        stride: table.load(fromByteOffset: 72, as: UInt.self),
+        flags: table.load(fromByteOffset: 80, as: UInt32.self),
+        extraInhabitantCount: table.load(fromByteOffset: 84, as: UInt32.self)
+    )
+}
+
+func decodeSmallSwiftString(_ pointer: UnsafeRawPointer) -> String? {
+    let word0 = pointer.load(as: UInt64.self)
+    let word1 = pointer.load(fromByteOffset: MemoryLayout<UInt64>.stride, as: UInt64.self)
+    let marker = UInt8(truncatingIfNeeded: word1 >> 56)
+    guard marker >= 0xe0 && marker <= 0xef else {
+        return nil
+    }
+    let length = Int(marker - 0xe0)
+    guard length <= 15 else {
+        return nil
+    }
+
+    var bytes: [UInt8] = []
+    for index in 0..<8 {
+        bytes.append(UInt8(truncatingIfNeeded: word0 >> UInt64(index * 8)))
+    }
+    for index in 0..<7 {
+        bytes.append(UInt8(truncatingIfNeeded: word1 >> UInt64(index * 8)))
+    }
+    let payload = Array(bytes.prefix(length))
+    guard payload.allSatisfy({ $0 >= 0x20 && $0 < 0x7f }) else {
+        return nil
+    }
+    return String(bytes: payload, encoding: .utf8)
+}
+
+func decodeSwiftString(_ pointer: UnsafeRawPointer) -> String? {
+    if let small = decodeSmallSwiftString(pointer) {
+        return small
+    }
+
+    let word0 = pointer.load(as: UInt64.self)
+    let word1 = pointer.load(fromByteOffset: MemoryLayout<UInt64>.stride, as: UInt64.self)
+    guard (word0 >> 60) == 0xf else {
+        return nil
+    }
+    let length = Int(word0 & 0x0fff_ffff_ffff_ffff)
+    guard length > 0 && length <= 4096 else {
+        return nil
+    }
+
+    let storageAddress = word1 & 0x0fff_ffff_ffff_ffff
+    guard let storage = UnsafeRawPointer(bitPattern: UInt(storageAddress)), storageAddress != 0 else {
+        return nil
+    }
+
+    let bytes = UnsafeRawBufferPointer(start: storage.advanced(by: 32), count: length)
+    guard bytes.allSatisfy({ $0 == 0x09 || $0 == 0x0a || ($0 >= 0x20 && $0 < 0x7f) }) else {
+        return nil
+    }
+    return String(decoding: bytes, as: UTF8.self)
+}
+
+func swiftStringBitsSummary(_ pointer: UnsafeRawPointer) -> String {
+    let word0 = pointer.load(as: UInt64.self)
+    let word1 = pointer.load(fromByteOffset: MemoryLayout<UInt64>.stride, as: UInt64.self)
+    if let string = decodeSwiftString(pointer) {
+        return "\"\(string)\""
+    }
+
+    var parts = [String(format: "stringWords=%016llx,%016llx", word0, word1)]
+    let storageAddress = word1 & 0x0fff_ffff_ffff_ffff
+    if let storage = UnsafeRawPointer(bitPattern: UInt(storageAddress)), storageAddress != 0 {
+        var words: [String] = []
+        for wordIndex in 0..<6 {
+            let word = storage.load(fromByteOffset: wordIndex * MemoryLayout<UInt64>.stride, as: UInt64.self)
+            words.append(String(format: "%016llx", word))
+        }
+        parts.append("stringStorage=\(words.joined(separator: ","))")
+    }
+    return parts.joined(separator: " ")
+}
+
+func codableValueSummary(_ raw: UInt64) -> String {
+    let tag = raw >> 60
+    let payloadAddress = raw & 0x0fff_ffff_ffff_ffff
+    guard let payload = UnsafeRawPointer(bitPattern: UInt(payloadAddress)), payloadAddress != 0 else {
+        return String(format: "tag=%llx payload=<null>", tag)
+    }
+
+    switch tag {
+    case 0x0:
+        let arrayAddress = payload.load(fromByteOffset: 16, as: UInt64.self)
+        guard let arrayStorage = UnsafeRawPointer(bitPattern: UInt(arrayAddress)), arrayAddress != 0 else {
+            return "array:<null>"
+        }
+        let count = arrayStorage.load(fromByteOffset: 16, as: UInt64.self)
+        var elementWords: [String] = []
+        if count <= 32 {
+            for elementIndex in 0..<Int(count) {
+                let element = arrayStorage.load(fromByteOffset: 32 + elementIndex * MemoryLayout<UInt64>.stride, as: UInt64.self)
+                elementWords.append(codableValueSummary(element))
+            }
+        }
+        return "array:[\(elementWords.joined(separator: ", "))]"
+    case 0x5:
+        let pairAddress = payload.load(fromByteOffset: 16, as: UInt64.self)
+        guard let pair = UnsafeRawPointer(bitPattern: UInt(pairAddress)), pairAddress != 0 else {
+            return "dictionary:<null>"
+        }
+        return "dictionary:\(codableDictionarySummary(pair))"
+    case 0x1:
+        let value = payload.load(fromByteOffset: 16, as: UInt64.self)
+        return "bool:\(value != 0)"
+    case 0x8:
+        let value = payload.load(fromByteOffset: 16, as: UInt64.self)
+        return "uint:\(value)"
+    case 0x9:
+        let value = payload.load(fromByteOffset: 16, as: UInt64.self)
+        return String(format: "serviceID:0x%llx", value)
+    case 0xa:
+        return "string:\(swiftStringBitsSummary(payload.advanced(by: 16)))"
+    default:
+        var words: [String] = []
+        for wordIndex in 0..<4 {
+            let word = payload.load(fromByteOffset: wordIndex * MemoryLayout<UInt64>.stride, as: UInt64.self)
+            words.append(String(format: "%016llx", word))
+        }
+        return String(format: "tag=%llx payload=%016llx payloadWords=%@", tag, payloadAddress, words.joined(separator: ","))
+    }
+}
+
+func codableDictionarySummary(_ storage: UnsafeRawPointer) -> String {
+    let fields = codableDictionaryFields(storage)
+    if fields.isEmpty {
+        let storageHeader = storage.bindMemory(to: UInt.self, capacity: 8)
+        let fieldCount = storageHeader[2]
+        let scale = Int(storageHeader[4] & 0xff)
+        let bucketCount = scale < 20 ? 1 << scale : 0
+        return String(format: "{count:%llu buckets:%d}", UInt64(fieldCount), bucketCount)
+    }
+    return "{\(fields.map { "\($0.0):\($0.1)" }.joined(separator: ", "))}"
+}
+
+func codableDictionaryFields(_ storage: UnsafeRawPointer) -> [(String, String)] {
+    let storageHeader = storage.bindMemory(to: UInt.self, capacity: 8)
+    let fieldCount = storageHeader[2]
+    let scale = Int(storageHeader[4] & 0xff)
+    let bucketCount = scale < 20 ? 1 << scale : 0
+    let keysAddress = storageHeader[6]
+    let valuesAddress = storageHeader[7]
+
+    guard fieldCount <= 128,
+          bucketCount > 0,
+          bucketCount <= 256,
+          let keys = UnsafeRawPointer(bitPattern: keysAddress),
+          let values = UnsafeRawPointer(bitPattern: valuesAddress) else {
+        return []
+    }
+
+    var pairs: [(String, String)] = []
+    for bucket in 0..<bucketCount {
+        let keyPointer = keys.advanced(by: bucket * 16)
+        guard let key = decodeSwiftString(keyPointer) else {
+            continue
+        }
+        let rawValue = values.advanced(by: bucket * MemoryLayout<UInt64>.stride).load(as: UInt64.self)
+        pairs.append((key, codableValueSummary(rawValue)))
+    }
+    return pairs
+}
+
+func orderedDescriptorFields(_ fields: [(String, String)]) -> [(String, String)] {
+    let priority = [
+        "_ServiceID",
+        "Product",
+        "Transport",
+        "PrimaryUsagePage",
+        "PrimaryUsage",
+        "DeviceUsagePairs",
+        "DeviceTypeHint",
+        "Built-In",
+        "Authenticated",
+        "DisplayIntegrated",
+        "UniversalControlVirtualService",
+        "_CoreDevice_originalUsages",
+        "_CoreDevice_suppressMousePointer",
+        "RouteEventsIgnoringSystemShellPolicy",
+    ]
+    var result: [(String, String)] = []
+    var seen = Set<String>()
+    for key in priority {
+        for field in fields where field.0 == key {
+            result.append(field)
+            seen.insert(field.0)
+        }
+    }
+    let remaining = fields
+        .filter { !seen.contains($0.0) }
+        .sorted { $0.0 < $1.0 }
+    result.append(contentsOf: remaining)
+    return result
 }
 
 func printHIDServiceID(_ name: String, _ serviceID: CoreDeviceHIDServiceIDWords) {
@@ -292,6 +532,130 @@ func swiftProtocolWitness(for classObject: AnyClass, protocolSymbol: String) -> 
     return witness
 }
 
+func dumpWitnessTable(_ label: String, _ witness: UnsafeRawPointer, slots: Int = 12) {
+    fputs("\(label) witness=\(witness)\n", stderr)
+    for index in 0..<slots {
+        let value = witness.load(fromByteOffset: index * MemoryLayout<UInt>.stride, as: UInt.self)
+        fputs(String(format: "  [%02d] 0x%016llx\n", index, UInt64(value)), stderr)
+    }
+}
+
+func dumpRawDescriptorArray(_ raw: UnsafeRawPointer) {
+    let verbose = ProcessInfo.processInfo.environment["HIDCTL_VERBOSE_DESCRIPTORS"] != nil
+    let storageAddress = UInt(bitPattern: raw)
+    guard storageAddress != 0 else {
+        print("connected descriptors async raw array=<null>")
+        return
+    }
+
+    let header = raw.bindMemory(to: UInt.self, capacity: 4)
+    let metadata = header[0]
+    let refcount = header[1]
+    let count = header[2]
+    let capacityAndFlags = header[3]
+    print("connected descriptors count=\(count)")
+    if verbose {
+        print(String(format: "connected descriptors async raw array=%016llx metadata=%016llx refcount=%016llx count=%llu capacityAndFlags=%016llx",
+                     UInt64(storageAddress),
+                     UInt64(metadata),
+                     UInt64(refcount),
+                     UInt64(count),
+                     UInt64(capacityAndFlags)))
+    }
+
+    guard count > 0 else {
+        print("connected descriptors: <empty>")
+        return
+    }
+    guard count <= 1024 else {
+        print("connected descriptors: refusing to decode suspicious count \(count)")
+        return
+    }
+
+    let descriptorMetadata = hidServiceDescriptorMetadata()
+    let valueWitness = valueWitnessLayout(for: descriptorMetadata)
+    if verbose {
+        print(String(format: "HIDServiceDescriptor metadata=%016llx valueWitness=%016llx size=%llu stride=%llu flags=%08x extraInhabitantCount=%u",
+                     UInt64(UInt(bitPattern: descriptorMetadata)),
+                     UInt64(UInt(bitPattern: valueWitness.table)),
+                     UInt64(valueWitness.size),
+                     UInt64(valueWitness.stride),
+                     valueWitness.flags,
+                     valueWitness.extraInhabitantCount))
+    }
+
+    let stride = Int(valueWitness.stride)
+    guard stride > 0 && stride <= 4096 else {
+        print("connected descriptors: refusing to decode suspicious descriptor stride \(stride)")
+        return
+    }
+
+    let elements = raw.advanced(by: 32)
+    for index in 0..<Int(count) {
+        let element = elements.advanced(by: index * stride)
+        let wordCount = min(stride / MemoryLayout<UInt64>.stride, 12)
+        var words: [String] = []
+        for wordIndex in 0..<wordCount {
+            let word = element.load(fromByteOffset: wordIndex * MemoryLayout<UInt64>.stride, as: UInt64.self)
+            words.append(String(format: "%016llx", word))
+        }
+        if verbose {
+            print("connectedDescriptor[\(index)] rawWords=\(words.joined(separator: " "))")
+        }
+
+        let storageWord = element.load(as: UInt.self)
+        if let storage = UnsafeRawPointer(bitPattern: storageWord) {
+            let storageHeader = storage.bindMemory(to: UInt.self, capacity: 8)
+            let fieldCount = storageHeader[2]
+            let capacity = storageHeader[3]
+            let scaleWord = storageHeader[4]
+            let scale = Int(scaleWord & 0xff)
+            let bucketCount = scale < 20 ? 1 << scale : 0
+            let keysAddress = storageHeader[6]
+            let valuesAddress = storageHeader[7]
+            if verbose {
+                print(String(format: "connectedDescriptor[%d] storage count=%llu capacity=%llu scale=%d buckets=%d keys=%016llx values=%016llx",
+                             index,
+                             UInt64(fieldCount),
+                             UInt64(capacity),
+                             scale,
+                             bucketCount,
+                             UInt64(keysAddress),
+                             UInt64(valuesAddress)))
+            }
+
+            guard bucketCount > 0,
+                  bucketCount <= 256,
+                  UnsafeRawPointer(bitPattern: keysAddress) != nil,
+                  UnsafeRawPointer(bitPattern: valuesAddress) != nil else {
+                continue
+            }
+
+            if verbose, let codableValueMetadata = optionalMetadata("$s10CoreDevice12CodableValueOMa") {
+                let codableValueWitness = valueWitnessLayout(for: codableValueMetadata)
+                print(String(format: "CodableValue metadata=%016llx valueWitness=%016llx size=%llu stride=%llu flags=%08x",
+                             UInt64(UInt(bitPattern: codableValueMetadata)),
+                             UInt64(UInt(bitPattern: codableValueWitness.table)),
+                             UInt64(codableValueWitness.size),
+                             UInt64(codableValueWitness.stride),
+                             codableValueWitness.flags))
+            }
+
+            let fields = orderedDescriptorFields(codableDictionaryFields(storage))
+            var fieldMap: [String: String] = [:]
+            for field in fields {
+                fieldMap[field.0] = field.1
+            }
+            let serviceID = fieldMap["_ServiceID"] ?? "serviceID:<unknown>"
+            let product = fieldMap["Product"] ?? "string:\"<unknown>\""
+            print("connectedDescriptor[\(index)] \(serviceID) \(product)")
+            for (key, value) in fields {
+                print("  \(key)=\(value)")
+            }
+        }
+    }
+}
+
 func storePointer(_ base: UnsafeMutableRawPointer, offset: Int, _ value: UnsafeRawPointer?) {
     base.advanced(by: offset).storeBytes(of: UInt(bitPattern: value), as: UInt.self)
 }
@@ -351,6 +715,10 @@ func makeDDIUniversalHIDService(_ connection: UnsafeMutableRawPointer?) -> (Unsa
     if ProcessInfo.processInfo.environment["HIDCTL_QUIET"] == nil {
         fputs("coredevice hid: peer=\(type(of: peer)) serviceName=\(serviceName) feature=\(featureIdentifier)\n", stderr)
         fputs("coredevice hid: peerWitness=\(peerWitness) ddiWitness=\(ddiWitness)\n", stderr)
+        if ProcessInfo.processInfo.environment["HIDCTL_DUMP_WITNESS"] != nil {
+            dumpWitnessTable("coredevice hid peer", peerWitness)
+            dumpWitnessTable("coredevice hid ddi", ddiWitness)
+        }
     }
     return (ddiPointer, ddiWitness)
 }
@@ -603,6 +971,59 @@ public func coredevicePrintConnectedServices(_ connection: UnsafeMutableRawPoint
         }
     }
     return result
+}
+
+@_cdecl("coredevice_print_connected_descriptors_async_raw")
+public func coredevicePrintConnectedDescriptorsAsyncRaw(_ connection: UnsafeMutableRawPointer?) -> Int32 {
+    guard let connection else {
+        fputs("connected descriptors async raw: remote connection is null\n", stderr)
+        return 2
+    }
+
+    let (service, witness) = makeDDIUniversalHIDService(connection)
+    let serviceAddress = UInt(bitPattern: service)
+    let witnessAddress = UInt(bitPattern: witness)
+    let state = AsyncProbeState()
+    let semaphore = DispatchSemaphore(value: 0)
+
+    Task {
+        let resultBuffer = UnsafeMutableRawPointer.allocate(byteCount: 64, alignment: 8)
+        resultBuffer.initializeMemory(as: UInt64.self, repeating: 0, count: 8)
+        defer {
+            resultBuffer.deallocate()
+        }
+
+        do {
+            guard let asyncService = UnsafeRawPointer(bitPattern: serviceAddress),
+                  let asyncWitness = UnsafeRawPointer(bitPattern: witnessAddress) else {
+                fputs("connected descriptors async raw: failed to rebuild service pointers\n", stderr)
+                state.result = 2
+                semaphore.signal()
+                return
+            }
+            let serviceBox = UnsafeMutableRawPointer.allocate(byteCount: 8, alignment: 8)
+            serviceBox.storeBytes(of: UInt(bitPattern: asyncService), as: UInt.self)
+            defer {
+                serviceBox.deallocate()
+            }
+            let raw = try await coredeviceConnectedServiceDescriptorsAsyncABI(resultBuffer, serviceBox, asyncWitness)
+            let words = resultBuffer.bindMemory(to: UInt64.self, capacity: 8)
+            if ProcessInfo.processInfo.environment["HIDCTL_VERBOSE_DESCRIPTORS"] != nil {
+                print(String(format: "connected descriptors async raw return=%016llx", UInt64(UInt(bitPattern: raw))))
+                print(String(format: "connected descriptors async raw buffer=%016llx %016llx %016llx %016llx %016llx %016llx %016llx %016llx",
+                             words[0], words[1], words[2], words[3], words[4], words[5], words[6], words[7]))
+            }
+            dumpRawDescriptorArray(raw)
+            state.result = 0
+        } catch {
+            fputs("connected descriptors async raw error: \(error)\n", stderr)
+            state.result = 1
+        }
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    return state.result
 }
 
 @_cdecl("coredevice_send_universalhid_hid_report")

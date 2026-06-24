@@ -25,6 +25,7 @@ usage:
   devicehubctl recents
   devicehubctl screenshot <path>
   devicehubctl service-ids
+  devicehubctl descriptors              # experimental async descriptor-discovery probe
   devicehubctl services                 # experimental descriptor-discovery probe
   devicehubctl reset-gesture [service_id]
   devicehubctl button <usage_page> <usage_code> [hold_seconds]
@@ -90,6 +91,10 @@ case "$cmd" in
   services|probe-services)
     [[ $# -eq 0 ]] || { usage; exit 2; }
     run_uhid cd_connected_services
+    ;;
+  descriptors|probe-descriptors)
+    [[ $# -eq 0 ]] || { usage; exit 2; }
+    run_uhid cd_connected_descriptors_async_raw
     ;;
   service-ids|ids)
     [[ $# -eq 0 ]] || { usage; exit 2; }

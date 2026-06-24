@@ -25,6 +25,7 @@ bin/devicehubctl home
 bin/devicehubctl recents
 bin/devicehubctl screenshot build/smoke.png
 bin/devicehubctl service-ids
+bin/devicehubctl descriptors
 ```
 
 The original investigation also captured screenshots after each command, but those are intentionally not committed to keep the repository small and reviewable.
@@ -33,13 +34,14 @@ Additional protocol probe commands now exposed:
 
 ```sh
 bin/devicehubctl services
+HIDCTL_VERBOSE_DESCRIPTORS=1 bin/devicehubctl descriptors
 bin/devicehubctl reset-gesture 0x101
 bin/devicehubctl button 0x0c 0x40
 bin/devicehubctl uhid-report 0x101 0.5 0.5 0 0
 bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 2 0
 ```
 
-`services` currently reaches the UniversalHID Mercury peer but does not yet decode `connectedServices` successfully; this is tracked in `docs/protocol.md`.
+`services` reaches the UniversalHID Mercury peer but does not decode the synchronous `connectedServices` wrapper successfully. The verified DeviceHub discovery path is now `descriptors`, which calls `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` through a Swift async ABI bridge and decodes the returned descriptor dictionaries.
 
 After correcting the Mercury `sendSync(value:)` generic argument order, the `services` probe no longer hits the previous illegal-instruction crash path. A later guard also prevents the raw Mercury sync probe from trying to bridge a zero-word reply into `NSDictionary`. The remaining result is a remote-level `Connection invalid`, which matches the current hypothesis that DeviceHub uses the async `UniversalHIDService.connectedServiceDescriptors()` path for dynamic descriptor discovery rather than the synchronous typed Mercury path currently exposed by the CLI.
 
@@ -52,6 +54,26 @@ connected services result=1 raw=0000000000000000
 ```
 
 The experimental `services-async` command was removed from the public wrapper after disassembly showed that the crash was caused by a local ABI mismatch when calling Mercury's generic `send(value:replyQueue:replyHandler:)` overload. The original DeviceHub path should be re-entered through a Swift async CoreDevice shim, not by exposing that unsafe assembly call.
+
+Current `descriptors` output, abbreviated only by omitting raw pointer diagnostics:
+
+```text
+connected descriptors count=5
+connectedDescriptor[0] serviceID:0x101 string:"CoreDevice touchscreen(nil)"
+  PrimaryUsagePage=uint:13
+  PrimaryUsage=uint:4
+  DeviceUsagePairs=array:[dictionary:{DeviceUsagePage:uint:13, DeviceUsage:uint:4}]
+connectedDescriptor[1] serviceID:0x200 string:"CoreDevice keyboard"
+  _CoreDevice_originalUsages=array:[dictionary:{DeviceUsage:uint:6, DeviceUsagePage:uint:1}]
+connectedDescriptor[2] serviceID:0x402 string:"CoreDevice mainScreenButtons"
+  DeviceUsagePairs=array:[dictionary:{DeviceUsage:uint:1, DeviceUsagePage:uint:11}, dictionary:{DeviceUsage:uint:6, DeviceUsagePage:uint:1}]
+connectedDescriptor[3] serviceID:0x500 string:"CoreDevice avpCustom"
+  PrimaryUsagePage=uint:65377
+  PrimaryUsage=uint:91
+connectedDescriptor[4] serviceID:0x501 string:"CoreDevice touchscreenGesture"
+  DeviceTypeHint=string:"Trackpad"
+  RouteEventsIgnoringSystemShellPolicy=bool:true
+```
 
 `service-ids` is host-side and does not require an active device socket. It is verified to return `mainTouchscreen = 0x101`, and that resolved value has been used successfully with:
 
@@ -78,4 +100,4 @@ Findings:
 - `DeviceKit` links `CoreDevice`, `CoreDeviceUtilities`, `UniversalHID`, `HID.framework`, and weakly `UniversalHIDKit`.
 - `DeviceKit.HIDManager` has strings and code paths for `fetchConnectedServiceDescriptors(generation:)`, `createService(descriptor:)`, `reset(serviceID:)`, `report(reportID:)`, and local service lookup by `serviceID`.
 - `CoreDevice.UniversalHIDService` exposes synchronous report sending/reset/barrier and async descriptor/service discovery.
-- `CoreDeviceUtilities.DDIUniversalHIDServicePayload.ConnectedServices` wraps `[CoreDevice.HIDServiceDescriptor]`.
+- `CoreDeviceUtilities.DDIUniversalHIDServicePayload.ConnectedServices` wraps `[CoreDevice.HIDServiceDescriptor]`, but DeviceKit's verified runtime path uses CoreDevice's async `connectedServiceDescriptors()` API.

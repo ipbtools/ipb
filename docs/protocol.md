@@ -241,9 +241,13 @@ CoreDeviceUtilities.DDIUniversalHIDServicePayload.ConnectedServices
 
 The raw enum layout observed for `Request.connectedServices` is a 32-byte value with tag byte `4` at offset `24`; its description prints `{connectedServices}`.
 
-`connectedServices` / `connectedServiceDescriptors` are the next important gap. The Swift async protocol methods are visible, and the typed payload layout is known, but the current probes have not decoded the original DeviceHub descriptor-discovery reply.
+`connectedServices` and the synchronous `DDIUniversalHIDServicePayload.Request.connectedServices` wrapper are not the path DeviceHub uses for discovery. The DeviceHub/DeviceKit path calls the Swift async protocol method:
 
-Current descriptor-discovery probe matrix:
+```text
+CoreDevice.UniversalHIDService.connectedServiceDescriptors() async throws -> [CoreDevice.HIDServiceDescriptor]
+```
+
+Descriptor-discovery probe matrix:
 
 | Probe | Result | Interpretation |
 | --- | --- | --- |
@@ -251,9 +255,32 @@ Current descriptor-discovery probe matrix:
 | Raw Mercury one-way XPC dictionary | Remote `Connection invalid` | The UniversalHID peer expects typed CoreDevice/Mercury values |
 | Mercury `sendSync(value:)` with `Request.connectedServices` | Reaches the peer, but reply is currently zero/empty and the remote event is `Connection invalid` | Synchronous typed request is not the DeviceHub path, or still misses a session/metadata detail |
 | Mercury `send(value:replyQueue:replyHandler:)` hand-written ABI experiment | Removed from the public CLI after an ABI crash | Crash was local Swift generic/closure ABI misuse, not a valid protocol result |
-| `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` | Symbol and dispatch thunk identified; not safely invoked yet | This appears to be DeviceHub's real async descriptor path |
+| `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` | Verified through a Swift async shim plus a small ARM64 ABI bridge | DeviceHub's real descriptor path |
 
-The `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` dispatch thunk is a Swift async protocol dispatch path. It allocates a task frame, stores the async continuation, loads the concrete implementation from the witness table, and tail-jumps into that implementation. A safe CLI implementation probably needs a real Swift async shim that calls the CoreDevice API from Swift concurrency, rather than a C/assembly call into the Mercury generic reply-handler overload.
+The async dispatch detail that mattered: CoreDevice's async function pointer descriptor uses two 32-bit words, a signed relative target and an async frame size. The `connectedServiceDescriptors()` witness entry is an async descriptor, and the concrete DDI implementation expects the UniversalHID existential self in `x20`. The CLI bridge therefore sets `x20` to a one-word service box and exposes a matching `Tu` async descriptor for Swift concurrency.
+
+The returned value is native Swift Array storage for `[CoreDevice.HIDServiceDescriptor]`. Runtime value witness metadata shows `HIDServiceDescriptor` is an 8-byte resilient value whose single word is its storage dictionary. The dictionary is `[String: CoreDevice.CodableValue]`; the currently decoded `CodableValue` tags are:
+
+| Tag | Meaning | Payload |
+| --- | --- | --- |
+| `0x0` | array | Swift Array storage of nested `CodableValue` |
+| `0x1` | bool | boxed UInt64, nonzero is true |
+| `0x5` | dictionary | Swift Dictionary storage of `String -> CodableValue` |
+| `0x8` | unsigned integer | boxed UInt64 |
+| `0x9` | `HIDServiceID` | boxed UInt64 service id |
+| `0xa` | string | boxed Swift `String` |
+
+On the verified iPhone 13 Pro/iOS 27 device, `bin/devicehubctl descriptors` decodes:
+
+| Service | Product | Primary usage page | Primary usage | Notable fields |
+| --- | --- | --- | --- | --- |
+| `0x101` | `CoreDevice touchscreen(nil)` | `13` | `4` | `DeviceTypeHint=Digitizer`, `Built-In=true` |
+| `0x200` | `CoreDevice keyboard` | `0` | `0` | `DeviceTypeHint=Keyboard`, original usage `{page=1, usage=6}` |
+| `0x402` | `CoreDevice mainScreenButtons` | `11` | `1` | `Authenticated=true`, `DisplayIntegrated=true`, also usage `{page=1, usage=6}` |
+| `0x500` | `CoreDevice avpCustom` | `65377` | `91` | AVP/vendor custom service |
+| `0x501` | `CoreDevice touchscreenGesture` | `1` | `2` | `DeviceTypeHint=Trackpad`, suppresses mouse pointer |
+
+`HIDCTL_VERBOSE_DESCRIPTORS=1 bin/devicehubctl descriptors` prints raw Array, metadata, and value-witness details for future ABI checks.
 
 The current `sendSync(value:)` ABI shim was corrected during this analysis. The short generic overload orders arguments as:
 
@@ -351,8 +378,8 @@ Verified high-level use:
 
 ## Current Gaps
 
-- `connectedServices`, `connectedServiceDescriptors`, and `connectedServiceIDs` are visible in symbols and the payload structs are identified, but they are not yet successfully decoded through the current CLI.
-- The original DeviceHub dynamic discovery path is async Swift protocol dispatch. The static report-sending path is complete enough for basic interaction, but the async descriptor path is not complete.
+- `connectedServiceDescriptors()` is decoded on the current macOS 27/Xcode 27 beta 2 host and iOS 27 device, but the ABI is private Swift framework ABI and should be re-verified on each beta seed.
+- `connectedServices` and `connectedServiceIDs` remain symbol-mapped but are not exposed because the verified DeviceHub path is `connectedServiceDescriptors()`.
 - `createService` and `removeService` request cases are identified but not verified.
 - Keyboard, pointer, scroll-specific, vendor-defined HID feature protocols are symbol-mapped but not implemented.
 - Multi-touch second point, `DigitizerTarget`, and `DigitizerEdge` values need systematic enumeration.

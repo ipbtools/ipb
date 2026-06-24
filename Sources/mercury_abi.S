@@ -69,6 +69,21 @@ _uhid_connected_services_description_abi:
     ldp x20, x30, [sp], #16
     ret
 
+.globl _coredevice_connected_descriptors_async_abi
+.p2align 2
+_coredevice_connected_descriptors_async_abi:
+    mov x20, x1
+    b _$s10CoreDevice19UniversalHIDServiceP27connectedServiceDescriptorsSayAA0D10DescriptorVGyYaAA0aB5ErrorVYKFTj
+
+.section __TEXT,__const
+.globl _coredevice_connected_descriptors_async_abiTu
+.p2align 2
+_coredevice_connected_descriptors_async_abiTu:
+    .long _coredevice_connected_descriptors_async_abi - _coredevice_connected_descriptors_async_abiTu
+    .long 0x20
+
+.text
+
 .macro hid_static_getter_shim cname, swift_symbol
 .globl \cname
 .p2align 2
