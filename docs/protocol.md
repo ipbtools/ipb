@@ -74,7 +74,7 @@ The verified main touchscreen service is:
 mainTouchscreen(0x101)
 ```
 
-The CLI exposes this as `UHID_SERVICE_ID`, defaulting to `0x101`. The value is now verified by calling CoreDeviceUtilities `HIDServiceID` static getters through an indirect-return ABI shim:
+The CLI can still use this as an explicit `UHID_SERVICE_ID=0x101`, but the wrapper default is now `UHID_SERVICE_ID=auto`. In auto mode, the CLI calls `connectedServiceDescriptors()` and selects the descriptor whose product is `CoreDevice touchscreen(nil)`, falling back to `0x101` if discovery fails. The static value is also verified by calling CoreDeviceUtilities `HIDServiceID` getters through an indirect-return ABI shim:
 
 ```sh
 bin/devicehubctl service-ids
@@ -281,6 +281,20 @@ On the verified iPhone 13 Pro/iOS 27 device, `bin/devicehubctl descriptors` deco
 | `0x501` | `CoreDevice touchscreenGesture` | `1` | `2` | `DeviceTypeHint=Trackpad`, suppresses mouse pointer |
 
 `HIDCTL_VERBOSE_DESCRIPTORS=1 bin/devicehubctl descriptors` prints raw Array, metadata, and value-witness details for future ABI checks.
+
+The shell wrapper exposes descriptor-derived service resolution:
+
+```sh
+bin/devicehubctl services              # alias of descriptors
+bin/devicehubctl descriptors
+bin/devicehubctl service-id touchscreen
+bin/devicehubctl service-id gesture
+bin/devicehubctl service-id keyboard
+bin/devicehubctl service-id buttons
+bin/devicehubctl service-id avp
+```
+
+High-level UniversalHID commands (`tap`, `swipe`, `scroll`, `reset-gesture`, `recents-nav`, and `recents-dock`) pass through this resolver when `UHID_SERVICE_ID=auto`.
 
 The current `sendSync(value:)` ABI shim was corrected during this analysis. The short generic overload orders arguments as:
 

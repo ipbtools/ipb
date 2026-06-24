@@ -26,6 +26,9 @@ bin/devicehubctl recents
 bin/devicehubctl screenshot build/smoke.png
 bin/devicehubctl service-ids
 bin/devicehubctl descriptors
+bin/devicehubctl services
+bin/devicehubctl service-id touchscreen
+bin/devicehubctl service-id gesture
 ```
 
 The original investigation also captured screenshots after each command, but those are intentionally not committed to keep the repository small and reviewable.
@@ -33,7 +36,7 @@ The original investigation also captured screenshots after each command, but tho
 Additional protocol probe commands now exposed:
 
 ```sh
-bin/devicehubctl services
+bin/devicehubctl probe-services
 HIDCTL_VERBOSE_DESCRIPTORS=1 bin/devicehubctl descriptors
 bin/devicehubctl reset-gesture 0x101
 bin/devicehubctl button 0x0c 0x40
@@ -41,9 +44,9 @@ bin/devicehubctl uhid-report 0x101 0.5 0.5 0 0
 bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 2 0
 ```
 
-`services` reaches the UniversalHID Mercury peer but does not decode the synchronous `connectedServices` wrapper successfully. The verified DeviceHub discovery path is now `descriptors`, which calls `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` through a Swift async ABI bridge and decodes the returned descriptor dictionaries.
+`services` is now an alias of the verified descriptor-discovery path. `probe-services` reaches the UniversalHID Mercury peer but does not decode the synchronous `connectedServices` wrapper successfully. The verified DeviceHub discovery path is `descriptors`, which calls `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` through a Swift async ABI bridge and decodes the returned descriptor dictionaries.
 
-After correcting the Mercury `sendSync(value:)` generic argument order, the `services` probe no longer hits the previous illegal-instruction crash path. A later guard also prevents the raw Mercury sync probe from trying to bridge a zero-word reply into `NSDictionary`. The remaining result is a remote-level `Connection invalid`, which matches the current hypothesis that DeviceHub uses the async `UniversalHIDService.connectedServiceDescriptors()` path for dynamic descriptor discovery rather than the synchronous typed Mercury path currently exposed by the CLI.
+After correcting the Mercury `sendSync(value:)` generic argument order, the `probe-services` path no longer hits the previous illegal-instruction crash path. A later guard also prevents the raw Mercury sync probe from trying to bridge a zero-word reply into `NSDictionary`. The remaining result is a remote-level `Connection invalid`, which matches the current hypothesis that DeviceHub uses the async `UniversalHIDService.connectedServiceDescriptors()` path for dynamic descriptor discovery rather than the synchronous typed Mercury path currently exposed by the CLI.
 
 Current probe output:
 
@@ -81,6 +84,14 @@ connectedDescriptor[4] serviceID:0x501 string:"CoreDevice touchscreenGesture"
 service_id=$(bin/devicehubctl service-ids | awk '/^mainTouchscreen/ {print $2}')
 UHID_SERVICE_ID="$service_id" bin/devicehubctl uhid-report "$service_id" 0.5 0.5 0 0
 UHID_SERVICE_ID="$service_id" bin/devicehubctl reset-gesture
+```
+
+`UHID_SERVICE_ID=auto` is also verified for role resolution:
+
+```text
+bin/devicehubctl service-id touchscreen -> 0x101
+bin/devicehubctl service-id gesture -> 0x501
+bin/devicehubctl service-id buttons -> 0x402
 ```
 
 DeviceHub / DeviceKit checks performed:

@@ -2,9 +2,9 @@
 
 `devicehubctl` is a small CLI for driving basic iOS 27 device interactions through CoreDevice private services, without XCUITest or WebDriverAgent.
 
-It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, Home, App Switcher, and screenshots.
+It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, Home, App Switcher, screenshots, and descriptor-based HID service discovery.
 
-The basic interaction path is verified. DeviceHub's full dynamic descriptor-discovery path is still under analysis; `services` is an experimental probe, not a stable command yet.
+The basic interaction path is verified, and the CLI now uses DeviceHub's async descriptor-discovery path to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
 
 ## Requirements
 
@@ -46,8 +46,9 @@ bin/devicehubctl home
 bin/devicehubctl recents
 bin/devicehubctl screenshot build/current.png
 bin/devicehubctl service-ids
-bin/devicehubctl services   # experimental descriptor-discovery probe
-bin/devicehubctl reset-gesture 0x101
+bin/devicehubctl services
+bin/devicehubctl service-id touchscreen
+bin/devicehubctl reset-gesture
 bin/devicehubctl button 0x0c 0x40
 bin/devicehubctl raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
 ```
@@ -62,13 +63,24 @@ Useful runtime overrides:
 
 ```sh
 DEVICE_ID=<device-uuid>
-UHID_SERVICE_ID=0x101
+UHID_SERVICE_ID=auto
+UHID_SERVICE_FALLBACK=0x101
 DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.2.app
 DEVICEHUBCTL_BIN=/path/to/action_sender_mercury
 HIDCTL_WAIT_MS=700
 ```
 
-`UHID_SERVICE_ID` defaults to `0x101`, which CoreDeviceUtilities returns for `HIDServiceID.mainTouchscreen`.
+`UHID_SERVICE_ID` defaults to `auto`. In that mode, the wrapper calls `connectedServiceDescriptors()` and selects the descriptor whose product is `CoreDevice touchscreen(nil)`. If descriptor discovery fails, it falls back to `UHID_SERVICE_FALLBACK`, currently `0x101`.
+
+Supported `service-id` roles:
+
+```sh
+bin/devicehubctl service-id touchscreen
+bin/devicehubctl service-id gesture
+bin/devicehubctl service-id keyboard
+bin/devicehubctl service-id buttons
+bin/devicehubctl service-id avp
+```
 
 ## Interaction Backends
 
@@ -89,6 +101,7 @@ The current build has been manually verified against an iPhone 13 Pro on iOS 27.
 - swipe moves a list
 - Home returns to SpringBoard
 - Recents opens App Switcher
+- descriptors returns five CoreDevice HID services on the verified device
 
 See [docs/verification.md](docs/verification.md) for the exact command set used.
 

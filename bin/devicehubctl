@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT="${0:A:h:h}"
 BIN="${DEVICEHUBCTL_BIN:-$ROOT/build/action_sender_mercury}"
 DEVICE="${DEVICE_ID:-<device-uuid>}"
-UHID_SERVICE_ID="${UHID_SERVICE_ID:-0x101}"
+UHID_SERVICE_ID="${UHID_SERVICE_ID:-auto}"
+UHID_SERVICE_FALLBACK="${UHID_SERVICE_FALLBACK:-0x101}"
 XCODE="${DEVELOPER_DIR:-/Applications/Xcode-27.0.0-Beta.2.app}"
 
 ACTION="com.apple.coredevice.action.createservicesocket"
@@ -25,8 +26,9 @@ usage:
   devicehubctl recents
   devicehubctl screenshot <path>
   devicehubctl service-ids
-  devicehubctl descriptors              # experimental async descriptor-discovery probe
-  devicehubctl services                 # experimental descriptor-discovery probe
+  devicehubctl service-id <role>
+  devicehubctl descriptors
+  devicehubctl services
   devicehubctl reset-gesture [service_id]
   devicehubctl button <usage_page> <usage_code> [hold_seconds]
   devicehubctl uhid-report <service_id> <x> <y> <touching> [in_range]
@@ -38,7 +40,8 @@ usage:
 
 coordinates are normalized: 0..1 from top-left to bottom-right.
 Set DEVICE_ID to override the default connected device.
-Set UHID_SERVICE_ID to override the default UniversalHID service, currently 0x101.
+Set UHID_SERVICE_ID to override the UniversalHID service. The default, auto,
+resolves the touchscreen service from descriptors and falls back to 0x101.
 Set DEVICEHUBCTL_BIN to override the built helper path.
 EOF
 }
@@ -55,6 +58,92 @@ run_digitizer() {
   env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$DIGITIZER_FEATURE" 0 "$@"
 }
 
+descriptor_output() {
+  run_uhid cd_connected_descriptors_async_raw
+}
+
+service_pattern_for_role() {
+  case "$1" in
+    touchscreen|touch|main-touchscreen|main)
+      print -r -- 'string:"CoreDevice touchscreen('
+      ;;
+    gesture|touchscreen-gesture|trackpad)
+      print -r -- 'string:"CoreDevice touchscreenGesture"'
+      ;;
+    keyboard|main-keyboard)
+      print -r -- 'string:"CoreDevice keyboard"'
+      ;;
+    buttons|screen-buttons|main-screen-buttons)
+      print -r -- 'string:"CoreDevice mainScreenButtons"'
+      ;;
+    avp|avp-custom)
+      print -r -- 'string:"CoreDevice avpCustom"'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+fallback_for_role() {
+  case "$1" in
+    touchscreen|touch|main-touchscreen|main) print -r -- "$UHID_SERVICE_FALLBACK" ;;
+    gesture|touchscreen-gesture|trackpad) print -r -- "0x501" ;;
+    keyboard|main-keyboard) print -r -- "0x200" ;;
+    buttons|screen-buttons|main-screen-buttons) print -r -- "0x402" ;;
+    avp|avp-custom) print -r -- "0x500" ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_service_id() {
+  local role="${1:-touchscreen}"
+  local pattern fallback output resolved
+
+  if [[ "$role" == <-> || "$role" == 0x* ]]; then
+    print -r -- "$role"
+    return 0
+  fi
+
+  pattern="$(service_pattern_for_role "$role")" || {
+    print -u2 "unknown service role: $role"
+    return 2
+  }
+  fallback="$(fallback_for_role "$role")"
+  output="$(descriptor_output 2>/dev/null || true)"
+  resolved="$(
+    print -r -- "$output" | awk -v pattern="$pattern" '
+      $0 ~ /^connectedDescriptor\[/ && index($0, pattern) > 0 {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^serviceID:/) {
+            sub(/^serviceID:/, "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    '
+  )"
+
+  if [[ -n "$resolved" ]]; then
+    print -r -- "$resolved"
+  else
+    print -r -- "$fallback"
+  fi
+}
+
+resolve_uhid_service_id() {
+  local requested="${1:-$UHID_SERVICE_ID}"
+  case "$requested" in
+    ""|auto)
+      resolve_service_id touchscreen
+      ;;
+    *)
+      resolve_service_id "$requested"
+      ;;
+  esac
+}
+
 cmd="${1:-}"
 [[ -n "$cmd" ]] || { usage; exit 2; }
 shift || true
@@ -62,7 +151,8 @@ shift || true
 case "$cmd" in
   tap|click)
     [[ $# -eq 2 ]] || { usage; exit 2; }
-    run_uhid cd_uhid_tap "$UHID_SERVICE_ID" "$1" "$2"
+    service_id="$(resolve_uhid_service_id)"
+    run_uhid cd_uhid_tap "$service_id" "$1" "$2"
     ;;
   long|press|longpress)
     [[ $# -eq 2 || $# -eq 3 ]] || { usage; exit 2; }
@@ -70,11 +160,13 @@ case "$cmd" in
     ;;
   swipe|drag)
     [[ $# -ge 4 && $# -le 6 ]] || { usage; exit 2; }
-    run_uhid cd_uhid_swipe "$UHID_SERVICE_ID" "$1" "$2" "$3" "$4" "${5:-0.30}" "${6:-0}"
+    service_id="$(resolve_uhid_service_id)"
+    run_uhid cd_uhid_swipe "$service_id" "$1" "$2" "$3" "$4" "${5:-0.30}" "${6:-0}"
     ;;
   scroll)
     [[ $# -ge 4 && $# -le 5 ]] || { usage; exit 2; }
-    run_uhid cd_uhid_scroll "$UHID_SERVICE_ID" "$1" "$2" "$3" "$4" "${5:-0.35}"
+    service_id="$(resolve_uhid_service_id)"
+    run_uhid cd_uhid_scroll "$service_id" "$1" "$2" "$3" "$4" "${5:-0.35}"
     ;;
   home)
     [[ $# -eq 0 ]] || { usage; exit 2; }
@@ -88,13 +180,17 @@ case "$cmd" in
     [[ $# -eq 1 ]] || { usage; exit 2; }
     DEVELOPER_DIR="$XCODE" xcrun devicectl device capture screenshot --device "$DEVICE" --destination "$1" --quiet
     ;;
-  services|probe-services)
+  services|descriptors|probe-descriptors)
+    [[ $# -eq 0 ]] || { usage; exit 2; }
+    descriptor_output
+    ;;
+  probe-services|probe-connected-services)
     [[ $# -eq 0 ]] || { usage; exit 2; }
     run_uhid cd_connected_services
     ;;
-  descriptors|probe-descriptors)
-    [[ $# -eq 0 ]] || { usage; exit 2; }
-    run_uhid cd_connected_descriptors_async_raw
+  service-id|resolve-service)
+    [[ $# -eq 1 ]] || { usage; exit 2; }
+    resolve_service_id "$1"
     ;;
   service-ids|ids)
     [[ $# -eq 0 ]] || { usage; exit 2; }
@@ -102,7 +198,8 @@ case "$cmd" in
     ;;
   reset-gesture)
     [[ $# -le 1 ]] || { usage; exit 2; }
-    run_uhid cd_reset_gesture "${1:-$UHID_SERVICE_ID}"
+    service_id="$(resolve_uhid_service_id "${1:-$UHID_SERVICE_ID}")"
+    run_uhid cd_reset_gesture "$service_id"
     ;;
   button)
     [[ $# -eq 2 || $# -eq 3 ]] || { usage; exit 2; }
@@ -130,11 +227,13 @@ case "$cmd" in
     ;;
   recents-nav)
     [[ $# -le 3 ]] || { usage; exit 2; }
-    run_uhid cd_recents_nav "${1:-$UHID_SERVICE_ID}" "${2:-0x01}" "${3:-0x05}"
+    service_id="$(resolve_uhid_service_id "${1:-$UHID_SERVICE_ID}")"
+    run_uhid cd_recents_nav "$service_id" "${2:-0x01}" "${3:-0x05}"
     ;;
   recents-dock)
     [[ $# -le 3 ]] || { usage; exit 2; }
-    run_uhid cd_recents_dock "${1:-$UHID_SERVICE_ID}" "${2:-0x01}" "${3:-0x03}"
+    service_id="$(resolve_uhid_service_id "${1:-$UHID_SERVICE_ID}")"
+    run_uhid cd_recents_dock "$service_id" "${2:-0x01}" "${3:-0x03}"
     ;;
   raw)
     [[ $# -ge 2 ]] || { usage; exit 2; }
