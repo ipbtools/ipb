@@ -47,6 +47,7 @@ extern int uhid_make_navigation_swipe_hid_report(uint32_t phase, uint32_t swipe_
 extern int uhid_make_dock_swipe_hid_report(uint32_t phase, uint32_t swipe_mask, uint32_t gesture_motion, uint32_t flavor, double progress, double x, double y, void *output) __attribute__((weak_import));
 extern int uhid_make_keyboard_hid_report(uint32_t usage, int pressed, void *output) __attribute__((weak_import));
 extern int uhid_make_pointer_hid_report(int64_t x, int64_t y, uint32_t button_mask, double accel_x, double accel_y, uint32_t flags, void *output) __attribute__((weak_import));
+extern int uhid_make_scroll_hid_report(int64_t x, int64_t y, uint32_t phase, uint32_t momentum, uint32_t flags, double accel_x, double accel_y, void *output) __attribute__((weak_import));
 
 static void print_xpc(const char *label, xpc_object_t object) {
     if (g_quiet) {
@@ -638,6 +639,41 @@ static void send_coredevice_pointer_report(xpc_remote_connection_t remote, uint6
     }
 }
 
+static void send_coredevice_scroll_report(xpc_remote_connection_t remote, uint64_t service_id, int64_t x, int64_t y, uint32_t phase, uint32_t momentum, uint32_t flags, double accel_x, double accel_y, useconds_t delay_after) {
+    if (!uhid_make_scroll_hid_report || !coredevice_send_universalhid_hid_report) {
+        fprintf(stderr, "CoreDevice scroll sender is not linked\n");
+        exit(2);
+    }
+    uint64_t report_words[2] = {0, 0};
+    int count = uhid_make_scroll_hid_report(x, y, phase, momentum, flags, accel_x, accel_y, report_words);
+    if (count != (int)sizeof(report_words)) {
+        fprintf(stderr, "Unable to build UniversalHID scroll HIDReport, result=%d x=%lld y=%lld phase=0x%x momentum=0x%x flags=0x%x\n",
+                count,
+                (long long)x,
+                (long long)y,
+                phase,
+                momentum,
+                flags);
+        exit(2);
+    }
+    int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (!g_quiet) {
+        printf("coredevice scroll result=%d service=0x%llx x=%lld y=%lld phase=0x%x momentum=0x%x flags=0x%x accel=(%g,%g)\n",
+               result,
+               (unsigned long long)service_id,
+               (long long)x,
+               (long long)y,
+               phase,
+               momentum,
+               flags,
+               accel_x,
+               accel_y);
+    }
+    if (delay_after) {
+        usleep(delay_after);
+    }
+}
+
 static void send_coredevice_keyboard_report(xpc_remote_connection_t remote, uint64_t service_id, uint32_t usage, bool pressed, useconds_t delay_after) {
     if (!uhid_make_keyboard_hid_report || !coredevice_send_universalhid_hid_report) {
         fprintf(stderr, "CoreDevice keyboard sender is not linked\n");
@@ -1106,6 +1142,17 @@ int main(int argc, const char *argv[]) {
                         double accel_y = argc > 11 ? strtod(argv[11], NULL) : 0.0;
                         uint32_t flags = argc > 12 ? (uint32_t)strtoul(argv[12], NULL, 0) : 0;
                         send_coredevice_pointer_report(remote, service_id, x, y, button_mask, accel_x, accel_y, flags, 120000);
+                        send_coredevice_hid_barrier(remote, 100000);
+                    } else if (strcmp(kind, "cd_scroll_report") == 0) {
+                        uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x501;
+                        int64_t x = argc > 7 ? strtoll(argv[7], NULL, 0) : 0;
+                        int64_t y = argc > 8 ? strtoll(argv[8], NULL, 0) : 0;
+                        uint32_t phase = argc > 9 ? (uint32_t)strtoul(argv[9], NULL, 0) : 0;
+                        uint32_t momentum = argc > 10 ? (uint32_t)strtoul(argv[10], NULL, 0) : 0;
+                        uint32_t flags = argc > 11 ? (uint32_t)strtoul(argv[11], NULL, 0) : 0;
+                        double accel_x = argc > 12 ? strtod(argv[12], NULL) : 0.0;
+                        double accel_y = argc > 13 ? strtod(argv[13], NULL) : 0.0;
+                        send_coredevice_scroll_report(remote, service_id, x, y, phase, momentum, flags, accel_x, accel_y, 120000);
                         send_coredevice_hid_barrier(remote, 100000);
                     } else if (strcmp(kind, "cd_key_report") == 0) {
                         uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x200;

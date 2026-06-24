@@ -320,6 +320,7 @@ Currently generated via `UniversalHID.framework` private Swift symbols:
 | `UniversalHID.DigitizerReport` | `reportID = 0x09`, `bitCount = 0x140` | contact index, touch, range, resting, x, y, contact count, max count |
 | `UniversalHID.KeyboardReport` | `reportID = 0x01`, `bitCount = 0xf8` | keyboard usage bit at `usage + 8` |
 | `UniversalHID.PointerReport` | queried from framework | x, y, button mask, accel x, accel y; flags identified but not mapped |
+| `UniversalHID.ScrollReport` + `ScrollCollection` | queried from framework | collection flags, phase, momentum, x, y, accel x, accel y |
 | `UniversalHID.NavigationSwipeReport` | queried from framework | phase, swipe mask, gesture motion, flavor, progress, x, y |
 | `UniversalHID.DockSwipeReport` | queried from framework | phase, swipe mask, gesture motion, flavor, progress, x, y |
 
@@ -330,10 +331,41 @@ bin/devicehubctl uhid-report 0x101 0.5 0.5 1 1
 bin/devicehubctl uhid-swipe-report 0x101 0.5 0.5 1 1 0 0 0
 bin/devicehubctl keyboard-report 0x200 escape 1
 bin/devicehubctl pointer-report 0x501 0 0 0
+bin/devicehubctl scroll-report 0x501 0 0
 bin/devicehubctl key-up
 bin/devicehubctl nav-report 0x101 1 1 0x0d 5 0.0 0.5 0.99
 bin/devicehubctl dock-report 0x101 1 1 0x0d 3 0.0 0.5 0.99
 ```
+
+## HID Scroll
+
+Native scroll report construction is implemented through the verified UniversalHID service report path. The high-level `scroll` command still uses the older touch-swipe implementation; `scroll-report` exposes the lower-level `UniversalHID.ScrollReport` path directly.
+
+Symbol evidence from `UniversalHID.framework`:
+
+```text
+UniversalHID.ScrollReport.reportID -> UniversalHID.ReportID.scroll
+UniversalHID.ScrollReport.initialReportBitCount
+UniversalHID.ScrollReport.init(_report:)
+UniversalHID.ScrollReport.scrollCollection setter
+UniversalHID.ScrollCollection.init()
+UniversalHID.ScrollCollection.flags -> UInt8 setter
+UniversalHID.ScrollCollection.phase -> HIDEventPhase setter
+UniversalHID.ScrollCollection.momentum -> HIDScrollMomentum setter
+UniversalHID.ScrollCollection.x/y -> Swift.Int setters
+UniversalHID.ScrollCollection.accelX/accelY -> Double setters
+```
+
+The CLI constructs `UniversalHID.HIDReport(bitCount:id:)`, wraps it with `UniversalHID.ScrollReport(_report:)`, creates and populates a `ScrollCollection`, assigns the collection into the report, and sends it to `CoreDevice touchscreenGesture` service `0x501` by default for low-level probes.
+
+Verified non-destructive sequence:
+
+```sh
+bin/devicehubctl scroll-report 0x501 0 0
+bin/devicehubctl scroll-report 0x501 0 0 256
+```
+
+The first command sends a zero-movement scroll report successfully. The second command verifies local validation: `phase`, `momentum`, and `flags` are `UInt8`-sized raw values, so `phase=256` is rejected before a report is sent.
 
 ## HID Pointer
 
@@ -453,7 +485,8 @@ Verified high-level use:
 - `connectedServices` and `connectedServiceIDs` remain symbol-mapped but are not exposed because the verified DeviceHub path is `connectedServiceDescriptors()`.
 - `createService` and `removeService` request cases are identified but not verified.
 - The UniversalHID `PointerReport` base fields are implemented, but `PointerReport.Flags` and the standalone `CoreDevice.HIDPointer` feature socket still need full ABI mapping and behavior verification.
-- Scroll-specific and vendor-defined HID feature protocols are symbol-mapped but not implemented.
+- The UniversalHID `ScrollReport` base fields are implemented and zero-report delivery is verified, but non-zero scroll behavior, momentum semantics, and the standalone `CoreDevice.HIDScroll` feature socket still need full behavior verification.
+- Vendor-defined HID feature protocols are symbol-mapped but not implemented.
 - The standalone `CoreDevice.HIDKeyboard` feature protocol is symbol-mapped, but the CLI uses the lower-level verified `UniversalHID.KeyboardReport` path instead.
 - Multi-touch second point, `DigitizerTarget`, and `DigitizerEdge` values need systematic enumeration.
 - The current implementation still relies on private Swift framework ABI and can break across Xcode 27 beta seeds.

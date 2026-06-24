@@ -68,6 +68,85 @@ _uhid_pointer_report_set_accel_y_abi:
     ldp x20, x30, [sp], #16
     ret
 
+.globl _uhid_scroll_collection_set_flags_abi
+.p2align 2
+_uhid_scroll_collection_set_flags_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    bl _$s12UniversalHID16ScrollCollectionV5flagss5UInt8Vvs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_scroll_collection_set_phase_abi
+.p2align 2
+_uhid_scroll_collection_set_phase_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    bl _$s12UniversalHID16ScrollCollectionV5phaseAA13HIDEventPhaseVvs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_scroll_collection_set_momentum_abi
+.p2align 2
+_uhid_scroll_collection_set_momentum_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    bl _$s12UniversalHID16ScrollCollectionV8momentumAA17HIDScrollMomentumVvs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_scroll_collection_set_x_abi
+.p2align 2
+_uhid_scroll_collection_set_x_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    bl _$s12UniversalHID16ScrollCollectionV1xSivs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_scroll_collection_set_y_abi
+.p2align 2
+_uhid_scroll_collection_set_y_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    bl _$s12UniversalHID16ScrollCollectionV1ySivs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_scroll_collection_set_accel_x_abi
+.p2align 2
+_uhid_scroll_collection_set_accel_x_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    bl _$s12UniversalHID16ScrollCollectionV6accelXSdvs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_scroll_collection_set_accel_y_abi
+.p2align 2
+_uhid_scroll_collection_set_accel_y_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    bl _$s12UniversalHID16ScrollCollectionV6accelYSdvs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_scroll_report_set_collection_abi
+.p2align 2
+_uhid_scroll_report_set_collection_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    ldr x0, [x1]
+    ldr x1, [x1, #8]
+    bl _$s12UniversalHID12ScrollReportV16scrollCollectionAA0cF0Vvs
+    ldp x20, x30, [sp], #16
+    ret
+
 .globl _uhid_digitizer_contact_set_touch_abi
 .p2align 2
 _uhid_digitizer_contact_set_touch_abi:

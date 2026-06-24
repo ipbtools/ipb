@@ -32,6 +32,7 @@ bin/devicehubctl service-id gesture
 bin/devicehubctl service-id keyboard
 bin/devicehubctl pointer-report 0x501 0 0 0
 bin/devicehubctl pointer 0 0
+bin/devicehubctl scroll-report 0x501 0 0
 bin/devicehubctl key-up
 bin/devicehubctl key escape 0.02
 ```
@@ -47,6 +48,7 @@ bin/devicehubctl reset-gesture 0x101
 bin/devicehubctl button 0x0c 0x40
 bin/devicehubctl keyboard-report 0x200 escape 1
 bin/devicehubctl pointer-report 0x501 0 0 0
+bin/devicehubctl scroll-report 0x501 0 0
 bin/devicehubctl uhid-report 0x101 0.5 0.5 0 0
 bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 2 0
 ```
@@ -120,6 +122,15 @@ bin/devicehubctl pointer-report 0x501 0 0 0 0 0 1 -> PointerReport flags are not
 ```
 
 The zero-movement pointer reports are non-destructive smoke tests for construction and delivery of `UniversalHID.PointerReport` to the `CoreDevice touchscreenGesture` service. Non-zero flags are intentionally rejected until `PointerReport.Flags` ABI is mapped.
+
+Scroll report verification:
+
+```text
+bin/devicehubctl scroll-report 0x501 0 0
+bin/devicehubctl scroll-report 0x501 0 0 256 -> Unable to build UniversalHID scroll HIDReport
+```
+
+The zero-movement scroll report is a non-destructive smoke test for construction and delivery of `UniversalHID.ScrollReport` plus `ScrollCollection` to the `CoreDevice touchscreenGesture` service. The `phase=256` probe verifies local `UInt8` raw-value validation.
 
 DeviceHub / DeviceKit checks performed:
 

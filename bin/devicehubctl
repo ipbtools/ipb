@@ -36,6 +36,7 @@ usage:
   devicehubctl key-up [usage_or_name] [service_id]
   devicehubctl button <usage_page> <usage_code> [hold_seconds]
   devicehubctl pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
+  devicehubctl scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
   devicehubctl keyboard-report <service_id> <usage_or_name> <pressed>
   devicehubctl uhid-report <service_id> <x> <y> <touching> [in_range]
   devicehubctl uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
@@ -306,6 +307,10 @@ case "$cmd" in
   pointer-report)
     [[ $# -ge 3 && $# -le 7 ]] || { usage; exit 2; }
     run_uhid cd_pointer_report "$1" "$2" "$3" "${4:-0}" "${5:-0}" "${6:-0}" "${7:-0}"
+    ;;
+  scroll-report)
+    [[ $# -ge 3 && $# -le 8 ]] || { usage; exit 2; }
+    run_uhid cd_scroll_report "$1" "$2" "$3" "${4:-0}" "${5:-0}" "${6:-0}" "${7:-0}" "${8:-0}"
     ;;
   uhid-report)
     [[ $# -eq 4 || $# -eq 5 ]] || { usage; exit 2; }

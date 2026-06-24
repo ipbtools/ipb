@@ -12,6 +12,8 @@ typealias UHIDDigitizerContact = UHIDReportWords
 typealias UHIDDockSwipeReport = UHIDReportWords
 typealias UHIDNavigationSwipeReport = UHIDReportWords
 typealias UHIDPointerReport = UHIDReportWords
+typealias UHIDScrollReport = UHIDReportWords
+typealias UHIDScrollCollection = UHIDReportWords
 
 var retainedHIDReports: [UHIDHIDReport] = []
 
@@ -78,6 +80,21 @@ func uhidPointerReportInitUnderscore(_ report: UHIDHIDReport) -> UHIDPointerRepo
 @_silgen_name("$s12UniversalHID13PointerReportV6reportAA9HIDReportVvg")
 func uhidPointerReportGetReport(_ report: UHIDPointerReport) -> UHIDHIDReport
 
+@_silgen_name("$s12UniversalHID12ScrollReportV07initialD8BitCountSivgZ")
+func uhidScrollReportInitialBitCount() -> Int
+
+@_silgen_name("$s12UniversalHID12ScrollReportV8reportIDAA0dF0VvgZ")
+func uhidScrollReportID() -> UInt8
+
+@_silgen_name("$s12UniversalHID12ScrollReportV7_reportAcA9HIDReportV_tcfC")
+func uhidScrollReportInitUnderscore(_ report: UHIDHIDReport) -> UHIDScrollReport
+
+@_silgen_name("$s12UniversalHID12ScrollReportV6reportAA9HIDReportVvg")
+func uhidScrollReportGetReport(_ report: UHIDScrollReport) -> UHIDHIDReport
+
+@_silgen_name("$s12UniversalHID16ScrollCollectionVACycfC")
+func uhidScrollCollectionInit() -> UHIDScrollCollection
+
 @_silgen_name("uhid_digitizer_contact_set_index_abi")
 func uhidDigitizerContactSetIndexABI(_ contact: UnsafeMutablePointer<UHIDDigitizerContact>, _ index: Int)
 
@@ -98,6 +115,30 @@ func uhidPointerReportSetAccelXABI(_ report: UnsafeMutablePointer<UHIDPointerRep
 
 @_silgen_name("uhid_pointer_report_set_accel_y_abi")
 func uhidPointerReportSetAccelYABI(_ report: UnsafeMutablePointer<UHIDPointerReport>, _ accelY: Double)
+
+@_silgen_name("uhid_scroll_collection_set_flags_abi")
+func uhidScrollCollectionSetFlagsABI(_ collection: UnsafeMutablePointer<UHIDScrollCollection>, _ flags: UInt8)
+
+@_silgen_name("uhid_scroll_collection_set_phase_abi")
+func uhidScrollCollectionSetPhaseABI(_ collection: UnsafeMutablePointer<UHIDScrollCollection>, _ phase: UInt8)
+
+@_silgen_name("uhid_scroll_collection_set_momentum_abi")
+func uhidScrollCollectionSetMomentumABI(_ collection: UnsafeMutablePointer<UHIDScrollCollection>, _ momentum: UInt8)
+
+@_silgen_name("uhid_scroll_collection_set_x_abi")
+func uhidScrollCollectionSetXABI(_ collection: UnsafeMutablePointer<UHIDScrollCollection>, _ x: Int)
+
+@_silgen_name("uhid_scroll_collection_set_y_abi")
+func uhidScrollCollectionSetYABI(_ collection: UnsafeMutablePointer<UHIDScrollCollection>, _ y: Int)
+
+@_silgen_name("uhid_scroll_collection_set_accel_x_abi")
+func uhidScrollCollectionSetAccelXABI(_ collection: UnsafeMutablePointer<UHIDScrollCollection>, _ accelX: Double)
+
+@_silgen_name("uhid_scroll_collection_set_accel_y_abi")
+func uhidScrollCollectionSetAccelYABI(_ collection: UnsafeMutablePointer<UHIDScrollCollection>, _ accelY: Double)
+
+@_silgen_name("uhid_scroll_report_set_collection_abi")
+func uhidScrollReportSetCollectionABI(_ report: UnsafeMutablePointer<UHIDScrollReport>, _ collection: UnsafePointer<UHIDScrollCollection>)
 
 @_silgen_name("uhid_digitizer_contact_set_touch_abi")
 func uhidDigitizerContactSetTouchABI(_ contact: UnsafeMutablePointer<UHIDDigitizerContact>, _ touch: UInt8)
@@ -304,6 +345,35 @@ func makePointerHIDReport(
     return uhidPointerReportGetReport(report)
 }
 
+func makeScrollHIDReport(
+    x: Int,
+    y: Int,
+    phase: UInt32,
+    momentum: UInt32,
+    flags: UInt32,
+    accelX: Double,
+    accelY: Double
+) -> UHIDHIDReport? {
+    guard phase <= UInt8.max, momentum <= UInt8.max, flags <= UInt8.max else {
+        return nil
+    }
+
+    let hidReport = uhidHIDReportInit(uhidScrollReportInitialBitCount(), uhidScrollReportID())
+    var report = uhidScrollReportInitUnderscore(hidReport)
+    var collection = uhidScrollCollectionInit()
+
+    uhidScrollCollectionSetFlagsABI(&collection, UInt8(flags))
+    uhidScrollCollectionSetPhaseABI(&collection, UInt8(phase))
+    uhidScrollCollectionSetMomentumABI(&collection, UInt8(momentum))
+    uhidScrollCollectionSetXABI(&collection, x)
+    uhidScrollCollectionSetYABI(&collection, y)
+    uhidScrollCollectionSetAccelXABI(&collection, accelX)
+    uhidScrollCollectionSetAccelYABI(&collection, accelY)
+    uhidScrollReportSetCollectionABI(&report, &collection)
+
+    return uhidScrollReportGetReport(report)
+}
+
 @_cdecl("uhid_make_digitizer_report")
 public func uhidMakeDigitizerReport(
     _ x: Double,
@@ -355,6 +425,37 @@ public func uhidMakeDigitizerHIDReport(
     retainedHIDReports.append(finalReport)
     if let output {
         withUnsafeBytes(of: &finalReport) { bytes in
+            output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
+        }
+    }
+    return Int32(MemoryLayout<UHIDHIDReport>.size)
+}
+
+@_cdecl("uhid_make_scroll_hid_report")
+public func uhidMakeScrollHIDReport(
+    _ x: Int64,
+    _ y: Int64,
+    _ phase: UInt32,
+    _ momentum: UInt32,
+    _ flags: UInt32,
+    _ accelX: Double,
+    _ accelY: Double,
+    _ output: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard var report = makeScrollHIDReport(
+        x: Int(x),
+        y: Int(y),
+        phase: phase,
+        momentum: momentum,
+        flags: flags,
+        accelX: accelX,
+        accelY: accelY
+    ) else {
+        return -1
+    }
+    retainedHIDReports.append(report)
+    if let output {
+        withUnsafeBytes(of: &report) { bytes in
             output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
         }
     }
