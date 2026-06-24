@@ -30,10 +30,12 @@ usage:
   devicehubctl descriptors
   devicehubctl services
   devicehubctl reset-gesture [service_id]
+  devicehubctl pointer <dx> <dy> [button_mask] [service_id]
   devicehubctl key <usage_or_name> [hold_seconds] [service_id]
   devicehubctl key-down <usage_or_name> [service_id]
   devicehubctl key-up [usage_or_name] [service_id]
   devicehubctl button <usage_page> <usage_code> [hold_seconds]
+  devicehubctl pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
   devicehubctl keyboard-report <service_id> <usage_or_name> <pressed>
   devicehubctl uhid-report <service_id> <x> <y> <touching> [in_range]
   devicehubctl uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
@@ -42,7 +44,9 @@ usage:
   devicehubctl dock-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
   devicehubctl raw <feature> <helper_kind> [args...]
 
-coordinates are normalized: 0..1 from top-left to bottom-right.
+Touch coordinates are normalized: 0..1 from top-left to bottom-right.
+Pointer dx/dy are signed relative deltas; button_mask is the raw PointerReport
+button mask.
 Set DEVICE_ID to override the default connected device.
 Set UHID_SERVICE_ID to override the UniversalHID service. The default, auto,
 resolves the touchscreen service from descriptors and falls back to 0x101.
@@ -267,6 +271,11 @@ case "$cmd" in
     service_id="$(resolve_uhid_service_id "${1:-$UHID_SERVICE_ID}")"
     run_uhid cd_reset_gesture "$service_id"
     ;;
+  pointer|mouse-move)
+    [[ $# -ge 2 && $# -le 4 ]] || { usage; exit 2; }
+    service_id="$(resolve_service_id "${4:-gesture}")"
+    run_uhid cd_pointer_report "$service_id" "$1" "$2" "${3:-0}"
+    ;;
   key)
     [[ $# -ge 1 && $# -le 3 ]] || { usage; exit 2; }
     usage_code="$(keyboard_usage "$1")"
@@ -293,6 +302,10 @@ case "$cmd" in
     [[ $# -eq 3 ]] || { usage; exit 2; }
     usage_code="$(keyboard_usage "$2")"
     run_uhid cd_key_report "$1" "$usage_code" "$3"
+    ;;
+  pointer-report)
+    [[ $# -ge 3 && $# -le 7 ]] || { usage; exit 2; }
+    run_uhid cd_pointer_report "$1" "$2" "$3" "${4:-0}" "${5:-0}" "${6:-0}" "${7:-0}"
     ;;
   uhid-report)
     [[ $# -eq 4 || $# -eq 5 ]] || { usage; exit 2; }

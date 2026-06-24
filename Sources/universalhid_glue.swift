@@ -11,6 +11,7 @@ typealias UHIDDigitizerReport = UHIDReportWords
 typealias UHIDDigitizerContact = UHIDReportWords
 typealias UHIDDockSwipeReport = UHIDReportWords
 typealias UHIDNavigationSwipeReport = UHIDReportWords
+typealias UHIDPointerReport = UHIDReportWords
 
 var retainedHIDReports: [UHIDHIDReport] = []
 
@@ -65,11 +66,38 @@ func uhidNavigationSwipeReportGetReport(_ report: UHIDNavigationSwipeReport) -> 
 @_silgen_name("$s12UniversalHID21NavigationSwipeReportVMa")
 func uhidNavigationSwipeReportMetadata(_ request: Int) -> UnsafeRawPointer
 
+@_silgen_name("$s12UniversalHID13PointerReportV07initialD8BitCountSivgZ")
+func uhidPointerReportInitialBitCount() -> Int
+
+@_silgen_name("$s12UniversalHID13PointerReportV8reportIDAA0dF0VvgZ")
+func uhidPointerReportID() -> UInt8
+
+@_silgen_name("$s12UniversalHID13PointerReportV7_reportAcA9HIDReportV_tcfC")
+func uhidPointerReportInitUnderscore(_ report: UHIDHIDReport) -> UHIDPointerReport
+
+@_silgen_name("$s12UniversalHID13PointerReportV6reportAA9HIDReportVvg")
+func uhidPointerReportGetReport(_ report: UHIDPointerReport) -> UHIDHIDReport
+
 @_silgen_name("uhid_digitizer_contact_set_index_abi")
 func uhidDigitizerContactSetIndexABI(_ contact: UnsafeMutablePointer<UHIDDigitizerContact>, _ index: Int)
 
 @_silgen_name("uhid_hid_report_set_bit_abi")
 func uhidHIDReportSetBitABI(_ report: UnsafeMutablePointer<UHIDHIDReport>, _ index: Int, _ value: UInt)
+
+@_silgen_name("uhid_pointer_report_set_x_abi")
+func uhidPointerReportSetXABI(_ report: UnsafeMutablePointer<UHIDPointerReport>, _ x: Int)
+
+@_silgen_name("uhid_pointer_report_set_y_abi")
+func uhidPointerReportSetYABI(_ report: UnsafeMutablePointer<UHIDPointerReport>, _ y: Int)
+
+@_silgen_name("uhid_pointer_report_set_button_mask_abi")
+func uhidPointerReportSetButtonMaskABI(_ report: UnsafeMutablePointer<UHIDPointerReport>, _ buttonMask: UInt8)
+
+@_silgen_name("uhid_pointer_report_set_accel_x_abi")
+func uhidPointerReportSetAccelXABI(_ report: UnsafeMutablePointer<UHIDPointerReport>, _ accelX: Double)
+
+@_silgen_name("uhid_pointer_report_set_accel_y_abi")
+func uhidPointerReportSetAccelYABI(_ report: UnsafeMutablePointer<UHIDPointerReport>, _ accelY: Double)
 
 @_silgen_name("uhid_digitizer_contact_set_touch_abi")
 func uhidDigitizerContactSetTouchABI(_ contact: UnsafeMutablePointer<UHIDDigitizerContact>, _ touch: UInt8)
@@ -252,6 +280,30 @@ func makeKeyboardHIDReport(usage: UInt32, pressed: Bool) -> UHIDHIDReport? {
     return report
 }
 
+func makePointerHIDReport(
+    x: Int,
+    y: Int,
+    buttonMask: UInt32,
+    accelX: Double,
+    accelY: Double,
+    flags: UInt32
+) -> UHIDHIDReport? {
+    guard flags == 0 else {
+        return nil
+    }
+
+    let hidReport = uhidHIDReportInit(uhidPointerReportInitialBitCount(), uhidPointerReportID())
+    var report = uhidPointerReportInitUnderscore(hidReport)
+
+    uhidPointerReportSetXABI(&report, x)
+    uhidPointerReportSetYABI(&report, y)
+    uhidPointerReportSetButtonMaskABI(&report, UInt8(truncatingIfNeeded: buttonMask))
+    uhidPointerReportSetAccelXABI(&report, accelX)
+    uhidPointerReportSetAccelYABI(&report, accelY)
+
+    return uhidPointerReportGetReport(report)
+}
+
 @_cdecl("uhid_make_digitizer_report")
 public func uhidMakeDigitizerReport(
     _ x: Double,
@@ -303,6 +355,35 @@ public func uhidMakeDigitizerHIDReport(
     retainedHIDReports.append(finalReport)
     if let output {
         withUnsafeBytes(of: &finalReport) { bytes in
+            output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
+        }
+    }
+    return Int32(MemoryLayout<UHIDHIDReport>.size)
+}
+
+@_cdecl("uhid_make_pointer_hid_report")
+public func uhidMakePointerHIDReport(
+    _ x: Int64,
+    _ y: Int64,
+    _ buttonMask: UInt32,
+    _ accelX: Double,
+    _ accelY: Double,
+    _ flags: UInt32,
+    _ output: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard var report = makePointerHIDReport(
+        x: Int(x),
+        y: Int(y),
+        buttonMask: buttonMask,
+        accelX: accelX,
+        accelY: accelY,
+        flags: flags
+    ) else {
+        return -2
+    }
+    retainedHIDReports.append(report)
+    if let output {
+        withUnsafeBytes(of: &report) { bytes in
             output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
         }
     }

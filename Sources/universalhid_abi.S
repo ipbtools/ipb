@@ -20,6 +20,54 @@ _uhid_digitizer_contact_set_index_abi:
     ldp x20, x30, [sp], #16
     ret
 
+.globl _uhid_pointer_report_set_x_abi
+.p2align 2
+_uhid_pointer_report_set_x_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    bl _$s12UniversalHID13PointerReportV1xSivs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_pointer_report_set_y_abi
+.p2align 2
+_uhid_pointer_report_set_y_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    bl _$s12UniversalHID13PointerReportV1ySivs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_pointer_report_set_button_mask_abi
+.p2align 2
+_uhid_pointer_report_set_button_mask_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x1
+    bl _$s12UniversalHID13PointerReportV10buttonMasks5UInt8Vvs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_pointer_report_set_accel_x_abi
+.p2align 2
+_uhid_pointer_report_set_accel_x_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    bl _$s12UniversalHID13PointerReportV6accelXSdvs
+    ldp x20, x30, [sp], #16
+    ret
+
+.globl _uhid_pointer_report_set_accel_y_abi
+.p2align 2
+_uhid_pointer_report_set_accel_y_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    bl _$s12UniversalHID13PointerReportV6accelYSdvs
+    ldp x20, x30, [sp], #16
+    ret
+
 .globl _uhid_digitizer_contact_set_touch_abi
 .p2align 2
 _uhid_digitizer_contact_set_touch_abi:

@@ -2,7 +2,7 @@
 
 `devicehubctl` is a small CLI for driving basic iOS 27 device interactions through CoreDevice private services, without XCUITest or WebDriverAgent.
 
-It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, keyboard keys, Home, App Switcher, screenshots, and descriptor-based HID service discovery.
+It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, keyboard keys, pointer reports, Home, App Switcher, screenshots, and descriptor-based HID service discovery.
 
 The basic interaction path is verified, and the CLI now uses DeviceHub's async descriptor-discovery path to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
 
@@ -35,7 +35,7 @@ build/action_sender_mercury
 
 ## Usage
 
-Coordinates are normalized from top-left to bottom-right, in the `0..1` range.
+Touch coordinates are normalized from top-left to bottom-right, in the `0..1` range. Pointer deltas are signed relative integers.
 
 ```sh
 bin/devicehubctl tap 0.5 0.5
@@ -49,6 +49,7 @@ bin/devicehubctl service-ids
 bin/devicehubctl services
 bin/devicehubctl service-id touchscreen
 bin/devicehubctl reset-gesture
+bin/devicehubctl pointer 0 0
 bin/devicehubctl key escape
 bin/devicehubctl button 0x0c 0x40
 bin/devicehubctl raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
@@ -87,6 +88,7 @@ bin/devicehubctl service-id avp
 
 - `tap` and `swipe`: UniversalHID service
 - `scroll`: UniversalHID service
+- `pointer`: UniversalHID pointer report to the `gesture`/trackpad service
 - `key`: UniversalHID keyboard report to the `keyboard` service
 - `long`: CoreDevice HID digitizer with repeated hold pulses
 - `home`: CoreDevice HID button service
@@ -102,6 +104,7 @@ The current build has been manually verified against an iPhone 13 Pro on iOS 27.
 - scroll moves a list
 - swipe moves a list
 - key sends a UniversalHID keyboard report to `CoreDevice keyboard`
+- pointer sends a zero-movement UniversalHID pointer report to `CoreDevice touchscreenGesture`
 - Home returns to SpringBoard
 - Recents opens App Switcher
 - descriptors returns five CoreDevice HID services on the verified device
