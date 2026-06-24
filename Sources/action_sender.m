@@ -45,6 +45,7 @@ extern int uhid_make_digitizer_hid_report(double x, double y, int touching, int 
 extern int uhid_make_digitizer_swipe_hid_report(double x, double y, int touching, int in_range, int swipe_pending, int swipe_locked, int swipe_up, void *output) __attribute__((weak_import));
 extern int uhid_make_navigation_swipe_hid_report(uint32_t phase, uint32_t swipe_mask, uint32_t gesture_motion, uint32_t flavor, double progress, double x, double y, void *output) __attribute__((weak_import));
 extern int uhid_make_dock_swipe_hid_report(uint32_t phase, uint32_t swipe_mask, uint32_t gesture_motion, uint32_t flavor, double progress, double x, double y, void *output) __attribute__((weak_import));
+extern int uhid_make_keyboard_hid_report(uint32_t usage, int pressed, void *output) __attribute__((weak_import));
 
 static void print_xpc(const char *label, xpc_object_t object) {
     if (g_quiet) {
@@ -599,6 +600,36 @@ static void send_coredevice_hid_swipe_report(xpc_remote_connection_t remote, uin
 
 static void send_coredevice_hid_barrier(xpc_remote_connection_t remote, useconds_t delay_after);
 
+static void send_coredevice_keyboard_report(xpc_remote_connection_t remote, uint64_t service_id, uint32_t usage, bool pressed, useconds_t delay_after) {
+    if (!uhid_make_keyboard_hid_report || !coredevice_send_universalhid_hid_report) {
+        fprintf(stderr, "CoreDevice keyboard sender is not linked\n");
+        exit(2);
+    }
+    uint64_t report_words[2] = {0, 0};
+    int count = uhid_make_keyboard_hid_report(usage, pressed ? 1 : 0, report_words);
+    if (count != (int)sizeof(report_words)) {
+        fprintf(stderr, "Unable to build UniversalHID keyboard HIDReport, result=%d usage=0x%x\n", count, usage);
+        exit(2);
+    }
+    int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (!g_quiet) {
+        printf("coredevice keyboard result=%d service=0x%llx usage=0x%x pressed=%d\n",
+               result,
+               (unsigned long long)service_id,
+               usage,
+               pressed);
+    }
+    if (delay_after) {
+        usleep(delay_after);
+    }
+}
+
+static void send_coredevice_keyboard_key(xpc_remote_connection_t remote, uint64_t service_id, uint32_t usage, useconds_t hold) {
+    send_coredevice_keyboard_report(remote, service_id, usage, true, hold);
+    send_coredevice_keyboard_report(remote, service_id, usage, false, 120000);
+    send_coredevice_hid_barrier(remote, 100000);
+}
+
 static void send_coredevice_hid_reset_gesture(xpc_remote_connection_t remote, uint64_t service_id, useconds_t delay_after) {
     if (!coredevice_reset_universalhid_gesture) {
         fprintf(stderr, "CoreDevice UniversalHID reset sender is not linked\n");
@@ -1028,6 +1059,16 @@ int main(int argc, const char *argv[]) {
                     } else if (strcmp(kind, "cd_reset_gesture") == 0) {
                         uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x101;
                         send_coredevice_hid_reset_gesture(remote, service_id, 250000);
+                    } else if (strcmp(kind, "cd_key_report") == 0) {
+                        uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x200;
+                        uint32_t usage = argc > 7 ? (uint32_t)strtoul(argv[7], NULL, 0) : 0;
+                        bool pressed = argc > 8 ? strtol(argv[8], NULL, 0) != 0 : false;
+                        send_coredevice_keyboard_report(remote, service_id, usage, pressed, 250000);
+                    } else if (strcmp(kind, "cd_key") == 0) {
+                        uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x200;
+                        uint32_t usage = argc > 7 ? (uint32_t)strtoul(argv[7], NULL, 0) : 0x29;
+                        useconds_t hold = argc > 8 ? (useconds_t)(strtod(argv[8], NULL) * 1000000.0) : 80000;
+                        send_coredevice_keyboard_key(remote, service_id, usage, hold);
                     } else if (strcmp(kind, "cd_digitizer_ext") == 0) {
                         double x1 = argc > 6 ? strtod(argv[6], NULL) : 0.5;
                         double y1 = argc > 7 ? strtod(argv[7], NULL) : 0.5;

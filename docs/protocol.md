@@ -318,6 +318,7 @@ Currently generated via `UniversalHID.framework` private Swift symbols:
 | Report | Report ID / size | Fields currently set |
 | --- | --- | --- |
 | `UniversalHID.DigitizerReport` | `reportID = 0x09`, `bitCount = 0x140` | contact index, touch, range, resting, x, y, contact count, max count |
+| `UniversalHID.KeyboardReport` | `reportID = 0x01`, `bitCount = 0xf8` | keyboard usage bit at `usage + 8` |
 | `UniversalHID.NavigationSwipeReport` | queried from framework | phase, swipe mask, gesture motion, flavor, progress, x, y |
 | `UniversalHID.DockSwipeReport` | queried from framework | phase, swipe mask, gesture motion, flavor, progress, x, y |
 
@@ -326,8 +327,35 @@ Low-level CLI commands:
 ```sh
 bin/devicehubctl uhid-report 0x101 0.5 0.5 1 1
 bin/devicehubctl uhid-swipe-report 0x101 0.5 0.5 1 1 0 0 0
+bin/devicehubctl keyboard-report 0x200 escape 1
+bin/devicehubctl key-up
 bin/devicehubctl nav-report 0x101 1 1 0x0d 5 0.0 0.5 0.99
 bin/devicehubctl dock-report 0x101 1 1 0x0d 3 0.0 0.5 0.99
+```
+
+## HID Keyboard
+
+Keyboard input is implemented through the verified UniversalHID service report path, not the separate `com.apple.coredevice.feature.remote.hid.keyboard` feature socket.
+
+Symbol and disassembly evidence from `UniversalHID.framework`:
+
+```text
+UniversalHID.KeyboardReport.reportID -> 0x01
+UniversalHID.KeyboardReport.initialReportBitCount -> 0xf8
+UniversalHID.KeyboardReport.index(for:) -> rawUsage + 8
+UniversalHID.KeyboardReport.update(with:) -> HIDReport[rawUsage + 8] = 1
+UniversalHID.KeyboardReport.keyboardState -> HIDReport byte/bit region at index 0xf0
+```
+
+The CLI constructs `UniversalHID.HIDReport(bitCount: 0xf8, id: 0x01)`, sets the usage bit through `HIDReport`'s Swift subscript setter, and sends it to `CoreDevice keyboard` service `0x200`.
+
+Verified sequences:
+
+```sh
+bin/devicehubctl key escape
+bin/devicehubctl key-down escape
+bin/devicehubctl key-up
+bin/devicehubctl keyboard-report 0x200 0x29 1
 ```
 
 ## HID Button
@@ -395,7 +423,8 @@ Verified high-level use:
 - `connectedServiceDescriptors()` is decoded on the current macOS 27/Xcode 27 beta 2 host and iOS 27 device, but the ABI is private Swift framework ABI and should be re-verified on each beta seed.
 - `connectedServices` and `connectedServiceIDs` remain symbol-mapped but are not exposed because the verified DeviceHub path is `connectedServiceDescriptors()`.
 - `createService` and `removeService` request cases are identified but not verified.
-- Keyboard, pointer, scroll-specific, vendor-defined HID feature protocols are symbol-mapped but not implemented.
+- Pointer, scroll-specific, and vendor-defined HID feature protocols are symbol-mapped but not implemented.
+- The standalone `CoreDevice.HIDKeyboard` feature protocol is symbol-mapped, but the CLI uses the lower-level verified `UniversalHID.KeyboardReport` path instead.
 - Multi-touch second point, `DigitizerTarget`, and `DigitizerEdge` values need systematic enumeration.
 - The current implementation still relies on private Swift framework ABI and can break across Xcode 27 beta seeds.
 

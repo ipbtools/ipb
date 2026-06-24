@@ -68,6 +68,9 @@ func uhidNavigationSwipeReportMetadata(_ request: Int) -> UnsafeRawPointer
 @_silgen_name("uhid_digitizer_contact_set_index_abi")
 func uhidDigitizerContactSetIndexABI(_ contact: UnsafeMutablePointer<UHIDDigitizerContact>, _ index: Int)
 
+@_silgen_name("uhid_hid_report_set_bit_abi")
+func uhidHIDReportSetBitABI(_ report: UnsafeMutablePointer<UHIDHIDReport>, _ index: Int, _ value: UInt)
+
 @_silgen_name("uhid_digitizer_contact_set_touch_abi")
 func uhidDigitizerContactSetTouchABI(_ contact: UnsafeMutablePointer<UHIDDigitizerContact>, _ touch: UInt8)
 
@@ -237,6 +240,18 @@ func makeDockSwipeReportData(
     return uhidHIDReportData(uhidDockSwipeReportGetReport(report))
 }
 
+func makeKeyboardHIDReport(usage: UInt32, pressed: Bool) -> UHIDHIDReport? {
+    guard usage <= 0xe7 else {
+        return nil
+    }
+
+    var report = uhidHIDReportInit(0xf8, 0x01)
+    if usage > 0 && pressed {
+        uhidHIDReportSetBitABI(&report, Int(usage) + 8, 1)
+    }
+    return report
+}
+
 @_cdecl("uhid_make_digitizer_report")
 public func uhidMakeDigitizerReport(
     _ x: Double,
@@ -288,6 +303,24 @@ public func uhidMakeDigitizerHIDReport(
     retainedHIDReports.append(finalReport)
     if let output {
         withUnsafeBytes(of: &finalReport) { bytes in
+            output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
+        }
+    }
+    return Int32(MemoryLayout<UHIDHIDReport>.size)
+}
+
+@_cdecl("uhid_make_keyboard_hid_report")
+public func uhidMakeKeyboardHIDReport(
+    _ usage: UInt32,
+    _ pressed: Int32,
+    _ output: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard var report = makeKeyboardHIDReport(usage: usage, pressed: pressed != 0) else {
+        return -1
+    }
+    retainedHIDReports.append(report)
+    if let output {
+        withUnsafeBytes(of: &report) { bytes in
             output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
         }
     }

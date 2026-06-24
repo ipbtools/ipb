@@ -29,6 +29,9 @@ bin/devicehubctl descriptors
 bin/devicehubctl services
 bin/devicehubctl service-id touchscreen
 bin/devicehubctl service-id gesture
+bin/devicehubctl service-id keyboard
+bin/devicehubctl key-up
+bin/devicehubctl key escape 0.02
 ```
 
 The original investigation also captured screenshots after each command, but those are intentionally not committed to keep the repository small and reviewable.
@@ -40,6 +43,7 @@ bin/devicehubctl probe-services
 HIDCTL_VERBOSE_DESCRIPTORS=1 bin/devicehubctl descriptors
 bin/devicehubctl reset-gesture 0x101
 bin/devicehubctl button 0x0c 0x40
+bin/devicehubctl keyboard-report 0x200 escape 1
 bin/devicehubctl uhid-report 0x101 0.5 0.5 0 0
 bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 2 0
 ```
@@ -91,8 +95,18 @@ UHID_SERVICE_ID="$service_id" bin/devicehubctl reset-gesture
 ```text
 bin/devicehubctl service-id touchscreen -> 0x101
 bin/devicehubctl service-id gesture -> 0x501
+bin/devicehubctl service-id keyboard -> 0x200
 bin/devicehubctl service-id buttons -> 0x402
 ```
+
+Keyboard report verification:
+
+```text
+bin/devicehubctl key-up
+bin/devicehubctl key escape 0.02
+```
+
+`key-up` sends an empty `UniversalHID.KeyboardReport` to service `0x200`; `key escape` sends usage `0x29` down, then an empty release report, followed by a UniversalHID barrier.
 
 DeviceHub / DeviceKit checks performed:
 

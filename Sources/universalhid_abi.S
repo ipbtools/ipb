@@ -1,5 +1,15 @@
 .text
 
+.globl _uhid_hid_report_set_bit_abi
+.p2align 2
+_uhid_hid_report_set_bit_abi:
+    stp x20, x30, [sp, #-16]!
+    mov x20, x0
+    mov x0, x2
+    bl _$s12UniversalHID9HIDReportVySuSicis
+    ldp x20, x30, [sp], #16
+    ret
+
 .globl _uhid_digitizer_contact_set_index_abi
 .p2align 2
 _uhid_digitizer_contact_set_index_abi:

@@ -30,7 +30,11 @@ usage:
   devicehubctl descriptors
   devicehubctl services
   devicehubctl reset-gesture [service_id]
+  devicehubctl key <usage_or_name> [hold_seconds] [service_id]
+  devicehubctl key-down <usage_or_name> [service_id]
+  devicehubctl key-up [usage_or_name] [service_id]
   devicehubctl button <usage_page> <usage_code> [hold_seconds]
+  devicehubctl keyboard-report <service_id> <usage_or_name> <pressed>
   devicehubctl uhid-report <service_id> <x> <y> <touching> [in_range]
   devicehubctl uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
   devicehubctl digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type> <edge> [target_low] [target_high]
@@ -144,6 +148,68 @@ resolve_uhid_service_id() {
   esac
 }
 
+keyboard_usage() {
+  local key="${1:l}"
+
+  if [[ "$key" == <-> || "$key" == 0x* ]]; then
+    print -r -- "$key"
+    return 0
+  fi
+
+  case "$key" in
+    a) print -r -- "0x04" ;; b) print -r -- "0x05" ;; c) print -r -- "0x06" ;;
+    d) print -r -- "0x07" ;; e) print -r -- "0x08" ;; f) print -r -- "0x09" ;;
+    g) print -r -- "0x0a" ;; h) print -r -- "0x0b" ;; i) print -r -- "0x0c" ;;
+    j) print -r -- "0x0d" ;; k) print -r -- "0x0e" ;; l) print -r -- "0x0f" ;;
+    m) print -r -- "0x10" ;; n) print -r -- "0x11" ;; o) print -r -- "0x12" ;;
+    p) print -r -- "0x13" ;; q) print -r -- "0x14" ;; r) print -r -- "0x15" ;;
+    s) print -r -- "0x16" ;; t) print -r -- "0x17" ;; u) print -r -- "0x18" ;;
+    v) print -r -- "0x19" ;; w) print -r -- "0x1a" ;; x) print -r -- "0x1b" ;;
+    y) print -r -- "0x1c" ;; z) print -r -- "0x1d" ;;
+    1) print -r -- "0x1e" ;; 2) print -r -- "0x1f" ;; 3) print -r -- "0x20" ;;
+    4) print -r -- "0x21" ;; 5) print -r -- "0x22" ;; 6) print -r -- "0x23" ;;
+    7) print -r -- "0x24" ;; 8) print -r -- "0x25" ;; 9) print -r -- "0x26" ;;
+    0) print -r -- "0x27" ;;
+    enter|return) print -r -- "0x28" ;;
+    escape|esc) print -r -- "0x29" ;;
+    delete|backspace) print -r -- "0x2a" ;;
+    tab) print -r -- "0x2b" ;;
+    space) print -r -- "0x2c" ;;
+    minus|hyphen|dash) print -r -- "0x2d" ;;
+    equal|equals) print -r -- "0x2e" ;;
+    left-bracket|lbracket) print -r -- "0x2f" ;;
+    right-bracket|rbracket) print -r -- "0x30" ;;
+    backslash) print -r -- "0x31" ;;
+    semicolon) print -r -- "0x33" ;;
+    quote|apostrophe) print -r -- "0x34" ;;
+    grave|backtick) print -r -- "0x35" ;;
+    comma) print -r -- "0x36" ;;
+    period|dot) print -r -- "0x37" ;;
+    slash) print -r -- "0x38" ;;
+    caps-lock|capslock) print -r -- "0x39" ;;
+    f1) print -r -- "0x3a" ;; f2) print -r -- "0x3b" ;; f3) print -r -- "0x3c" ;;
+    f4) print -r -- "0x3d" ;; f5) print -r -- "0x3e" ;; f6) print -r -- "0x3f" ;;
+    f7) print -r -- "0x40" ;; f8) print -r -- "0x41" ;; f9) print -r -- "0x42" ;;
+    f10) print -r -- "0x43" ;; f11) print -r -- "0x44" ;; f12) print -r -- "0x45" ;;
+    right|arrow-right) print -r -- "0x4f" ;;
+    left|arrow-left) print -r -- "0x50" ;;
+    down|arrow-down) print -r -- "0x51" ;;
+    up|arrow-up) print -r -- "0x52" ;;
+    left-control|lctrl|ctrl) print -r -- "0xe0" ;;
+    left-shift|lshift|shift) print -r -- "0xe1" ;;
+    left-option|loption|alt|option) print -r -- "0xe2" ;;
+    left-command|lcommand|cmd|command) print -r -- "0xe3" ;;
+    right-control|rctrl) print -r -- "0xe4" ;;
+    right-shift|rshift) print -r -- "0xe5" ;;
+    right-option|roption) print -r -- "0xe6" ;;
+    right-command|rcommand) print -r -- "0xe7" ;;
+    *)
+      print -u2 "unknown keyboard usage: $1"
+      return 2
+      ;;
+  esac
+}
+
 cmd="${1:-}"
 [[ -n "$cmd" ]] || { usage; exit 2; }
 shift || true
@@ -201,9 +267,32 @@ case "$cmd" in
     service_id="$(resolve_uhid_service_id "${1:-$UHID_SERVICE_ID}")"
     run_uhid cd_reset_gesture "$service_id"
     ;;
+  key)
+    [[ $# -ge 1 && $# -le 3 ]] || { usage; exit 2; }
+    usage_code="$(keyboard_usage "$1")"
+    service_id="$(resolve_service_id "${3:-keyboard}")"
+    run_uhid cd_key "$service_id" "$usage_code" "${2:-0.08}"
+    ;;
+  key-down|keyboard-down)
+    [[ $# -ge 1 && $# -le 2 ]] || { usage; exit 2; }
+    usage_code="$(keyboard_usage "$1")"
+    service_id="$(resolve_service_id "${2:-keyboard}")"
+    run_uhid cd_key_report "$service_id" "$usage_code" 1
+    ;;
+  key-up|keyboard-up)
+    [[ $# -le 2 ]] || { usage; exit 2; }
+    usage_code="$(keyboard_usage "${1:-0x0}")"
+    service_id="$(resolve_service_id "${2:-keyboard}")"
+    run_uhid cd_key_report "$service_id" "$usage_code" 0
+    ;;
   button)
     [[ $# -eq 2 || $# -eq 3 ]] || { usage; exit 2; }
     run_button cd_button_click "$1" "$2" "${3:-0.08}"
+    ;;
+  keyboard-report)
+    [[ $# -eq 3 ]] || { usage; exit 2; }
+    usage_code="$(keyboard_usage "$2")"
+    run_uhid cd_key_report "$1" "$usage_code" "$3"
     ;;
   uhid-report)
     [[ $# -eq 4 || $# -eq 5 ]] || { usage; exit 2; }
