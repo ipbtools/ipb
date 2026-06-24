@@ -4,6 +4,9 @@ Host:
 
 - macOS 27 beta
 - Xcode 27.0.0 Beta 2
+- DeviceHub 27.0 build 244.2.3
+- DeviceKit 244.2.0
+- CoreDevice/CoreDeviceUtilities 636.3.0
 
 Device:
 
@@ -38,6 +41,16 @@ bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 2 0
 
 `services` currently reaches the UniversalHID Mercury peer but does not yet decode `connectedServices` successfully; this is tracked in `docs/protocol.md`.
 
+After correcting the Mercury `sendSync(value:)` generic argument order, the `services` probe no longer hits the previous illegal-instruction crash path. The remaining result is a remote-level `Connection invalid`, which matches the current hypothesis that DeviceHub uses the async `UniversalHIDService.connectedServiceDescriptors()` path for dynamic descriptor discovery rather than the synchronous typed Mercury path currently exposed by the CLI.
+
+Current probe output:
+
+```text
+connected services request: UniversalHIDServiceDDIPayload.Request {connectedServices}
+remote event: { "XPCErrorDescription" => "Connection invalid" }
+connected services result=1 raw=0000000000000000
+```
+
 `service-ids` is host-side and does not require an active device socket. It is verified to return `mainTouchscreen = 0x101`, and that resolved value has been used successfully with:
 
 ```sh
@@ -45,3 +58,22 @@ service_id=$(bin/devicehubctl service-ids | awk '/^mainTouchscreen/ {print $2}')
 UHID_SERVICE_ID="$service_id" bin/devicehubctl uhid-report "$service_id" 0.5 0.5 0 0
 UHID_SERVICE_ID="$service_id" bin/devicehubctl reset-gesture
 ```
+
+DeviceHub / DeviceKit checks performed:
+
+```sh
+plutil -p /Applications/Xcode-27.0.0-Beta.2.app/Contents/Applications/DeviceHub.app/Contents/Info.plist
+otool -L /Applications/Xcode-27.0.0-Beta.2.app/Contents/Applications/DeviceHub.app/Contents/MacOS/DeviceHub
+otool -L /Applications/Xcode-27.0.0-Beta.2.app/Contents/SharedFrameworks/DeviceKit.framework/Versions/A/DeviceKit
+strings -a -t x /Applications/Xcode-27.0.0-Beta.2.app/Contents/SharedFrameworks/DeviceKit.framework/Versions/A/DeviceKit | rg 'HIDManager|connectedService|createService|fetchConnectedServiceDescriptors'
+nm -gU /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice | xcrun swift-demangle | rg 'UniversalHIDService|connectedService|createService'
+nm -gU /Library/Developer/PrivateFrameworks/CoreDeviceUtilities.framework/Versions/A/CoreDeviceUtilities | xcrun swift-demangle | rg 'DDIUniversalHIDServicePayload|HIDServiceDescriptor|HIDServiceID'
+```
+
+Findings:
+
+- `DeviceHub` links `DeviceKit`, but the HID manager implementation is in `DeviceKit.framework`.
+- `DeviceKit` links `CoreDevice`, `CoreDeviceUtilities`, `UniversalHID`, `HID.framework`, and weakly `UniversalHIDKit`.
+- `DeviceKit.HIDManager` has strings and code paths for `fetchConnectedServiceDescriptors(generation:)`, `createService(descriptor:)`, `reset(serviceID:)`, `report(reportID:)`, and local service lookup by `serviceID`.
+- `CoreDevice.UniversalHIDService` exposes synchronous report sending/reset/barrier and async descriptor/service discovery.
+- `CoreDeviceUtilities.DDIUniversalHIDServicePayload.ConnectedServices` wraps `[CoreDevice.HIDServiceDescriptor]`.

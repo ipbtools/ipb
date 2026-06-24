@@ -529,7 +529,7 @@ public func mercurySendUHIDRequestValue(
 
     let data = Data(bytes: bytes, count: length)
     var request = makeUHIDSendRequest(data: data, serviceID: serviceID)
-    withUnsafePointer(to: &request) { requestPointer in
+    _ = withUnsafePointer(to: &request) { requestPointer in
         fputs("mercury typed request: \(uhidRequestDescriptionABI(UnsafeRawPointer(requestPointer)))\n", stderr)
     }
 
@@ -564,7 +564,7 @@ public func coredevicePrintConnectedServices(_ connection: UnsafeMutableRawPoint
 
     var request = makeUHIDConnectedServicesRequest()
     if ProcessInfo.processInfo.environment["HIDCTL_QUIET"] == nil {
-        withUnsafePointer(to: &request) { requestPointer in
+        _ = withUnsafePointer(to: &request) { requestPointer in
             fputs("connected services request: \(uhidRequestDescriptionABI(UnsafeRawPointer(requestPointer)))\n", stderr)
         }
     }
@@ -594,7 +594,7 @@ public func coredevicePrintConnectedServices(_ connection: UnsafeMutableRawPoint
 
     fputs(String(format: "connected services result=%d raw=%016llx\n", result, reply), stderr)
     if result == 0 {
-        withUnsafePointer(to: &reply) { replyPointer in
+        _ = withUnsafePointer(to: &reply) { replyPointer in
             fputs("connected services: \(uhidConnectedServicesDescriptionABI(UnsafeRawPointer(replyPointer)))\n", stderr)
         }
     }

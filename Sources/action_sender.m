@@ -876,6 +876,7 @@ int main(int argc, const char *argv[]) {
     setbuf(stdout, NULL);
     signal(SIGSEGV, crash_handler);
     signal(SIGBUS, crash_handler);
+    signal(SIGILL, crash_handler);
     setbuf(stderr, NULL);
     g_quiet = getenv("HIDCTL_QUIET") != NULL;
     g_sync_remote = getenv("HIDCTL_SYNC") != NULL;

@@ -25,7 +25,7 @@ usage:
   devicehubctl recents
   devicehubctl screenshot <path>
   devicehubctl service-ids
-  devicehubctl services
+  devicehubctl services                 # experimental descriptor-discovery probe
   devicehubctl reset-gesture [service_id]
   devicehubctl button <usage_page> <usage_code> [hold_seconds]
   devicehubctl uhid-report <service_id> <x> <y> <touching> [in_range]

@@ -114,6 +114,100 @@ Encoding inferred from disassembly and verified by the getters:
 
 The getter ABI is indirect for resilient Swift structs: the caller provides an output buffer in `x8`, and the getter writes the 64-bit id into that buffer.
 
+## DeviceHub / DeviceKit Path
+
+DeviceHub itself is a thin SwiftUI/AppKit shell. On Xcode 27.0 beta 2:
+
+```text
+DeviceHub.app CFBundleIdentifier = com.apple.dt.Devices
+DeviceHub.app CFBundleVersion = 244.2.3
+DeviceKit.framework current version = 244.2.0
+CoreDevice.framework current version = 636.3.0
+CoreDeviceUtilities.framework current version = 636.3.0
+```
+
+`DeviceHub` links `DeviceKit.framework`, `CoreDevice.framework`, and `CoreDeviceUtilities.framework`, but the HID logic is in:
+
+```text
+/Applications/Xcode-27.0.0-Beta.2.app/Contents/SharedFrameworks/DeviceKit.framework/Versions/A/DeviceKit
+```
+
+`DeviceKit` links:
+
+```text
+/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice
+/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID
+/Library/Developer/PrivateFrameworks/CoreDeviceUtilities.framework/Versions/A/CoreDeviceUtilities
+/System/Library/PrivateFrameworks/HID.framework/Versions/A/HID
+/System/Library/PrivateFrameworks/UniversalHIDKit.framework/Versions/A/UniversalHIDKit
+```
+
+The important classes and strings are:
+
+```text
+DeviceKit.HIDManager
+DeviceKit.HIDManager.EventSender
+DeviceKit.HIDManagerProtocol
+DeviceKit.SyntheticTouchEventProcessor
+DeviceKit.DigitizerState
+DeviceKit.HIDEventGeometry
+DeviceKit/DeviceKit/HIDManager.swift
+createService(descriptor:
+reset(serviceID:
+report(reportID:
+fetchConnectedServiceDescriptors(generation:)
+Failed to lookup service for 0x%s
+Creating new service with descriptor %s
+Starting initializeHIDServices generation %{public}ld
+Available HID services from %{public}s are %{public}s
+Touchscreen service %{public}s
+Created HID service: %{public}s
+Sent Reset HID Service State
+```
+
+The DeviceKit implementation appears to be a two-stage pipeline:
+
+1. Initialization starts an async HID service task. The task logs `Starting initializeHIDServices generation`, fetches connected HID service descriptors, logs `Available HID services from ...`, then filters descriptors using `CoreDeviceUtilities.HIDServiceDescriptor` helpers.
+2. When a touchscreen descriptor qualifies, `DeviceKit` records it and builds the local processing state used by `SyntheticTouchEventProcessor`.
+3. Event delivery goes through `DeviceKit.HIDManager.EventSender`. It first queries the local HID event system client's `services`, compares each service's `serviceID`, and uses the matching local service if present.
+4. If the local HID service is missing, it logs `Creating new service with descriptor ...`, creates a local UniversalHID/HID service from the `CoreDevice.HIDServiceDescriptor`, computes report/event masks, and caches the service keyed by `HIDServiceID`.
+5. The final remote delivery still uses the CoreDevice UniversalHID protocol surface: `send(report:to:)`, `resetGestureState(service:)`, and `sendBarrier()`.
+
+Representative disassembly evidence from `DeviceKit`:
+
+| Address | Evidence | Interpretation |
+| --- | --- | --- |
+| `0x412e04` | calls `_objc_msgSend$services` | Enumerates local HID services before sending an event |
+| `0x412e90` | calls `_objc_msgSend$serviceID` | Reads each local service id |
+| `0x412e9c` | calls a CoreDevice HIDServiceID getter/raw helper, then compares | Matches local service by CoreDevice service id |
+| `0x4131bc` | logs `Failed to lookup service for 0x%s` | No local HID service exists for the target id |
+| `0x413514` | logs `Creating new service with descriptor %s` | Starts dynamic local service creation |
+| `0x413604` | witness-call using the descriptor | Copies/initializes descriptor-shaped value |
+| `0x413610` | stores enum tag `4` before helper calls | Builds a descriptor-related Swift enum payload |
+| `0x41362c` | witness-call using the service id | Associates created local service with `HIDServiceID` |
+| `0x4136ac`-`0x413708` | iterates descriptor-derived report ids/masks | Computes event/report mask set for the local service |
+| `0x413788` | inserts into a dictionary/cache | Caches the created local service |
+| `0x418438` | async task frame setup | HID service initialization task |
+| `0x418864` | logs `Starting initializeHIDServices generation` | Initialization has entered descriptor discovery |
+| `0x418ff0` | logs `Available HID services from ...` | Descriptor array has been fetched |
+| `0x4191a8` | loops over descriptor array | Filters connected descriptors |
+| `0x4192e0` | allocates touchscreen processing object | Touchscreen descriptor accepted |
+| `0x4195b8` | logs `Touchscreen service %{public}s` | Touchscreen service selected |
+
+This means DeviceHub UI interaction is not a separate public command channel. It uses DeviceKit to translate local Mac mouse/touch/key events into UniversalHID reports and then sends those reports over the same CoreDevice service socket.
+
+For this CLI, the useful abstraction is therefore:
+
+```text
+CoreDevice service socket
+  -> Mercury peer for com.apple.coredevice.hid.universalhidservice
+  -> CoreDevice.DDIUniversalHIDService
+  -> UniversalHID.HIDReport
+  -> HIDServiceID, usually 0x101 for the main touchscreen
+```
+
+The current CLI intentionally bypasses DeviceKit's local `HIDEventSystemClient`, `UniversalHIDKit.EventObserver`, and event translation layer. It constructs `UniversalHID.HIDReport` values directly and dispatches them through `CoreDevice.UniversalHIDService`.
+
 ## UniversalHID Requests
 
 `CoreDeviceUtilities.DDIUniversalHIDServicePayload.Request` has symbol-level constructors for:
@@ -132,7 +226,37 @@ The Mercury peer service name discovered in strings and successful typed send ex
 com.apple.coredevice.hid.universal
 ```
 
-`connectedServices` is the next important gap: the Swift async protocol methods are visible, but the current generic `sendSync(value:)` ABI shim does not decode a reply successfully yet.
+The generated/observed request and reply types are:
+
+```text
+CoreDeviceUtilities.DDIUniversalHIDServicePayload.Request
+CoreDeviceUtilities.DDIUniversalHIDServicePayload.ConnectedServices
+```
+
+`ConnectedServices` is a struct wrapping:
+
+```text
+[CoreDevice.HIDServiceDescriptor]
+```
+
+The raw enum layout observed for `Request.connectedServices` is a 32-byte value with tag byte `4` at offset `24`; its description prints `{connectedServices}`.
+
+`connectedServices` / `connectedServiceDescriptors` are the next important gap. The Swift async protocol methods are visible, and the typed payload layout is known, but the current generic `sendSync(value:)` shim still gets a remote `Connection invalid` for the connected-services probe. DeviceHub appears to use the async CoreDevice path for descriptor discovery rather than a synchronous Mercury typed request.
+
+The current `sendSync(value:)` ABI shim was corrected during this analysis. The short generic overload orders arguments as:
+
+```text
+request value
+request metadata
+reply metadata
+request Decodable witness
+request Encodable witness
+reply Decodable witness
+reply Encodable witness
+reply out buffer in x8
+self in x20
+error in x21
+```
 
 ## HID Reports
 
@@ -215,7 +339,8 @@ Verified high-level use:
 
 ## Current Gaps
 
-- `connectedServices` and `connectedServiceIDs` are visible in symbols but not yet successfully decoded through the current CLI.
+- `connectedServices`, `connectedServiceDescriptors`, and `connectedServiceIDs` are visible in symbols and the payload structs are identified, but they are not yet successfully decoded through the current CLI.
+- The original DeviceHub dynamic discovery path is async Swift protocol dispatch. The static report-sending path is complete enough for basic interaction, but the async descriptor path is not complete.
 - `createService` and `removeService` request cases are identified but not verified.
 - Keyboard, pointer, scroll-specific, vendor-defined HID feature protocols are symbol-mapped but not implemented.
 - Multi-touch second point, `DigitizerTarget`, and `DigitizerEdge` values need systematic enumeration.

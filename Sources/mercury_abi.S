@@ -43,14 +43,14 @@ _mercury_xpc_connection_send_sync_value_abi:
     stp x22, x30, [sp, #16]
     ldr x9, [sp, #32]
     mov x20, x0
-    mov x10, x5
-    mov x11, x6
-    mov x12, x7
     mov x0, x1
     mov x1, x2
-    mov x2, x10
-    mov x5, x11
-    mov x6, x12
+    mov x2, x5
+    // sendSync(value:) orders generic metadata before the Codable witnesses:
+    // request metadata, reply metadata, request Decodable, request Encodable,
+    // reply Decodable, reply Encodable.
+    mov x5, x6
+    mov x6, x7
     mov x8, x9
     mov x21, #0
     bl _$s7Mercury13XPCConnectionC8sendSync5valueq_x_tKSeRzSERzSeR_SER_r0_lF

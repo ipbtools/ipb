@@ -4,6 +4,8 @@
 
 It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, Home, App Switcher, and screenshots.
 
+The basic interaction path is verified. DeviceHub's full dynamic descriptor-discovery path is still under analysis; `services` is an experimental probe, not a stable command yet.
+
 ## Requirements
 
 - macOS 27 beta host
@@ -44,7 +46,7 @@ bin/devicehubctl home
 bin/devicehubctl recents
 bin/devicehubctl screenshot build/current.png
 bin/devicehubctl service-ids
-bin/devicehubctl services
+bin/devicehubctl services   # experimental descriptor-discovery probe
 bin/devicehubctl reset-gesture 0x101
 bin/devicehubctl button 0x0c 0x40
 bin/devicehubctl raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
