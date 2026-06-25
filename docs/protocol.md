@@ -214,11 +214,22 @@ The current CLI intentionally bypasses DeviceKit's local `HIDEventSystemClient`,
 
 | Request case | Fields observed | Status |
 | --- | --- | --- |
-| `send` | `Data`, `CoreDevice.HIDServiceID` | Verified through CoreDevice protocol dispatch |
-| `resetGestureState` | `CoreDevice.HIDServiceID` | CLI exposed, needs broader device testing |
+| `send` | positional `_0 = Data`, `_1 = CoreDevice.HIDServiceID` | Verified through CoreDevice protocol dispatch |
+| `resetGestureState` | positional `_0 = CoreDevice.HIDServiceID` | CLI exposed, needs broader device testing |
 | `connectedServices` | no payload | Symbol present, current Mercury typed sync bridge returns `result=1` |
-| `createService` | `CoreDevice.HIDServiceDescriptor` | Legacy XPC wrapper exists, not verified |
-| `removeService` | `CoreDevice.HIDServiceID` | Symbol present, not yet wired |
+| `createService` | positional `_0 = CoreDevice.HIDServiceDescriptor` | Legacy XPC wrapper exists, not verified |
+| `removeService` | positional `_0 = CoreDevice.HIDServiceID` | Symbol present, not yet wired |
+
+Swift metadata in `CoreDeviceUtilities.framework` confirms the request coding-key layout:
+
+```text
+Request.CodingKeys = connectedServices, createService, removeService, send, resetGestureState
+CreateServiceCodingKeys = _0
+RemoveServiceCodingKeys = _0
+SendCodingKeys = _0, _1
+ResetGestureStateCodingKeys = _0
+ConnectedServicesCodingKeys = <empty>
+```
 
 The Mercury peer service name discovered in strings and successful typed send experiments is:
 
@@ -230,6 +241,7 @@ The generated/observed request and reply types are:
 
 ```text
 CoreDeviceUtilities.DDIUniversalHIDServicePayload.Request
+CoreDeviceUtilities.DDIUniversalHIDServicePayload.CreatedServiceID
 CoreDeviceUtilities.DDIUniversalHIDServicePayload.ConnectedServices
 ```
 
@@ -237,6 +249,12 @@ CoreDeviceUtilities.DDIUniversalHIDServicePayload.ConnectedServices
 
 ```text
 [CoreDevice.HIDServiceDescriptor]
+```
+
+`CreatedServiceID` is a struct wrapping:
+
+```text
+serviceID: CoreDevice.HIDServiceID
 ```
 
 The raw enum layout observed for `Request.connectedServices` is a 32-byte value with tag byte `4` at offset `24`; its description prints `{connectedServices}`.
@@ -258,6 +276,8 @@ Descriptor-discovery probe matrix:
 | `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` | Verified through a Swift async shim plus a small ARM64 ABI bridge | DeviceHub's real descriptor path |
 
 The async dispatch detail that mattered: CoreDevice's async function pointer descriptor uses two 32-bit words, a signed relative target and an async frame size. The `connectedServiceDescriptors()` witness entry is an async descriptor, and the concrete DDI implementation expects the UniversalHID existential self in `x20`. The CLI bridge therefore sets `x20` to a one-word service box and exposes a matching `Tu` async descriptor for Swift concurrency.
+
+`connectedServiceIDs()` is a protocol extension, not a protocol requirement thunk. A requirement-style async shim is not valid for it; it needs a separate ABI analysis before exposing it safely.
 
 The returned value is native Swift Array storage for `[CoreDevice.HIDServiceDescriptor]`. Runtime value witness metadata shows `HIDServiceDescriptor` is an 8-byte resilient value whose single word is its storage dictionary. The dictionary is `[String: CoreDevice.CodableValue]`; the currently decoded `CodableValue` tags are:
 
@@ -634,7 +654,8 @@ Verified high-level use:
 ## Current Gaps
 
 - `connectedServiceDescriptors()` is decoded on the current macOS 27/Xcode 27 beta 2 host and iOS 27 device, but the ABI is private Swift framework ABI and should be re-verified on each beta seed.
-- `connectedServices` and `connectedServiceIDs` remain symbol-mapped but are not exposed because the verified DeviceHub path is `connectedServiceDescriptors()`.
+- `connectedServices` remains symbol-mapped but is not exposed because the verified DeviceHub path is `connectedServiceDescriptors()`.
+- `connectedServiceIDs()` is symbol-mapped as a protocol extension; it still needs a separate extension ABI bridge before exposure.
 - `createService` and `removeService` request cases are identified but not verified.
 - The UniversalHID `PointerReport` base fields and raw UInt32 flags are implemented, but flag behavior beyond `accelerated = 0x1` still needs systematic enumeration.
 - The UniversalHID `ScrollReport` base fields and standalone `CoreDevice.HIDScroll` zero-event path are implemented and verified, but non-zero scroll behavior, momentum semantics, and target behavior still need full behavior verification.
