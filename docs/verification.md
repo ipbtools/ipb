@@ -156,6 +156,23 @@ bin/devicehubctl vendor-defined 0x10000 0 0 -> HIDVendorDefined raw values out o
 
 The zero-length vendor-defined event is a non-destructive smoke test for opening `com.apple.coredevice.feature.remote.hid.vendordefined`, dispatching `CoreDevice.HIDVendorDefined.send(usagePage:usage:version:data:)`, and following with `sendBarrier()`. The other probes verify payload and raw-width validation before send.
 
+Keyboard / pointer capability adapter verification:
+
+```text
+strings -a -t x /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice | rg 'feature.remote.hid'
+```
+
+Observed feature strings in CoreDevice:
+
+```text
+com.apple.coredevice.feature.remote.hid.button
+com.apple.coredevice.feature.remote.hid.digitizer
+com.apple.coredevice.feature.remote.hid.vendordefined
+com.apple.coredevice.feature.remote.hid.scroll
+```
+
+No `feature.remote.hid.keyboard` or `feature.remote.hid.pointer` string is present on this seed. Runtime metadata shows `UniversalHIDKeyboard` and `UniversalHIDPointer` each have only one ivar, `filter` at offset `0x10`; disassembly of the keyboard witness path shows it constructs a UniversalHID keyboard report and sends through the filter-backed UniversalHID service helper.
+
 DeviceHub / DeviceKit checks performed:
 
 ```sh

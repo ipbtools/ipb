@@ -37,14 +37,14 @@ Verified features:
 | `com.apple.coredevice.feature.remote.hid.scroll` | `CoreDevice.HIDScroll` / `IndigoHIDScroll` | raw scroll event probes |
 | `com.apple.coredevice.feature.remote.hid.vendordefined` | `CoreDevice.HIDVendorDefined` / `IndigoHIDVendorDefined` | raw vendor-defined event probes |
 
-Additional feature strings present in CoreDevice but not yet wired in this CLI:
+Additional related CoreDevice/DeviceKit feature strings observed in this seed:
 
 ```text
-com.apple.coredevice.feature.remote.hid.keyboard
-com.apple.coredevice.feature.remote.hid.pointer
 com.apple.coredevice.feature.remote.devicecontrol.orientation
 com.apple.coredevice.feature.remote.universalhid
 ```
+
+`CoreDevice.framework` does not contain `com.apple.coredevice.feature.remote.hid.keyboard` or `com.apple.coredevice.feature.remote.hid.pointer` strings on the verified Xcode 27 beta 2 host. Keyboard and pointer protocols exist, but their built-in implementations are UniversalHID capability adapters rather than independent feature sockets.
 
 ## UniversalHID Service
 
@@ -476,7 +476,7 @@ The first command sends a zero-movement scroll report successfully. The second c
 
 ## HID Pointer
 
-Pointer input is currently implemented through the verified UniversalHID service report path, not the separate `com.apple.coredevice.feature.remote.hid.pointer` feature socket.
+Pointer input is currently implemented through the verified UniversalHID service report path. There is no standalone `com.apple.coredevice.feature.remote.hid.pointer` feature string in `CoreDevice.framework` on Xcode 27 beta 2.
 
 Symbol evidence from `UniversalHID.framework`:
 
@@ -503,7 +503,7 @@ bin/devicehubctl pointer 0 0
 
 ## HID Keyboard
 
-Keyboard input is implemented through the verified UniversalHID service report path, not the separate `com.apple.coredevice.feature.remote.hid.keyboard` feature socket.
+Keyboard input is implemented through the verified UniversalHID service report path. There is no standalone `com.apple.coredevice.feature.remote.hid.keyboard` feature string in `CoreDevice.framework` on Xcode 27 beta 2.
 
 Symbol and disassembly evidence from `UniversalHID.framework`:
 
@@ -524,6 +524,38 @@ bin/devicehubctl key escape
 bin/devicehubctl key-down escape
 bin/devicehubctl key-up
 bin/devicehubctl keyboard-report 0x200 0x29 1
+```
+
+## CoreDevice Keyboard / Pointer Capability Adapters
+
+CoreDevice still exposes typed protocols for keyboard and pointer capability use:
+
+```text
+CoreDevice.HIDKeyboard
+CoreDevice.HIDPointer
+CoreDevice.UniversalHIDKeyboard
+CoreDevice.UniversalHIDPointer
+```
+
+Runtime metadata shows both implementation classes are tiny Swift objects with a single ivar:
+
+| Class | Instance size | Ivar |
+| --- | --- | --- |
+| `UniversalHIDKeyboard` | `24` bytes | `filter` at offset `0x10` |
+| `UniversalHIDPointer` | `24` bytes | `filter` at offset `0x10` |
+
+The `filter` is not the Mercury peer or a feature identifier string. Disassembly shows it contains a boxed UniversalHID capability/filter path:
+
+- `UniversalHIDKeyboard.send(key:state:)` dispatches through witness slot `0x10` to file offset `0x2aa354`, then into `0x2a99ac`.
+- The implementation constructs a `UniversalHID.KeyboardReport`-style report, reads `self + 0x10`, and passes the report through the common UniversalHID send helper at `0x2a7b00`.
+- `UniversalHIDKeyboard.sendBarrier()` at `0x2a8794` reads `self + 0x10`, projects a boxed existential, and calls the underlying UniversalHID service witness.
+- `UniversalHIDPointer` uses async protocol dispatch thunks and the same one-ivar `filter` object shape; no separate pointer feature socket backing class is present.
+
+So the practical CLI abstraction is:
+
+```text
+keyboard/pointer reports -> UniversalHIDService.send(report:to:)
+button/digitizer/scroll/vendor events -> IndigoHID* typed feature sockets
 ```
 
 ## HID Button
@@ -591,10 +623,10 @@ Verified high-level use:
 - `connectedServiceDescriptors()` is decoded on the current macOS 27/Xcode 27 beta 2 host and iOS 27 device, but the ABI is private Swift framework ABI and should be re-verified on each beta seed.
 - `connectedServices` and `connectedServiceIDs` remain symbol-mapped but are not exposed because the verified DeviceHub path is `connectedServiceDescriptors()`.
 - `createService` and `removeService` request cases are identified but not verified.
-- The UniversalHID `PointerReport` base fields are implemented, but `PointerReport.Flags` and the standalone `CoreDevice.HIDPointer` feature socket still need full ABI mapping and behavior verification.
+- The UniversalHID `PointerReport` base fields are implemented, but `PointerReport.Flags` still needs full ABI mapping and behavior verification.
 - The UniversalHID `ScrollReport` base fields and standalone `CoreDevice.HIDScroll` zero-event path are implemented and verified, but non-zero scroll behavior, momentum semantics, and target behavior still need full behavior verification.
 - The standalone `CoreDevice.HIDVendorDefined` feature is implemented for raw hex payload dispatch, but vendor-specific non-empty payload semantics are not enumerated.
-- The standalone `CoreDevice.HIDKeyboard` feature protocol is symbol-mapped, but the CLI uses the lower-level verified `UniversalHID.KeyboardReport` path instead.
+- `CoreDevice.HIDKeyboard` and `CoreDevice.HIDPointer` are symbol-mapped as capability protocols, but their built-in implementations are `UniversalHIDKeyboard` / `UniversalHIDPointer` filter-backed adapters, not standalone feature sockets in this seed.
 - Multi-touch second point, `DigitizerTarget`, and `DigitizerEdge` values need systematic enumeration.
 - The current implementation still relies on private Swift framework ABI and can break across Xcode 27 beta seeds.
 

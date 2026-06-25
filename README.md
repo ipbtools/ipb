@@ -101,6 +101,8 @@ bin/devicehubctl service-id avp
 - `recents`: CoreDevice HID digitizer bottom-edge gesture
 - `screenshot`: `xcrun devicectl device capture screenshot`
 
+`CoreDevice.framework` exposes `HIDKeyboard` and `HIDPointer` protocols, but on the verified Xcode 27 beta 2 build their implementations are `UniversalHIDKeyboard` / `UniversalHIDPointer` adapters backed by the UniversalHID service, not separate `feature.remote.hid.keyboard` or `feature.remote.hid.pointer` sockets.
+
 ## Verified Scope
 
 The current build has been manually verified against an iPhone 13 Pro on iOS 27.0 for:
