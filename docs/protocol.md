@@ -606,16 +606,25 @@ sendBarrier()
 Observed event values:
 
 ```text
-0 = start
-1 = position / move
-2 = end
+0 = start / begin / began
+1 = position / move / changed
+2 = end / ended
+```
+
+Observed edge values:
+
+```text
+0 = none / undefined
+3 = bottom / bottom-edge
 ```
 
 The CLI exposes the raw digitizer event:
 
 ```sh
-bin/devicehubctl digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type> <edge> [target_low] [target_high]
+bin/devicehubctl digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
 ```
+
+The raw numeric values are still accepted for protocol probing. The named event values are verified through long-press/tap sequencing; `bottom` is verified through the App Switcher edge gesture. Other `DigitizerEdge` and `DigitizerTarget` values are intentionally left raw until enumerated.
 
 Verified high-level use:
 
@@ -631,7 +640,7 @@ Verified high-level use:
 - The UniversalHID `ScrollReport` base fields and standalone `CoreDevice.HIDScroll` zero-event path are implemented and verified, but non-zero scroll behavior, momentum semantics, and target behavior still need full behavior verification.
 - The standalone `CoreDevice.HIDVendorDefined` feature is implemented for raw hex payload dispatch, but vendor-specific non-empty payload semantics are not enumerated.
 - `CoreDevice.HIDKeyboard` and `CoreDevice.HIDPointer` are symbol-mapped as capability protocols, but their built-in implementations are `UniversalHIDKeyboard` / `UniversalHIDPointer` filter-backed adapters, not standalone feature sockets in this seed.
-- Multi-touch second point, `DigitizerTarget`, and `DigitizerEdge` values need systematic enumeration.
+- Multi-touch second point, `DigitizerTarget`, and `DigitizerEdge` values beyond `none = 0` / `bottom = 3` need systematic enumeration.
 - The current implementation still relies on private Swift framework ABI and can break across Xcode 27 beta seeds.
 
 ## Reproducing Symbol Evidence

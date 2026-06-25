@@ -3,14 +3,70 @@
 #include <uuid/uuid.h>
 #include <execinfo.h>
 #include <signal.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 typedef struct OS_xpc_remote_connection *xpc_remote_connection_t;
 static bool g_quiet = false;
 static bool g_sync_remote = false;
+
+static bool parse_u64_literal(const char *text, uint64_t *out) {
+    if (!text || !text[0] || text[0] == '-') {
+        return false;
+    }
+
+    errno = 0;
+    char *end = NULL;
+    unsigned long long value = strtoull(text, &end, 0);
+    if (end == text || (end && *end) || errno != 0) {
+        return false;
+    }
+
+    *out = (uint64_t)value;
+    return true;
+}
+
+static uint64_t parse_digitizer_event_type(const char *text) {
+    uint64_t value = 0;
+    if (parse_u64_literal(text, &value)) {
+        return value;
+    }
+    if (strcasecmp(text, "start") == 0 || strcasecmp(text, "begin") == 0 || strcasecmp(text, "began") == 0) {
+        return 0;
+    }
+    if (strcasecmp(text, "position") == 0 || strcasecmp(text, "move") == 0 || strcasecmp(text, "moved") == 0 ||
+        strcasecmp(text, "change") == 0 || strcasecmp(text, "changed") == 0) {
+        return 1;
+    }
+    if (strcasecmp(text, "end") == 0 || strcasecmp(text, "ended") == 0) {
+        return 2;
+    }
+
+    fprintf(stderr, "unknown digitizer event type: %s\n", text);
+    exit(2);
+}
+
+static uint64_t parse_digitizer_edge(const char *text) {
+    uint64_t value = 0;
+    if (parse_u64_literal(text, &value)) {
+        return value;
+    }
+    if (strcasecmp(text, "none") == 0 || strcasecmp(text, "undefined") == 0 || strcasecmp(text, "no-edge") == 0) {
+        return 0;
+    }
+    if (strcasecmp(text, "bottom") == 0 || strcasecmp(text, "bottom-edge") == 0 ||
+        strcasecmp(text, "from-bottom") == 0 || strcasecmp(text, "from-bottom-edge") == 0) {
+        return 3;
+    }
+
+    fprintf(stderr, "unknown digitizer edge: %s\n", text);
+    exit(2);
+}
 
 static void crash_handler(int signo) {
     void *frames[64];
@@ -1274,8 +1330,8 @@ int main(int argc, const char *argv[]) {
                         double x2 = argc > 8 ? strtod(argv[8], NULL) : 0.0;
                         double y2 = argc > 9 ? strtod(argv[9], NULL) : 0.0;
                         uint64_t point_two_optional_tag = argc > 10 ? strtoull(argv[10], NULL, 0) : 1;
-                        uint64_t event_type = argc > 11 ? strtoull(argv[11], NULL, 0) : 0;
-                        uint64_t edge = argc > 12 ? strtoull(argv[12], NULL, 0) : 0;
+                        uint64_t event_type = argc > 11 ? parse_digitizer_event_type(argv[11]) : 0;
+                        uint64_t edge = argc > 12 ? parse_digitizer_edge(argv[12]) : 0;
                         uint64_t target_low = argc > 13 ? strtoull(argv[13], NULL, 0) : 0;
                         uint64_t target_high = argc > 14 ? strtoull(argv[14], NULL, 0) : 0;
                         send_coredevice_digitizer_cgpoint(remote, x1, y1, x2, y2, point_two_optional_tag, event_type, edge, target_low, target_high, 250000);
@@ -1297,7 +1353,7 @@ int main(int argc, const char *argv[]) {
                         double y1 = argc > 7 ? strtod(argv[7], NULL) : 0.8;
                         double x2 = argc > 8 ? strtod(argv[8], NULL) : 0.5;
                         double y2 = argc > 9 ? strtod(argv[9], NULL) : 0.3;
-                        uint64_t edge = argc > 10 ? strtoull(argv[10], NULL, 0) : 0;
+                        uint64_t edge = argc > 10 ? parse_digitizer_edge(argv[10]) : 0;
                         uint64_t target_low = argc > 11 ? strtoull(argv[11], NULL, 0) : 0;
                         uint64_t target_high = argc > 12 ? strtoull(argv[12], NULL, 0) : 0;
                         useconds_t duration = argc > 13 ? (useconds_t)(strtod(argv[13], NULL) * 1000000.0) : 300000;

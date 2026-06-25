@@ -55,6 +55,9 @@ bin/devicehubctl scroll-event 0 0 0
 bin/devicehubctl vendor-defined 0 0 0
 bin/devicehubctl uhid-report 0x101 0.5 0.5 0 0
 bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 2 0
+bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 end none
+bin/devicehubctl raw com.apple.coredevice.feature.remote.hid.digitizer cd_digitizer_ext 0.5 0.5 0 0 1 end none
+bin/devicehubctl digitizer-event 0.5 0.5 0 0 1 impossible none -> unknown digitizer event type: impossible
 ```
 
 `services` is now an alias of the verified descriptor-discovery path. `probe-services` reaches the UniversalHID Mercury peer but does not decode the synchronous `connectedServices` wrapper successfully. The verified DeviceHub discovery path is `descriptors`, which calls `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` through a Swift async ABI bridge and decodes the returned descriptor dictionaries.

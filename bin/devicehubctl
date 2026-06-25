@@ -44,7 +44,7 @@ usage:
   devicehubctl keyboard-report <service_id> <usage_or_name> <pressed>
   devicehubctl uhid-report <service_id> <x> <y> <touching> [in_range]
   devicehubctl uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
-  devicehubctl digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type> <edge> [target_low] [target_high]
+  devicehubctl digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
   devicehubctl nav-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
   devicehubctl dock-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
   devicehubctl raw <feature> <helper_kind> [args...]
@@ -274,6 +274,33 @@ scroll_target() {
   esac
 }
 
+digitizer_event_type() {
+  local event="${1:l}"
+  case "$event" in
+    start|begin|began) print -r -- "0x0" ;;
+    position|move|moved|change|changed) print -r -- "0x1" ;;
+    end|ended) print -r -- "0x2" ;;
+    <->|0x*) print -r -- "$event" ;;
+    *)
+      print -u2 "unknown digitizer event type: $1"
+      return 2
+      ;;
+  esac
+}
+
+digitizer_edge() {
+  local edge="${1:l}"
+  case "$edge" in
+    none|undefined|no-edge) print -r -- "0x0" ;;
+    bottom|bottom-edge|from-bottom|from-bottom-edge) print -r -- "0x3" ;;
+    <->|0x*) print -r -- "$edge" ;;
+    *)
+      print -u2 "unknown digitizer edge: $1"
+      return 2
+      ;;
+  esac
+}
+
 cmd="${1:-}"
 [[ -n "$cmd" ]] || { usage; exit 2; }
 shift || true
@@ -304,7 +331,7 @@ case "$cmd" in
     ;;
   recents|app-switcher|switcher)
     [[ $# -eq 0 ]] || { usage; exit 2; }
-    run_digitizer cd_digitizer_swipe 0.5 0.995 0.5 0.74 3 0 0 0.36 1.05
+    run_digitizer cd_digitizer_swipe 0.5 0.995 0.5 0.74 bottom 0 0 0.36 1.05
     ;;
   screenshot)
     [[ $# -eq 1 ]] || { usage; exit 2; }
@@ -392,7 +419,9 @@ case "$cmd" in
     ;;
   digitizer-event)
     [[ $# -eq 7 || $# -eq 9 ]] || { usage; exit 2; }
-    run_digitizer cd_digitizer_ext "$1" "$2" "$3" "$4" "$5" "$6" "$7" "${8:-0}" "${9:-0}"
+    event_type="$(digitizer_event_type "$6")"
+    edge="$(digitizer_edge "$7")"
+    run_digitizer cd_digitizer_ext "$1" "$2" "$3" "$4" "$5" "$event_type" "$edge" "${8:-0}" "${9:-0}"
     ;;
   nav-report)
     [[ $# -eq 8 ]] || { usage; exit 2; }
