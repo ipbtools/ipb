@@ -612,10 +612,6 @@ static void send_coredevice_pointer_report(xpc_remote_connection_t remote, uint6
         fprintf(stderr, "CoreDevice pointer sender is not linked\n");
         exit(2);
     }
-    if (flags != 0) {
-        fprintf(stderr, "PointerReport flags are not mapped yet; pass flags=0\n");
-        exit(2);
-    }
     uint64_t report_words[2] = {0, 0};
     int count = uhid_make_pointer_hid_report(x, y, button_mask, accel_x, accel_y, flags, report_words);
     if (count != (int)sizeof(report_words)) {

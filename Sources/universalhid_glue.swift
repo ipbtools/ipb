@@ -110,6 +110,9 @@ func uhidPointerReportSetYABI(_ report: UnsafeMutablePointer<UHIDPointerReport>,
 @_silgen_name("uhid_pointer_report_set_button_mask_abi")
 func uhidPointerReportSetButtonMaskABI(_ report: UnsafeMutablePointer<UHIDPointerReport>, _ buttonMask: UInt8)
 
+@_silgen_name("uhid_pointer_report_set_flags_abi")
+func uhidPointerReportSetFlagsABI(_ report: UnsafeMutablePointer<UHIDPointerReport>, _ flags: UInt32)
+
 @_silgen_name("uhid_pointer_report_set_accel_x_abi")
 func uhidPointerReportSetAccelXABI(_ report: UnsafeMutablePointer<UHIDPointerReport>, _ accelX: Double)
 
@@ -329,10 +332,6 @@ func makePointerHIDReport(
     accelY: Double,
     flags: UInt32
 ) -> UHIDHIDReport? {
-    guard flags == 0 else {
-        return nil
-    }
-
     let hidReport = uhidHIDReportInit(uhidPointerReportInitialBitCount(), uhidPointerReportID())
     var report = uhidPointerReportInitUnderscore(hidReport)
 
@@ -341,6 +340,7 @@ func makePointerHIDReport(
     uhidPointerReportSetButtonMaskABI(&report, UInt8(truncatingIfNeeded: buttonMask))
     uhidPointerReportSetAccelXABI(&report, accelX)
     uhidPointerReportSetAccelYABI(&report, accelY)
+    uhidPointerReportSetFlagsABI(&report, flags)
 
     return uhidPointerReportGetReport(report)
 }

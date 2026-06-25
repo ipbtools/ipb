@@ -319,7 +319,7 @@ Currently generated via `UniversalHID.framework` private Swift symbols:
 | --- | --- | --- |
 | `UniversalHID.DigitizerReport` | `reportID = 0x09`, `bitCount = 0x140` | contact index, touch, range, resting, x, y, contact count, max count |
 | `UniversalHID.KeyboardReport` | `reportID = 0x01`, `bitCount = 0xf8` | keyboard usage bit at `usage + 8` |
-| `UniversalHID.PointerReport` | queried from framework | x, y, button mask, accel x, accel y; flags identified but not mapped |
+| `UniversalHID.PointerReport` | queried from framework | x, y, button mask, accel x, accel y, raw UInt32 flags |
 | `UniversalHID.ScrollReport` + `ScrollCollection` | queried from framework | collection flags, phase, momentum, x, y, accel x, accel y |
 | `UniversalHID.NavigationSwipeReport` | queried from framework | phase, swipe mask, gesture motion, flavor, progress, x, y |
 | `UniversalHID.DockSwipeReport` | queried from framework | phase, swipe mask, gesture motion, flavor, progress, x, y |
@@ -487,19 +487,23 @@ UniversalHID.PointerReport.x/y -> Swift.Int setters
 UniversalHID.PointerReport.buttonMask -> UInt8 setter
 UniversalHID.PointerReport.accelX/accelY -> Double setters
 UniversalHID.PointerReport.flags -> PointerReport.Flags OptionSet setter
+UniversalHID.PointerReport.Flags.rawValue -> UInt32 getter
+UniversalHID.PointerReport.Flags.init(rawValue:) -> UInt32-backed OptionSet initializer
+UniversalHID.PointerReport.Flags.accelerated -> raw value 0x1
 ```
 
-The CLI constructs `UniversalHID.HIDReport(bitCount:id:)`, wraps it with `UniversalHID.PointerReport(_report:)`, sets relative x/y deltas, button mask, and acceleration fields, and sends it to the `CoreDevice touchscreenGesture` service (`0x501`) by default.
+The CLI constructs `UniversalHID.HIDReport(bitCount:id:)`, wraps it with `UniversalHID.PointerReport(_report:)`, sets relative x/y deltas, button mask, acceleration fields, and raw `PointerReport.Flags` bits, then sends it to the `CoreDevice touchscreenGesture` service (`0x501`) by default.
 
 Verified non-destructive sequence:
 
 ```sh
 bin/devicehubctl service-id gesture
 bin/devicehubctl pointer-report 0x501 0 0 0
+bin/devicehubctl pointer-report 0x501 0 0 0 0 0 1
 bin/devicehubctl pointer 0 0
 ```
 
-`PointerReport.Flags` is identified but not fully mapped yet. A naive scalar setter call crashes locally, so the CLI rejects non-zero `flags` until the OptionSet ABI is decoded.
+`PointerReport.Flags` is a UInt32-backed Swift `OptionSet`. Its setter takes an indirect `Flags` value, so the CLI uses a small ABI shim that places the raw UInt32 value on the stack and passes that address to the private setter. `flags=1` matches the framework's static `accelerated` getter; other flag bits still need behavior enumeration.
 
 ## HID Keyboard
 
@@ -623,7 +627,7 @@ Verified high-level use:
 - `connectedServiceDescriptors()` is decoded on the current macOS 27/Xcode 27 beta 2 host and iOS 27 device, but the ABI is private Swift framework ABI and should be re-verified on each beta seed.
 - `connectedServices` and `connectedServiceIDs` remain symbol-mapped but are not exposed because the verified DeviceHub path is `connectedServiceDescriptors()`.
 - `createService` and `removeService` request cases are identified but not verified.
-- The UniversalHID `PointerReport` base fields are implemented, but `PointerReport.Flags` still needs full ABI mapping and behavior verification.
+- The UniversalHID `PointerReport` base fields and raw UInt32 flags are implemented, but flag behavior beyond `accelerated = 0x1` still needs systematic enumeration.
 - The UniversalHID `ScrollReport` base fields and standalone `CoreDevice.HIDScroll` zero-event path are implemented and verified, but non-zero scroll behavior, momentum semantics, and target behavior still need full behavior verification.
 - The standalone `CoreDevice.HIDVendorDefined` feature is implemented for raw hex payload dispatch, but vendor-specific non-empty payload semantics are not enumerated.
 - `CoreDevice.HIDKeyboard` and `CoreDevice.HIDPointer` are symbol-mapped as capability protocols, but their built-in implementations are `UniversalHIDKeyboard` / `UniversalHIDPointer` filter-backed adapters, not standalone feature sockets in this seed.

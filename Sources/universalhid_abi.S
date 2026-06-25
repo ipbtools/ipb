@@ -50,6 +50,19 @@ _uhid_pointer_report_set_button_mask_abi:
     ldp x20, x30, [sp], #16
     ret
 
+.globl _uhid_pointer_report_set_flags_abi
+.p2align 2
+_uhid_pointer_report_set_flags_abi:
+    stp x20, x30, [sp, #-16]!
+    sub sp, sp, #16
+    mov x20, x0
+    str w1, [sp, #12]
+    add x0, sp, #12
+    bl _$s12UniversalHID13PointerReportV5flagsAC5FlagsVvs
+    add sp, sp, #16
+    ldp x20, x30, [sp], #16
+    ret
+
 .globl _uhid_pointer_report_set_accel_x_abi
 .p2align 2
 _uhid_pointer_report_set_accel_x_abi:

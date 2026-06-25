@@ -122,10 +122,10 @@ Pointer report verification:
 ```text
 bin/devicehubctl pointer-report 0x501 0 0 0
 bin/devicehubctl pointer 0 0
-bin/devicehubctl pointer-report 0x501 0 0 0 0 0 1 -> PointerReport flags are not mapped yet; pass flags=0
+bin/devicehubctl pointer-report 0x501 0 0 0 0 0 1
 ```
 
-The zero-movement pointer reports are non-destructive smoke tests for construction and delivery of `UniversalHID.PointerReport` to the `CoreDevice touchscreenGesture` service. Non-zero flags are intentionally rejected until `PointerReport.Flags` ABI is mapped.
+The zero-movement pointer reports are non-destructive smoke tests for construction and delivery of `UniversalHID.PointerReport` to the `CoreDevice touchscreenGesture` service. `flags=1` exercises the UInt32-backed `PointerReport.Flags.accelerated` path; other flag bits still need behavior enumeration.
 
 Scroll report verification:
 
