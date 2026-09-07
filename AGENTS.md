@@ -4,7 +4,7 @@ Guidance for any AI agent (Claude, Codex, others) working in this repository. Re
 
 ## What this project is
 
-hdb (HID / Hub Debug Bridge; the repository is still named devicehubctl) drives a physical iPhone from a Mac the way `adb` drives an Android phone: tap, swipe, long press, keys, Home, App Switcher, screenshot. It does this **without XCTest and without any third-party server on the phone**, by speaking to the HID daemon (`dtuhidd`) that Apple ships inside the Xcode 27 developer disk image, over the same CoreDevice / RemoteXPC path Xcode 27's Device Hub uses. The long-term goal is an adb-class tool for the agent era; see the roadmap below.
+hdb (HID / Hub Debug Bridge; GitHub home `hdbtools/hdb`, Homebrew tap `hdbtools/homebrew-hdb`) drives a physical iPhone from a Mac the way `adb` drives an Android phone: tap, swipe, long press, keys, Home, App Switcher, screenshot. It does this **without XCTest and without any third-party server on the phone**, by speaking to the HID daemon (`dtuhidd`) that Apple ships inside the Xcode 27 developer disk image, over the same CoreDevice / RemoteXPC path Xcode 27's Device Hub uses. The long-term goal is an adb-class tool for the agent era; see the roadmap below.
 
 **Current release scope (v1, "simple validation build"): macOS 27 + Xcode 27 beta host, iOS 27 or iOS 26.6+ device.** Nothing else is a supported target. Do not add compatibility shims for other combinations without a matrix entry in `docs/verification.md` proving they work.
 

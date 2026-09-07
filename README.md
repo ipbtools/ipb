@@ -25,10 +25,10 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 ## Install (Homebrew, stage 1 distribution)
 
-The formula in `Formula/hdb.rb` builds from source, so the machine needs Xcode 27 beta selected for the build and its CoreDevice package for runtime:
+The tap `hdbtools/homebrew-hdb` carries the same formula as `Formula/hdb.rb` here; it builds from source, so the machine needs Xcode 27 beta selected for the build and its CoreDevice package for runtime:
 
 ```sh
-brew tap <owner>/hdb https://github.com/borealin/devicehubctl
+brew tap hdbtools/hdb
 brew install --HEAD hdb
 hdb version          # hdb 0.1.0 (macOS ..., CoreDevice 642.15)
 hdb service-ids      # host-only check
