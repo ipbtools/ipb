@@ -268,3 +268,13 @@ Behaviour established on both hosts:
 Pairing note: a phone that has never trusted the host shows up in `devicectl list devices` only as a bare ECID row with no state, and `devicectl manage pair` reports that only a `RestorableDeviceRef` representation exists, until the phone is unlocked and the Trust prompt is accepted.
 
 Xcode-free client spike (see `docs/standalone-distribution.md`): with pymobiledevice3 11.8.0 and its userspace tunnel, and no CoreDevice host stack in the loop, `dtuhidd` on the iPhone 13 Pro answered `connectedServices` with the same five services, and two raw `send` dictionaries (digitizer report id 0x09, 40 bytes) tapped the App Library search field at (0.15, 0.12). The `{isBarrier: true}` message got no reply within 5 s over that path.
+
+## Open question: does the device need iOS 27?
+
+Evidence so far (2026-09-07):
+
+- `dtuhidd` in the Xcode 27 beta 6 DDI is built with `LC_BUILD_VERSION minos 17.0, sdk 27.0`, and the DDI is the single personalized image Apple uses for iOS 17+, so the binary itself is not iOS 27 specific.
+- An iPhone 11 on iOS 26.6.1 (23G83), paired to <macos27-host> but reachable only over the local network, could not mount that DDI: `devicectl device info ddiServices` returned CoreDeviceError 12040 and the HID socket was refused with 1001. This does not separate "iOS 26 unsupported" from "network-only mount unsupported"; a USB-attached iOS 26 device is required to answer it.
+- On iOS 27 the device fetched the 642.15 DDI by itself as a `com.apple.MobileAsset.DDI` cryptex; whether iOS 26 does the same or relies on the host-supplied image is untested.
+
+Until a USB test exists, the supported matrix stays macOS 27 + Xcode 27 beta + iOS 27.
