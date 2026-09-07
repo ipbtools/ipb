@@ -6,7 +6,7 @@ class Hdb < Formula
   desc "Drive a physical iPhone from a Mac like adb: tap, swipe, keys, home, screenshot"
   homepage "https://github.com/hdbtools/hdb"
   head "https://github.com/hdbtools/hdb.git", branch: "main"
-  license :cannot_represent # set once the project LICENSE is decided
+  license "MIT"
 
   depends_on :macos
   depends_on xcode: :build

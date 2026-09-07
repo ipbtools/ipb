@@ -190,6 +190,10 @@ Verified on that beta 2 stack:
 
 See [docs/verification.md](docs/verification.md) for the exact command set used.
 
+## License and notice
+
+MIT (see `LICENSE`). hdb talks to undocumented Apple interfaces (CoreDevice, RemoteXPC, the developer disk image's HID daemon) and redistributes no Apple components; the CoreDevice package and the disk image come from Xcode on the user's machine. Apple may change these interfaces between releases. A future Python client built on pymobiledevice3 (GPL-3.0) will live in a separate repository so this one stays MIT.
+
 See [docs/protocol.md](docs/protocol.md) for the current protocol map, symbol evidence, and known gaps.
 
 See `AGENTS.md` for the four-stage roadmap (macOS 27 → macOS 26 → Xcode-free hosts) and [docs/standalone-distribution.md](docs/standalone-distribution.md) for the adb-style distribution plan and [docs/research/](docs/research/) for the 2026-09-07 landscape research (adb capability boundary, agent frameworks, peer iOS tools) and the direction review.
