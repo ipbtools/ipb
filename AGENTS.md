@@ -6,7 +6,7 @@ Guidance for any AI agent (Claude, Codex, others) working in this repository. Re
 
 devicehubctl drives a physical iPhone from a Mac the way `adb` drives an Android phone: tap, swipe, long press, keys, Home, App Switcher, screenshot. It does this **without XCTest and without any third-party server on the phone**, by speaking to the HID daemon (`dtuhidd`) that Apple ships inside the Xcode 27 developer disk image, over the same CoreDevice / RemoteXPC path Xcode 27's Device Hub uses. The long-term goal is an adb-class tool for the agent era; see the roadmap below.
 
-**Current release scope (v1, "simple validation build"): macOS 27 + Xcode 27 beta host, iOS 27 device.** Nothing else is a supported target. Do not add compatibility shims for other combinations without a matrix entry in `docs/verification.md` proving they work.
+**Current release scope (v1, "simple validation build"): macOS 27 + Xcode 27 beta host, iOS 27 or iOS 26.6+ device.** Nothing else is a supported target. Do not add compatibility shims for other combinations without a matrix entry in `docs/verification.md` proving they work.
 
 ## Documents and what each one is for
 
@@ -64,10 +64,15 @@ A change is done when `scripts/smoke_matrix.sh` passes on the supported matrix a
 - `bin/devicehubctl` (zsh) is the CLI; `build/action_sender_mercury` (ObjC + Swift glue + arm64 shims) is the helper; both are invoked by `scripts/smoke_matrix.sh`.
 - The macOS 27 test host is <macos27-host> (see the machine-level memory notes); it sleeps after one idle minute, run `caffeinate` for long sessions.
 
-## Roadmap (see the direction review for detail)
+## Roadmap
 
-1. v1 simple validation build, macOS 27 + iOS 27 only, current helper + wrapper + smoke gate.
-2. Python client on pymobiledevice3 (CLI + MCP sharing one session layer), keeping the helper as the protocol oracle; persistent session, screenshot contract with frame id/orientation, Unicode input via pasteboard.
-3. Decide on a native single-binary implementation only if licence, performance, or install cost measured in step 2 demand it.
+Stages are cumulative; a stage is "done" when `scripts/smoke_matrix.sh` passes on every host/device pair it names and `docs/verification.md` records it.
 
-Answered 2026-09-07 (`docs/verification.md`): the device does **not** need iOS 27. With the Xcode 27 DDI, an iOS 26.6.1 iPhone 15 Pro passed the full interactive smoke; the only OS-dependent difference is that the `touchscreenGesture` (0x501) service, used by `pointer` and `scroll-report`, exists on iOS 27 only. Widening the v1 support statement beyond iOS 27 is a product decision; the smoke gate already handles both service sets.
+| Stage | Host | Device | Status (2026-09-07) |
+| --- | --- | --- | --- |
+| 1 | macOS 27 + Xcode 27 beta | iOS 27 | Verified (<macos27-host>, iPhone 12 mini) |
+| 2 | macOS 27 + Xcode 27 beta | iOS 27 / iOS 26 | Verified (<macos27-host>, iPhone 15 Pro on 26.6.1; `touchscreenGesture` is iOS 27 only) |
+| 3 | macOS 27 / macOS 26 + Xcode 27 beta | iOS 27 / iOS 26 | macOS 26.5.1 + iOS 27 verified on this Mac; macOS 26 + iOS 26 not yet run |
+| 4 | macOS / Windows / Linux, no Xcode | iOS 27 / iOS 26 | Spike only: pymobiledevice3 userspace tunnel drove `dtuhidd` from macOS; see `docs/standalone-distribution.md` |
+
+Implementation path (from the direction review): keep the current helper as the protocol oracle; build the stage 4 client on pymobiledevice3 (CLI + MCP sharing one session layer); consider a native single binary only if licence, performance, or install cost measured there demand it.
