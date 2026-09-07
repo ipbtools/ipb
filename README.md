@@ -57,6 +57,11 @@ Touch coordinates are normalized from top-left to bottom-right, in the `0..1` ra
 bin/hdb devices                 # physical devices: uuid, name, os, transport, tunnel
 bin/hdb device                  # the device the other commands would use
 bin/hdb tap 0.5 0.5
+bin/hdb launch com.apple.Preferences
+bin/hdb open https://www.apple.com
+bin/hdb clipboard set "你好 🚀" && bin/hdb clipboard get
+bin/hdb apps | bin/hdb ps | bin/hdb lock-state | bin/hdb orientation
+bin/hdb push local.txt /Documents/x.txt --app <bundle-id>
 bin/hdb long 0.615 0.675 1.2
 bin/hdb scroll 0.5 0.75 0 0.30
 bin/hdb swipe 0.5 0.75 0.5 0.35
@@ -117,6 +122,36 @@ SMOKE_INTERACTIVE=1 TAP_XY="0.15 0.12" scripts/smoke_matrix.sh . build/smoke   #
 ```
 
 Every step must exit 0 and, where stated, print the expected output; the script exits non-zero otherwise. Screenshots before and after each interactive step land in the output directory; identical consecutive frames are reported as warnings because a system alert can legitimately freeze the screen.
+
+## Feature matrix: hdb vs adb vs idb vs devicectl
+
+Physical devices only. "own" means hdb implements the feature itself over the CoreDevice HID socket; "devicectl" means hdb is a thin adb-style verb over `xcrun devicectl`. idb columns reflect its documented real-device behaviour (its `ui` commands are simulator-only).
+
+| Capability | adb | hdb | idb (real device) | devicectl |
+| --- | --- | --- | --- | --- |
+| List devices | `adb devices` | `hdb devices` (devicectl) | `idb list-targets` | `list devices` |
+| Tap / swipe / long press | `input tap/swipe` | `hdb tap/swipe/long` (own) | no | no |
+| Scroll | `input swipe` | `hdb scroll` (own) | no | no |
+| Key / text | `input keyevent/text` | `hdb key` (HID usages, own); Unicode via `hdb clipboard set` + paste | no | no |
+| Home / App Switcher | `keyevent HOME/APP_SWITCH` | `hdb home` / `hdb recents` (own) | no | no |
+| Screenshot | `screencap` | `hdb screenshot` (devicectl) | yes | `capture screenshot` |
+| Screen recording | `screenrecord` | `hdb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
+| UI hierarchy | `uiautomator dump` | no (captions only via accessibility, no frames) | `ui describe-all` (simulator) | no |
+| Install / uninstall | `install` / `uninstall` | `hdb install` / `hdb uninstall` (devicectl) | yes | `install app` / `uninstall app` |
+| Launch / kill / ps | `am start` / `am force-stop` / `ps` | `hdb launch` / `hdb kill <pid>` / `hdb ps` (devicectl) | launch / terminate | `process launch/signal`, `info processes` |
+| Open URL / deep link | `am start -a VIEW -d` | `hdb open <url>` (devicectl) | `open` | `process openURL` |
+| Installed apps | `pm list packages` | `hdb apps` (devicectl) | `list-apps` | `info apps` |
+| Files | `push` / `pull` / `shell ls` | `hdb push/pull/ls ... --app <bundle>` (data container of developer-signed apps; system app containers are refused, devicectl) | `file push/pull` (app container) | `copy to/from`, `info files` |
+| Clipboard | `shell cmd clipboard` (limited) | `hdb clipboard get/set` (devicectl, Unicode ok) | no | `pasteboard` |
+| Location | emulator only | `hdb location <lat> <lon>` / `clear` (devicectl) | `set-location` (simulator) | `simulate location` |
+| Orientation | `settings put` | `hdb orientation [value]` (devicectl) | no | `orientation` |
+| Device info / lock state | `getprop` | `hdb info` / `hdb lock-state` (devicectl) | `describe` | `info details/lockState` |
+| Logs | `logcat` | no (planned: syslog via RemoteXPC) | `log` | no |
+| Shell | `adb shell` | no (iOS has no shell) | no | no |
+| Port forward | `forward` / `reverse` | no | no | no |
+| Reboot / sysdiagnose / pair | `reboot` | `hdb reboot` / `hdb sysdiagnose` / `hdb pair` (devicectl) | no | `reboot`, `sysdiagnose`, `manage pair` |
+| Needs on-device server / XCTest | no (adbd is OS-provided) | no (Apple DDI daemon only) | yes for UI (XCTest) | n/a |
+| Raw escape hatch | `adb shell <cmd>` | `hdb devicectl <args>` | | |
 
 ## Interaction Backends
 
