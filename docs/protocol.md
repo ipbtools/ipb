@@ -46,6 +46,36 @@ com.apple.coredevice.feature.remote.universalhid
 
 `CoreDevice.framework` does not contain `com.apple.coredevice.feature.remote.hid.keyboard` or `com.apple.coredevice.feature.remote.hid.pointer` strings on the verified Xcode 27 beta 2 host. Keyboard and pointer protocols exist, but their built-in implementations are UniversalHID capability adapters rather than independent feature sockets.
 
+## Wire Format (captured 2026-09-07)
+
+Interposing `xpc_remote_connection_send_message*` in the helper on Xcode 27 beta 6 / CoreDevice 642.15 shows that every typed CoreDevice path ends up as a plain XPC dictionary on the RemoteXPC socket. There is no Mercury type-name wrapper on the wire, so a client that only speaks XPC dictionaries (C, or pymobiledevice3 from Python) can drive the same device daemon.
+
+UniversalHID service (`featureIdentifier = com.apple.coredevice.feature.remote.universalhidservice`):
+
+```text
+send report        {messageType: "Request", featureIdentifier, payload: {send: {_0: <HID report bytes>, _1: <uint64 serviceID>}}}
+reset gesture      {messageType: "Request", featureIdentifier, payload: {resetGestureState: {_0: <uint64 serviceID>}}}
+connected services {messageType: "Request", featureIdentifier, payload: {connectedServices: {}}}   (sent with reply)
+  reply            {connectedServices: [ {Product, DeviceUsagePairs, PrimaryUsagePage, PrimaryUsage, DeviceTypeHint, _ServiceID, ...,
+                                          _CoreDevice_codablePropertyStorage: {<key>: {int|uint|bool|string|array|dictionary: value}}} ]}
+barrier            {isBarrier: true}   (synchronous, empty dictionary reply)
+```
+
+Report bytes seen: keyboard `KeyboardReport` is 31 bytes with report id `0x01`; the touchscreen `DigitizerReport` is 40 bytes with report id `0x09`, for example `09 01 01 c0 ff 7f ff 7f 00…` for a contact at (0.5, 0.5) and `09 00 01 00 ff 7f ff 7f 00…` for the release.
+
+Indigo features (`hid.button`, `hid.digitizer`, `hid.scroll`; `hid.vendordefined` follows the same shape):
+
+```text
+{messageType: "IndigoButtonEvent",    featureIdentifier, payload: {usagePage: 12, usageCode: 64, state: 1|2}}
+{messageType: "IndigoDigitizerEvent", featureIdentifier, payload: {pointOne: {x, y}, eventType: 0|1|2, edge: 0|3, target: 0}}   (pointTwo omitted when nil)
+{messageType: "IndigoScrollEvent",    featureIdentifier, payload: {point: {x, y, z}, phase, momentum, target}}
+barrier: {isBarrier: true} as above
+```
+
+The device side is `/usr/libexec/dtuhidd` from the Xcode 27 beta DDI. Its launchd plist registers the RemoteXPC services `com.apple.coredevice.hid.universalhidservice` (feature `universalhidservice`), `com.apple.coredevice.hid.universalhid`, and `com.apple.coredevice.hid.indigo` (features button, scroll, digitizer, vendordefined), all with `UsesRemoteXPC = true` and entitlement `com.apple.private.CoreDevice.hid`. `dtuhidd` is absent from the Xcode 26.x DDI (CoreDevice 518.x), which is why those hosts refuse every HID socket with CoreDeviceError 1001.
+
+Host-side prerequisites for the socket path are a connected CoreDevice tunnel (`tunnelState = connected`; otherwise `createservicesocket` fails with CoreDeviceError 4000) and the CoreDevice UUID of the device, not its UDID.
+
 ## UniversalHID Service
 
 Symbol evidence from `CoreDevice.UniversalHIDService`:
