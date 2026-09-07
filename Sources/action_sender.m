@@ -14,6 +14,23 @@
 typedef struct OS_xpc_remote_connection *xpc_remote_connection_t;
 static bool g_quiet = false;
 static bool g_sync_remote = false;
+static int g_failures = 0;
+static _Atomic int g_remote_live = 0;
+static _Atomic int g_remote_error = 0;
+
+/* Exit codes: 0 ok, 1 a dispatched operation reported failure, 2 usage/local error,
+   3 CoreDeviceService refused the service socket, 4 the device tunnel is not connected
+   (CoreDeviceError 4000; the wrapper can warm the tunnel and retry). */
+enum { HIDCTL_EXIT_OK = 0, HIDCTL_EXIT_DISPATCH = 1, HIDCTL_EXIT_USAGE = 2, HIDCTL_EXIT_SOCKET = 3, HIDCTL_EXIT_TUNNEL = 4 };
+
+static void note_result(const char *label, int result) {
+    if (result != 0) {
+        g_failures++;
+        fprintf(stderr, "%s failed: result=%d\n", label, result);
+    } else if (!g_quiet) {
+        printf("%s result=%d\n", label, result);
+    }
+}
 
 static bool parse_u64_literal(const char *text, uint64_t *out) {
     if (!text || !text[0] || text[0] == '-') {
@@ -466,9 +483,7 @@ static void send_remote_message(xpc_remote_connection_t remote, xpc_object_t mes
     print_xpc("remote request", message);
     if (getenv("HIDCTL_MERCURY_SYNC") && mercury_send_xpc_message_sync) {
         int result = mercury_send_xpc_message_sync(remote, message);
-        if (!g_quiet) {
-            printf("mercury sync result=%d\n", result);
-        }
+        note_result("mercury sync", result);
         if (delay_after) {
             usleep(delay_after);
         }
@@ -476,9 +491,7 @@ static void send_remote_message(xpc_remote_connection_t remote, xpc_object_t mes
     }
     if (getenv("HIDCTL_MERCURY") && mercury_send_xpc_message) {
         int result = mercury_send_xpc_message(remote, message);
-        if (!g_quiet) {
-            printf("mercury send result=%d\n", result);
-        }
+        note_result("mercury send", result);
         if (delay_after) {
             usleep(delay_after);
         }
@@ -603,9 +616,7 @@ static void send_uhid_report_typed(xpc_remote_connection_t remote, uint64_t serv
         exit(2);
     }
     int result = mercury_send_uhid_request_value(remote, bytes, count, service_id);
-    if (!g_quiet) {
-        printf("mercury typed result=%d\n", result);
-    }
+    note_result("mercury typed", result);
     if (delay_after) {
         usleep(delay_after);
     }
@@ -623,9 +634,7 @@ static void send_coredevice_hid_report(xpc_remote_connection_t remote, uint64_t 
         exit(2);
     }
     int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
-    if (!g_quiet) {
-        printf("coredevice hid result=%d\n", result);
-    }
+    note_result("coredevice hid", result);
     if (delay_after) {
         usleep(delay_after);
     }
@@ -652,6 +661,7 @@ static void send_coredevice_hid_swipe_report(xpc_remote_connection_t remote, uin
         exit(2);
     }
     int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_universalhid_hid_report failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice hid swipe-contact result=%d x=%g y=%g touch=%d range=%d pending=%d locked=%d up=%d\n",
                result, x, y, touching, in_range, swipe_pending, swipe_locked, swipe_up);
@@ -680,6 +690,7 @@ static void send_coredevice_pointer_report(xpc_remote_connection_t remote, uint6
         exit(2);
     }
     int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_universalhid_hid_report failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice pointer result=%d service=0x%llx x=%lld y=%lld buttonMask=0x%x accel=(%g,%g) flags=0x%x\n",
                result,
@@ -714,6 +725,7 @@ static void send_coredevice_scroll_report(xpc_remote_connection_t remote, uint64
         exit(2);
     }
     int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_universalhid_hid_report failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice scroll result=%d service=0x%llx x=%lld y=%lld phase=0x%x momentum=0x%x flags=0x%x accel=(%g,%g)\n",
                result,
@@ -743,6 +755,7 @@ static void send_coredevice_keyboard_report(xpc_remote_connection_t remote, uint
         exit(2);
     }
     int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_universalhid_hid_report failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice keyboard result=%d service=0x%llx usage=0x%x pressed=%d\n",
                result,
@@ -767,6 +780,7 @@ static void send_coredevice_hid_reset_gesture(xpc_remote_connection_t remote, ui
         exit(2);
     }
     int result = coredevice_reset_universalhid_gesture(remote, service_id);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_reset_universalhid_gesture failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice hid reset result=%d service=0x%llx\n", result, (unsigned long long)service_id);
     }
@@ -787,6 +801,7 @@ static void send_coredevice_navigation_swipe_report(xpc_remote_connection_t remo
         exit(2);
     }
     int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_universalhid_hid_report failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice nav result=%d phase=0x%x mask=0x%x motion=0x%x flavor=0x%x progress=%g x=%g y=%g\n",
                result, phase, swipe_mask, gesture_motion, flavor, progress, x, y);
@@ -808,6 +823,7 @@ static void send_coredevice_dock_swipe_report(xpc_remote_connection_t remote, ui
         exit(2);
     }
     int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_universalhid_hid_report failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice dock result=%d phase=0x%x mask=0x%x motion=0x%x flavor=0x%x progress=%g x=%g y=%g\n",
                result, phase, swipe_mask, gesture_motion, flavor, progress, x, y);
@@ -846,9 +862,7 @@ static void send_coredevice_hid_tap(xpc_remote_connection_t remote, uint64_t ser
     send_coredevice_hid_report(remote, service_id, x, y, false, false, 250000);
     if (coredevice_send_universalhid_barrier) {
         int result = coredevice_send_universalhid_barrier(remote);
-        if (!g_quiet) {
-            printf("coredevice hid barrier result=%d\n", result);
-        }
+        note_result("coredevice hid barrier", result);
         usleep(100000);
     }
 }
@@ -856,9 +870,7 @@ static void send_coredevice_hid_tap(xpc_remote_connection_t remote, uint64_t ser
 static void send_coredevice_hid_barrier(xpc_remote_connection_t remote, useconds_t delay_after) {
     if (coredevice_send_universalhid_barrier) {
         int result = coredevice_send_universalhid_barrier(remote);
-        if (!g_quiet) {
-            printf("coredevice hid barrier result=%d\n", result);
-        }
+        note_result("coredevice hid barrier", result);
     }
     if (delay_after) {
         usleep(delay_after);
@@ -871,6 +883,7 @@ static void send_coredevice_button_event(xpc_remote_connection_t remote, uint64_
         exit(2);
     }
     int result = coredevice_send_hid_button_custom(remote, usage_page, usage_code, state);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_hid_button_custom failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice button result=%d page=0x%llx code=0x%llx state=%u\n",
                result,
@@ -886,9 +899,7 @@ static void send_coredevice_button_event(xpc_remote_connection_t remote, uint64_
 static void send_coredevice_button_barrier(xpc_remote_connection_t remote, useconds_t delay_after) {
     if (coredevice_send_hid_button_barrier) {
         int result = coredevice_send_hid_button_barrier(remote);
-        if (!g_quiet) {
-            printf("coredevice button barrier result=%d\n", result);
-        }
+        note_result("coredevice button barrier", result);
     }
     if (delay_after) {
         usleep(delay_after);
@@ -901,6 +912,7 @@ static void send_coredevice_scroll_event(xpc_remote_connection_t remote, double 
         exit(2);
     }
     int result = coredevice_send_hid_scroll(remote, x, y, z, phase, momentum, target);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_hid_scroll failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice scroll-event result=%d point=(%g,%g,%g) phase=0x%x momentum=0x%x target=0x%x\n",
                result,
@@ -919,9 +931,7 @@ static void send_coredevice_scroll_event(xpc_remote_connection_t remote, double 
 static void send_coredevice_scroll_barrier(xpc_remote_connection_t remote, useconds_t delay_after) {
     if (coredevice_send_hid_scroll_barrier) {
         int result = coredevice_send_hid_scroll_barrier(remote);
-        if (!g_quiet) {
-            printf("coredevice scroll barrier result=%d\n", result);
-        }
+        note_result("coredevice scroll barrier", result);
     }
     if (delay_after) {
         usleep(delay_after);
@@ -934,6 +944,7 @@ static void send_coredevice_vendor_defined_event(xpc_remote_connection_t remote,
         exit(2);
     }
     int result = coredevice_send_hid_vendor_defined_hex(remote, usage_page, usage, version, hex_payload, device);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_hid_vendor_defined_hex failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice vendor-defined result=%d page=0x%x usage=0x%x version=0x%x hex=%s\n",
                result,
@@ -953,9 +964,7 @@ static void send_coredevice_vendor_defined_event(xpc_remote_connection_t remote,
 static void send_coredevice_vendor_defined_barrier(xpc_remote_connection_t remote, const char *device, useconds_t delay_after) {
     if (coredevice_send_hid_vendor_defined_barrier) {
         int result = coredevice_send_hid_vendor_defined_barrier(remote, device);
-        if (!g_quiet) {
-            printf("coredevice vendor-defined barrier result=%d\n", result);
-        }
+        note_result("coredevice vendor-defined barrier", result);
         if (result != 0) {
             exit(result);
         }
@@ -983,6 +992,7 @@ static void send_coredevice_digitizer_cgpoint(xpc_remote_connection_t remote, do
         exit(2);
     }
     int result = coredevice_send_hid_digitizer_cgpoint(remote, x1, y1, x2, y2, point_two_optional_tag, event_type, edge, target_low, target_high);
+    if (result != 0) { g_failures++; fprintf(stderr, "coredevice_send_hid_digitizer_cgpoint failed: result=%d\n", result); }
     if (!g_quiet) {
         printf("coredevice digitizer result=%d p1=(%g,%g) p2=(%g,%g) p2tag=%llu event=0x%llx edge=0x%llx target=(0x%llx,0x%llx)\n",
                result,
@@ -1105,8 +1115,50 @@ static void send_uhid_create_tap(xpc_remote_connection_t remote, uint64_t servic
     send_uhid_tap_positional(remote, service_id, x, y);
 }
 
+
+/* Print the CoreDevice.error carried by a CoreDeviceService reply and pick an exit code. */
+static int report_service_socket_error(xpc_object_t reply) {
+    xpc_object_t error = reply ? xpc_dictionary_get_dictionary(reply, "CoreDevice.error") : NULL;
+    if (!error) {
+        fprintf(stderr, "CoreDeviceService returned no CoreDevice.output and no CoreDevice.error\n");
+        return HIDCTL_EXIT_SOCKET;
+    }
+    const char *domain = xpc_dictionary_get_string(error, "domain");
+    int64_t code = xpc_dictionary_get_int64(error, "code");
+    const char *description = NULL;
+    xpc_object_t user_info = xpc_dictionary_get_dictionary(error, "userInfo");
+    if (user_info) {
+        description = xpc_dictionary_get_string(user_info, "NSLocalizedDescription");
+        if (!description) {
+            description = xpc_dictionary_get_string(user_info, "NSDebugDescription");
+        }
+    }
+    fprintf(stderr, "CoreDeviceService refused the service socket: %s %lld: %s\n",
+            domain ? domain : "<no domain>", (long long)code, description ? description : "<no description>");
+    if (domain && strcmp(domain, "com.apple.dt.CoreDeviceError") == 0 && code == 4000) {
+        return HIDCTL_EXIT_TUNNEL;
+    }
+    return HIDCTL_EXIT_SOCKET;
+}
+
+static void watchdog_handler(int signo) {
+    (void)signo;
+    const char message[] = "devicehubctl helper: timed out waiting for CoreDevice/RemoteXPC (HIDCTL_TIMEOUT_S)\n";
+    write(STDERR_FILENO, message, sizeof(message) - 1);
+    _exit(5);
+}
+
 int main(int argc, const char *argv[]) {
     setbuf(stdout, NULL);
+    /* Bound the whole run: XPC replies and the descriptor semaphore have no deadline of their own. */
+    {
+        const char *timeout_env = getenv("HIDCTL_TIMEOUT_S");
+        unsigned timeout_s = timeout_env ? (unsigned)strtoul(timeout_env, NULL, 0) : 30;
+        if (timeout_s) {
+            signal(SIGALRM, watchdog_handler);
+            alarm(timeout_s);
+        }
+    }
     if (!getenv("HIDCTL_NO_CRASH_HANDLER")) {
         signal(SIGSEGV, crash_handler);
         signal(SIGBUS, crash_handler);
@@ -1173,6 +1225,16 @@ int main(int argc, const char *argv[]) {
         print_xpc("reply", reply);
 
         xpc_object_t output = reply ? xpc_dictionary_get_dictionary(reply, "CoreDevice.output") : NULL;
+        if (!output) {
+            int exit_code = report_service_socket_error(reply);
+            if (reply) xpc_release(reply);
+            xpc_release(msg);
+            xpc_release(input);
+            xpc_release(components);
+            xpc_release(version);
+            xpc_connection_cancel(conn);
+            return exit_code;
+        }
         if (output) {
             int service_fd = xpc_dictionary_dup_fd(output, "fileDescriptor");
             uint64_t version_flags = xpc_dictionary_get_uint64(output, "remoteXPCVersionFlags");
@@ -1180,17 +1242,31 @@ int main(int argc, const char *argv[]) {
                 printf("service_fd=%d remoteXPCVersionFlags=%llu\n", service_fd, version_flags);
             }
 
+            if (service_fd < 0) {
+                fprintf(stderr, "CoreDeviceService reply carried no service file descriptor\n");
+                g_failures++;
+            }
             if (service_fd >= 0) {
                 dispatch_queue_t remote_queue = dispatch_queue_create("action-sender-remote", DISPATCH_QUEUE_SERIAL);
                 xpc_remote_connection_t remote = xpc_remote_connection_create_with_connected_fd(service_fd, remote_queue, version_flags, connection_mode);
                 if (!g_quiet) {
                     printf("remote=%p\n", remote);
                 }
+                if (!remote) {
+                    fprintf(stderr, "xpc_remote_connection_create_with_connected_fd failed\n");
+                    g_failures++;
+                }
                 if (remote) {
                     xpc_remote_connection_set_event_handler(remote, ^(xpc_object_t event) {
                         print_xpc("remote event", event);
+                        if (g_remote_live && event && xpc_get_type(event) == XPC_TYPE_ERROR) {
+                            const char *description = xpc_dictionary_get_string(event, XPC_ERROR_KEY_DESCRIPTION);
+                            fprintf(stderr, "remote connection error while active: %s\n", description ? description : "<unknown>");
+                            g_remote_error = 1;
+                        }
                     });
                     xpc_remote_connection_activate(remote);
+                    g_remote_live = 1;
 
                     const char *kind = argc > 5 ? argv[5] : "probe";
                     if (strcmp(kind, "tap") == 0) {
@@ -1278,18 +1354,14 @@ int main(int argc, const char *argv[]) {
                             exit(2);
                         }
                         int result = coredevice_print_connected_services(remote);
-                        if (!g_quiet) {
-                            printf("connected services result=%d\n", result);
-                        }
+                        note_result("connected services", result);
                     } else if (strcmp(kind, "cd_connected_descriptors_async_raw") == 0) {
                         if (!coredevice_print_connected_descriptors_async_raw) {
                             fprintf(stderr, "Connected-descriptors async raw printer is not linked\n");
                             exit(2);
                         }
                         int result = coredevice_print_connected_descriptors_async_raw(remote);
-                        if (!g_quiet) {
-                            printf("connected descriptors async raw result=%d\n", result);
-                        }
+                        note_result("connected descriptors async raw", result);
                     } else if (strcmp(kind, "cd_reset_gesture") == 0) {
                         uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x101;
                         send_coredevice_hid_reset_gesture(remote, service_id, 250000);
@@ -1489,9 +1561,7 @@ int main(int argc, const char *argv[]) {
                         if (argc > 5) {
                             send_remote_message(remote, remote_msg, 500000);
                         } else {
-                            alarm(3);
                             xpc_object_t remote_reply = xpc_remote_connection_send_message_with_reply_sync(remote, remote_msg);
-                            alarm(0);
                             print_xpc("remote reply", remote_reply);
                             if (remote_reply) xpc_release(remote_reply);
                         }
@@ -1501,6 +1571,7 @@ int main(int argc, const char *argv[]) {
                     if (wait_ms) {
                         usleep((useconds_t)(strtoull(wait_ms, NULL, 0) * 1000));
                     }
+                    g_remote_live = 0;
                     xpc_remote_connection_cancel(remote);
                 }
                 close(service_fd);
@@ -1514,5 +1585,8 @@ int main(int argc, const char *argv[]) {
         xpc_release(version);
         xpc_connection_cancel(conn);
     }
-    return 0;
+    if (g_remote_error) {
+        return HIDCTL_EXIT_DISPATCH;
+    }
+    return g_failures ? HIDCTL_EXIT_DISPATCH : HIDCTL_EXIT_OK;
 }

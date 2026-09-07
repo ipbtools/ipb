@@ -8,18 +8,20 @@ The basic interaction path is verified, and the CLI now uses DeviceHub's async d
 
 ## Requirements
 
-- macOS 27 beta host
-- Xcode 27 beta with CoreDevice private frameworks
-- A connected iOS 27 device visible to `xcrun devicectl`
-- GitHub-hosted code should be treated as beta/private-ABI research, because Apple may change these interfaces between seeds
+- A host whose installed CoreDevice package is 636.x or newer. This ships with Xcode 27 beta (`XcodeSystemResources.pkg`); it is what puts `UniversalHIDService`, the `HIDServiceID` helpers, and the embedded `UniversalHID.framework` into `/Library/Developer/PrivateFrameworks`.
+- Xcode 27 beta on the host. Its minimum macOS is 26.4, so macOS 26.4+ hosts qualify as well as macOS 27 beta hosts. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
+- A connected iOS 27 device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted.
+- GitHub-hosted code should be treated as beta/private-ABI research, because Apple may change these interfaces between seeds.
 
-The default Xcode path is:
+Xcode 26.x hosts cannot run this tool as-is: CoreDevice 518.x lacks the UniversalHID service protocol, and the Xcode 26 DDI ships no HID daemon, so every `feature.remote.hid.*` / `universalhidservice` socket request is refused with "Create Service Socket is not supported by this device".
+
+The Xcode used for building and for `screenshot` is taken from `xcode-select -p`, which honours `DEVELOPER_DIR`:
 
 ```sh
-/Applications/Xcode-27.0.0-Beta.2.app
+export DEVELOPER_DIR=/path/to/Xcode-beta.app/Contents/Developer
 ```
 
-Override it with either `XCODE_PATH` for build time or `DEVELOPER_DIR` for runtime.
+Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefer.
 
 ## Build
 
@@ -58,24 +60,28 @@ bin/devicehubctl button 0x0c 0x40
 bin/devicehubctl raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
 ```
 
-Set `DEVICE_ID` when more than one device is connected:
+`DEVICE_ID` is optional. Without it the wrapper picks the single wired or tunnelled physical device; with several devices it lists them and exits. Use the CoreDevice UUID from `devicectl list devices --json-output` (the 642.x table view prints UDIDs, which the service rejects):
 
 ```sh
-DEVICE_ID=<device-uuid> bin/devicehubctl tap 0.5 0.5
+DEVICE_ID=<coredevice-uuid> bin/devicehubctl tap 0.5 0.5
 ```
 
 Useful runtime overrides:
 
 ```sh
-DEVICE_ID=<device-uuid>
-UHID_SERVICE_ID=auto
-UHID_SERVICE_FALLBACK=0x101
-DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.2.app
+DEVICE_ID=<coredevice-uuid>          # pick a device explicitly
+UHID_SERVICE_ID=auto                 # or a fixed id such as 0x101
+UHID_SERVICE_FALLBACK=0x101          # opt in to a fixed id when descriptor discovery fails; unset = error
+DEVELOPER_DIR=/path/to/Xcode-beta.app/Contents/Developer   # only needed for `make`; runtime uses the CoreDevice package
+DEVICECTL=/path/to/devicectl         # defaults to the copy inside CoreDevice.framework
 DEVICEHUBCTL_BIN=/path/to/action_sender_mercury
-HIDCTL_WAIT_MS=700
+HIDCTL_WAIT_MS=700                   # settle time after each send
+HIDCTL_TIMEOUT_S=30                  # watchdog for a single helper run
 ```
 
-`UHID_SERVICE_ID` defaults to `auto`. In that mode, the wrapper calls `connectedServiceDescriptors()` and selects the descriptor whose product is `CoreDevice touchscreen(nil)`. If descriptor discovery fails, it falls back to `UHID_SERVICE_FALLBACK`, currently `0x101`.
+`UHID_SERVICE_ID` defaults to `auto`: the wrapper calls `connectedServiceDescriptors()` and selects the descriptor whose product is `CoreDevice touchscreen(nil)`. If discovery fails the command exits 3 unless `UHID_SERVICE_FALLBACK` is set.
+
+Exit codes from the helper: 0 ok, 1 a dispatched operation or the remote connection reported failure, 2 usage or local error, 3 CoreDeviceService refused the service socket (the CoreDevice error is printed), 4 the device tunnel is not connected, 5 watchdog timeout. On 4 the wrapper warms the tunnel once with `devicectl device info details` and retries; nothing has been sent to the device at that point.
 
 Supported `service-id` roles:
 
@@ -86,6 +92,15 @@ bin/devicehubctl service-id keyboard
 bin/devicehubctl service-id buttons
 bin/devicehubctl service-id avp
 ```
+
+## Smoke gate
+
+```sh
+scripts/smoke_matrix.sh . build/smoke            # host-only, discovery, and non-destructive reports
+SMOKE_INTERACTIVE=1 TAP_XY="0.15 0.12" scripts/smoke_matrix.sh . build/smoke   # adds home, tap, recents, swipe, scroll, long, key
+```
+
+Every step must exit 0 and, where stated, print the expected output; the script exits non-zero otherwise. Screenshots before and after each interactive step land in the output directory; identical consecutive frames are reported as warnings because a system alert can legitimately freeze the screen.
 
 ## Interaction Backends
 
@@ -99,13 +114,15 @@ bin/devicehubctl service-id avp
 - `long`: CoreDevice HID digitizer with repeated hold pulses
 - `home`: CoreDevice HID button service
 - `recents`: CoreDevice HID digitizer bottom-edge gesture
-- `screenshot`: `xcrun devicectl device capture screenshot`
+- `screenshot`: `devicectl device capture screenshot`, using the copy shipped in the CoreDevice package
 
 `CoreDevice.framework` exposes `HIDKeyboard` and `HIDPointer` protocols, but on the verified Xcode 27 beta 2 build their implementations are `UniversalHIDKeyboard` / `UniversalHIDPointer` adapters backed by the UniversalHID service, not separate `feature.remote.hid.keyboard` or `feature.remote.hid.pointer` sockets.
 
 ## Verified Scope
 
-The current build has been manually verified against an iPhone 13 Pro on iOS 27.0 for:
+The interaction commands below were manually verified against an iPhone 13 Pro on iOS 27.0 with the Xcode 27 beta 2 host stack (CoreDevice 636.3). See [docs/verification.md](docs/verification.md) for the later compatibility re-check against Xcode 27 beta 6 / CoreDevice 642.15, which covers the build and host-side paths and lists what still needs an attached device.
+
+Verified on that beta 2 stack:
 
 - tap opens an app
 - long press opens a context menu

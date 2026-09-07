@@ -395,11 +395,13 @@ func codableValueSummary(_ raw: UInt64) -> String {
         let value = payload.load(fromByteOffset: 16, as: UInt64.self)
         return "bool:\(value != 0)"
     case 0x8:
+        // CodableValue.int (signed)
+        let value = payload.load(fromByteOffset: 16, as: Int64.self)
+        return "int:\(value)"
+    case 0x9:
+        // CodableValue.uint; HIDServiceID raw values arrive here under the _ServiceID key
         let value = payload.load(fromByteOffset: 16, as: UInt64.self)
         return "uint:\(value)"
-    case 0x9:
-        let value = payload.load(fromByteOffset: 16, as: UInt64.self)
-        return String(format: "serviceID:0x%llx", value)
     case 0xa:
         return "string:\(swiftStringBitsSummary(payload.advanced(by: 16)))"
     default:
@@ -681,7 +683,7 @@ func dumpRawDescriptorArray(_ raw: UnsafeRawPointer) {
             for field in fields {
                 fieldMap[field.0] = field.1
             }
-            let serviceID = fieldMap["_ServiceID"] ?? "serviceID:<unknown>"
+            let serviceID = fieldMap["_ServiceID"].flatMap(serviceIDLabel) ?? "serviceID:<unknown>"
             let product = fieldMap["Product"] ?? "string:\"<unknown>\""
             print("connectedDescriptor[\(index)] \(serviceID) \(product)")
             for (key, value) in fields {
@@ -689,6 +691,15 @@ func dumpRawDescriptorArray(_ raw: UnsafeRawPointer) {
             }
         }
     }
+}
+
+/// Turn a decoded `_ServiceID` field ("uint:257" or "int:257") into the `serviceID:0x101` form the wrapper parses.
+func serviceIDLabel(_ summary: String) -> String? {
+    let parts = summary.split(separator: ":", maxSplits: 1)
+    guard parts.count == 2, parts[0] == "uint" || parts[0] == "int", let value = UInt64(parts[1]) else {
+        return nil
+    }
+    return String(format: "serviceID:0x%llx", value)
 }
 
 func storePointer(_ base: UnsafeMutableRawPointer, offset: Int, _ value: UnsafeRawPointer?) {

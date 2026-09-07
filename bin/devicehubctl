@@ -3,10 +3,17 @@ set -euo pipefail
 
 ROOT="${0:A:h:h}"
 BIN="${DEVICEHUBCTL_BIN:-$ROOT/build/action_sender_mercury}"
-DEVICE="${DEVICE_ID:-7F2FE6E9-5423-552A-A2A2-C499F1D8672F}"
 UHID_SERVICE_ID="${UHID_SERVICE_ID:-auto}"
-UHID_SERVICE_FALLBACK="${UHID_SERVICE_FALLBACK:-0x101}"
-XCODE="${DEVELOPER_DIR:-/Applications/Xcode-27.0.0-Beta.2.app}"
+# Set UHID_SERVICE_FALLBACK (for example 0x101) to keep going with a fixed service id when
+# descriptor discovery fails. Unset, discovery failure is an error.
+UHID_SERVICE_FALLBACK="${UHID_SERVICE_FALLBACK:-}"
+XCODE="${DEVELOPER_DIR:-$(xcode-select -p)}"
+# devicectl ships inside the CoreDevice package; prefer it so no Xcode is needed at runtime.
+DEVICECTL="${DEVICECTL:-/Library/Developer/PrivateFrameworks/CoreDevice.framework/Resources/bin/devicectl}"
+[[ -x "$DEVICECTL" ]] || DEVICECTL="xcrun devicectl"
+# Helper exit codes (see Sources/action_sender.m): 4 means the device tunnel is not connected.
+HIDCTL_EXIT_TUNNEL=4
+TUNNEL_WARMED=0
 
 ACTION="com.apple.coredevice.action.createservicesocket"
 UHID_FEATURE="com.apple.coredevice.feature.remote.universalhidservice"
@@ -52,31 +59,96 @@ usage:
 Touch coordinates are normalized: 0..1 from top-left to bottom-right.
 Pointer dx/dy are signed relative deltas; button_mask is the raw PointerReport
 button mask.
-Set DEVICE_ID to override the default connected device.
+Set DEVICE_ID to pick a device (CoreDevice UUID from devicectl list devices --json-output);
+otherwise the single wired or tunnelled physical device is used.
 Set UHID_SERVICE_ID to override the UniversalHID service. The default, auto,
-resolves the touchscreen service from descriptors and falls back to 0x101.
+resolves the touchscreen service from descriptors; set UHID_SERVICE_FALLBACK=0x101
+to tolerate discovery failures instead of erroring out.
 Set DEVICEHUBCTL_BIN to override the built helper path.
 EOF
 }
 
+devicectl() {
+  DEVELOPER_DIR="$XCODE" ${=DEVICECTL} "$@"
+}
+
+# Pick the device: DEVICE_ID wins; otherwise the single wired/tunnelled physical device.
+resolve_device() {
+  if [[ -n "${DEVICE_ID:-}" ]]; then
+    print -r -- "$DEVICE_ID"
+    return 0
+  fi
+  local json
+  json="$(mktemp -t devicehubctl-devices)"
+  devicectl list devices --json-output "$json" --quiet >/dev/null 2>&1 || true
+  local picked
+  picked="$(python3 - "$json" <<'PY'
+import json, sys
+try:
+    devices = json.load(open(sys.argv[1]))["result"]["devices"]
+except Exception:
+    sys.exit(3)
+usable = []
+for d in devices:
+    hw = d.get("hardwareProperties", {}); cp = d.get("connectionProperties", {})
+    if hw.get("reality", "physical") != "physical":
+        continue
+    if cp.get("transportType") == "wired" or cp.get("tunnelState") == "connected":
+        usable.append((d["identifier"], d.get("deviceProperties", {}).get("name", "?"), cp.get("tunnelState")))
+if len(usable) == 1:
+    print(usable[0][0])
+elif not usable:
+    print("no wired or tunnelled physical device found; set DEVICE_ID", file=sys.stderr); sys.exit(3)
+else:
+    print("several devices are connected; set DEVICE_ID to one of:", file=sys.stderr)
+    for ident, name, state in usable:
+        print(f"  {ident}  {name}  ({state})", file=sys.stderr)
+    sys.exit(3)
+PY
+)" || { rm -f "$json"; return 3; }
+  rm -f "$json"
+  print -r -- "$picked"
+}
+
+# Warm the CoreDevice tunnel once; any devicectl device action brings it up and it then persists.
+warm_tunnel() {
+  (( TUNNEL_WARMED )) && return 1
+  TUNNEL_WARMED=1
+  print -u2 "devicehubctl: device tunnel not connected, warming it via devicectl..."
+  devicectl device info details --device "$DEVICE" --timeout 30 >/dev/null 2>&1 || true
+  return 0
+}
+
+# Run the helper; if the service socket cannot be created because the tunnel is down,
+# warm the tunnel and retry once. Nothing has been sent to the device at that point.
+run_helper() {
+  local rc=0
+  "$@" || rc=$?
+  if (( rc == HIDCTL_EXIT_TUNNEL )) && warm_tunnel; then
+    rc=0
+    "$@" || rc=$?
+  fi
+  return $rc
+}
+
 run_uhid() {
-  env HIDCTL_MERCURY_SERVICE="${HIDCTL_MERCURY_SERVICE:-com.apple.coredevice.hid.universal}" "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$UHID_FEATURE" 0 "$@"
+  run_helper env HIDCTL_MERCURY_SERVICE="${HIDCTL_MERCURY_SERVICE:-com.apple.coredevice.hid.universal}" "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$UHID_FEATURE" 0 "$@"
 }
 
 run_button() {
-  env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$BUTTON_FEATURE" 0 "$@"
+  run_helper env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$BUTTON_FEATURE" 0 "$@"
 }
 
 run_digitizer() {
-  env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$DIGITIZER_FEATURE" 0 "$@"
+  run_helper env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$DIGITIZER_FEATURE" 0 "$@"
 }
 
 run_scroll() {
-  env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$SCROLL_FEATURE" 0 "$@"
+  run_helper env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$SCROLL_FEATURE" 0 "$@"
 }
 
 run_vendor() {
-  env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$VENDOR_FEATURE" 0 "$@"
+  run_helper env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$VENDOR_FEATURE" 0 "$@"
 }
 
 descriptor_output() {
@@ -108,7 +180,7 @@ service_pattern_for_role() {
 
 fallback_for_role() {
   case "$1" in
-    touchscreen|touch|main-touchscreen|main) print -r -- "$UHID_SERVICE_FALLBACK" ;;
+    touchscreen|touch|main-touchscreen|main) print -r -- "${UHID_SERVICE_FALLBACK:-0x101}" ;;
     gesture|touchscreen-gesture|trackpad) print -r -- "0x501" ;;
     keyboard|main-keyboard) print -r -- "0x200" ;;
     buttons|screen-buttons|main-screen-buttons) print -r -- "0x402" ;;
@@ -131,7 +203,8 @@ resolve_service_id() {
     return 2
   }
   fallback="$(fallback_for_role "$role")"
-  output="$(descriptor_output 2>/dev/null || true)"
+  local discovery_rc=0
+  output="$(descriptor_output)" || discovery_rc=$?
   resolved="$(
     print -r -- "$output" | awk -v pattern="$pattern" '
       $0 ~ /^connectedDescriptor\[/ && index($0, pattern) > 0 {
@@ -148,8 +221,12 @@ resolve_service_id() {
 
   if [[ -n "$resolved" ]]; then
     print -r -- "$resolved"
-  else
+  elif [[ -n "$UHID_SERVICE_FALLBACK" && -n "$fallback" ]]; then
+    print -u2 "devicehubctl: descriptor discovery failed (rc=$discovery_rc); using fallback $fallback for role $role"
     print -r -- "$fallback"
+  else
+    print -u2 "devicehubctl: could not resolve service id for role $role (discovery rc=$discovery_rc); set UHID_SERVICE_ID or UHID_SERVICE_FALLBACK"
+    return 3
   fi
 }
 
@@ -306,6 +383,11 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
+  service-ids|ids|help|-h|--help) DEVICE="" ;;
+  *) DEVICE="$(resolve_device)" || exit 3 ;;
+esac
+
+case "$cmd" in
   tap|click)
     [[ $# -eq 2 ]] || { usage; exit 2; }
     service_id="$(resolve_uhid_service_id)"
@@ -335,7 +417,7 @@ case "$cmd" in
     ;;
   screenshot)
     [[ $# -eq 1 ]] || { usage; exit 2; }
-    DEVELOPER_DIR="$XCODE" xcrun devicectl device capture screenshot --device "$DEVICE" --destination "$1" --quiet
+    devicectl device capture screenshot --device "$DEVICE" --destination "$1" --quiet
     ;;
   services|descriptors|probe-descriptors)
     [[ $# -eq 0 ]] || { usage; exit 2; }
@@ -351,7 +433,7 @@ case "$cmd" in
     ;;
   service-ids|ids)
     [[ $# -eq 0 ]] || { usage; exit 2; }
-    env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$UHID_FEATURE" 0 cd_hid_service_ids
+    env "${quiet_env[@]}" "$BIN" "${DEVICE_ID:-host}" "$ACTION" "$UHID_FEATURE" 0 cd_hid_service_ids
     ;;
   reset-gesture)
     [[ $# -le 1 ]] || { usage; exit 2; }
@@ -445,7 +527,7 @@ case "$cmd" in
     [[ $# -ge 2 ]] || { usage; exit 2; }
     feature="$1"
     shift
-    env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$feature" 0 "$@"
+    run_helper env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$feature" 0 "$@"
     ;;
   *)
     usage

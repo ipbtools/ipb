@@ -1,4 +1,5 @@
-XCODE_PATH ?= /Applications/Xcode-27.0.0-Beta.2.app
+# Defaults to the selected Xcode (honours DEVELOPER_DIR); override with XCODE_PATH=/path/to/Xcode.app
+XCODE_PATH ?= $(patsubst %/Contents/Developer,%,$(shell xcode-select -p))
 SDK_PRIVATE_FRAMEWORKS := $(XCODE_PATH)/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/PrivateFrameworks
 
 BUILD_DIR := build
