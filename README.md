@@ -114,6 +114,10 @@ bin/ipb service-id buttons
 bin/ipb service-id avp
 ```
 
+## First run: `ipb doctor`
+
+`ipb doctor` checks each layer in order and names the next step for anything that fails: local install (helper, python3), Apple host stack (devicectl, CoreDevice ≥ 636, Mercury, embedded UniversalHID), device (enumeration, selection, iOS version, transport), developer disk image (mounted, usable, compatible), lock state, and finally the HID descriptor set on the device (which also warms the tunnel). It exits non-zero on any FAIL; WARN lines (locked phone, network transport, unverified iOS) do not fail it.
+
 ## Smoke gate
 
 ```sh

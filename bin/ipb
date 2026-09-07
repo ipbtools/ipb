@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
+SELF="${0:A}"
 ROOT="${0:A:h:h}"
 # Helper lives in libexec/ when installed (Homebrew) and in build/ in a source checkout.
 if [[ -n "${IPB_HELPER:-}" ]]; then BIN="$IPB_HELPER"
@@ -31,6 +32,7 @@ quiet_env=(HIDCTL_QUIET=1 HIDCTL_WAIT_MS="${HIDCTL_WAIT_MS:-700}")
 usage() {
   cat <<'EOF'
 usage:
+  ipb doctor                  # layered self-check: install, Apple stack, device, DDI, HID services
   ipb version
   ipb devices                 # physical devices: uuid, name, os, transport, tunnel
   ipb device                  # the device the other commands would use
@@ -422,12 +424,117 @@ digitizer_edge() {
   esac
 }
 
+# ---------------------------------------------------------------------------
+# doctor: layered self-check. Each line is PASS / FAIL / WARN / UNKNOWN with a next step.
+DOCTOR_FAILS=0
+d_line() { printf '%-7s %-28s %s\n' "$1" "$2" "$3"; [[ "$1" == FAIL ]] && DOCTOR_FAILS=$((DOCTOR_FAILS + 1)); return 0; }
+d_pass() { d_line PASS "$1" "$2"; }
+d_fail() { d_line FAIL "$1" "$2"; }
+d_warn() { d_line WARN "$1" "$2"; }
+d_unk()  { d_line UNKNOWN "$1" "$2"; }
+
+doctor() {
+  local v cd_ver merc_ver uhid_ver arch dev_line os transport tunnel name model ddi lock desc count gesture os_major
+
+  print -r -- "== ipb doctor =="
+  print -r -- "-- local install"
+  v="$(cat "$IPB_VERSION_FILE" 2>/dev/null || print -r -- unknown)"
+  d_pass "ipb" "$v at $SELF"
+  if [[ -x "$BIN" ]]; then
+    arch="$(lipo -archs "$BIN" 2>/dev/null || print -r -- '?')"
+    d_pass "helper" "$BIN ($arch)"
+  else
+    d_fail "helper" "$BIN missing or not executable; run make, or brew reinstall --HEAD ipb"
+  fi
+  command -v python3 >/dev/null 2>&1 && d_pass "python3" "$(python3 --version 2>&1)" || d_fail "python3" "needed for device selection; install Xcode CLT or python3"
+
+  print -r -- "-- Apple host stack"
+  if [[ -x "${DEVICECTL%% *}" ]] || command -v ${=DEVICECTL} >/dev/null 2>&1; then
+    d_pass "devicectl" "$(devicectl --version 2>/dev/null || print -r -- '?') at ${DEVICECTL}"
+  else
+    d_fail "devicectl" "not found; install Xcode 27 beta (it installs the CoreDevice package)"
+  fi
+  cd_ver="$(plutil -p /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Resources/Info.plist 2>/dev/null | awk -F'"' '/CFBundleVersion/ {print $4}')"
+  if [[ -z "$cd_ver" ]]; then d_fail "CoreDevice" "package absent; install Xcode 27 beta and launch it once"
+  elif (( ${cd_ver%%.*} < 636 )); then d_fail "CoreDevice" "$cd_ver is older than 636; HID services need the Xcode 27 beta package"
+  else d_pass "CoreDevice" "$cd_ver (verified: 642.15)"; fi
+  merc_ver="$(plutil -p /Library/Apple/System/Library/PrivateFrameworks/Mercury.framework/Versions/A/Resources/Info.plist 2>/dev/null | awk -F'"' '/CFBundleVersion/ {print $4}')"
+  [[ -n "$merc_ver" ]] && d_pass "Mercury" "$merc_ver" || d_fail "Mercury" "missing; comes with Xcode's MobileDevice package"
+  uhid_ver="$(plutil -p /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/Resources/Info.plist 2>/dev/null | awk -F'"' '/CFBundleVersion/ {print $4}')"
+  [[ -n "$uhid_ver" ]] && d_pass "UniversalHID" "$uhid_ver (embedded in CoreDevice)" || d_fail "UniversalHID" "embedded framework missing; CoreDevice package too old"
+  d_line INFO "macOS" "$(sw_vers -productVersion) $(sw_vers -buildVersion) (verified: 27.0 beta 8, 26.5.1)"
+
+  print -r -- "-- device"
+  local devices; devices="$(list_devices 2>/dev/null)" || devices=""
+  if [[ -z "$devices" ]]; then
+    d_fail "enumeration" "no physical device listed; plug in over USB, unlock, accept Trust"
+  else
+    d_pass "enumeration" "$(print -r -- "$devices" | wc -l | tr -d ' ') physical device(s) known to CoreDevice"
+  fi
+  local selected="" sel_rc=0
+  selected="$(resolve_device 2>/tmp/ipb-doctor-sel.err)" || sel_rc=$?
+  if (( sel_rc != 0 )); then
+    d_fail "selection" "$(tr '\n' ' ' </tmp/ipb-doctor-sel.err)"
+    rm -f /tmp/ipb-doctor-sel.err
+    print -r -- "== result: $DOCTOR_FAILS failure(s); device checks skipped =="
+    return 1
+  fi
+  rm -f /tmp/ipb-doctor-sel.err
+  DEVICE="$selected"
+  dev_line="$(print -r -- "$devices" | awk -F'\t' -v id="$DEVICE" '$1 == id')"
+  if [[ -z "$dev_line" ]]; then
+    d_fail "selection" "DEVICE_ID $DEVICE is not a device CoreDevice knows; use a UUID from 'ipb devices'"
+    print -r -- "== result: $DOCTOR_FAILS failure(s); device checks skipped =="
+    return 1
+  fi
+  name="$(print -r -- "$dev_line" | cut -f2)"; os="$(print -r -- "$dev_line" | cut -f3)"
+  transport="$(print -r -- "$dev_line" | cut -f4)"; tunnel="$(print -r -- "$dev_line" | cut -f5)"; model="$(print -r -- "$dev_line" | cut -f6)"
+  d_pass "selected" "$DEVICE  $name ($model) iOS $os"
+  os_major="${os%%.*}"
+  if [[ "$os_major" == <27-> || "$os_major" == 26 ]]; then d_pass "iOS version" "$os (verified: 27.0, 26.6.1)"
+  else d_warn "iOS version" "$os not in the verified matrix"; fi
+  [[ "$transport" == wired ]] && d_pass "transport" "wired" || d_warn "transport" "$transport; DDI mounting was seen to fail over the network, prefer USB"
+  d_line INFO "tunnel (before)" "$tunnel"
+
+  print -r -- "-- developer disk image"
+  ddi="$(devicectl device info ddiServices --device "$DEVICE" --timeout 60 2>&1)"
+  if print -r -- "$ddi" | grep -q 'isUsable: true'; then
+    d_pass "DDI" "$(print -r -- "$ddi" | awk '/buildUpdate:/ {b=$3} /CoreDevice-/ {c=$2} END {print b, c}') usable and compatible"
+  else
+    d_fail "DDI" "$(print -r -- "$ddi" | grep -E 'ERROR|Error' | head -1 | cut -c1-160); is Developer Mode on and the phone unlocked?"
+  fi
+  lock="$(devicectl device info lockState --device "$DEVICE" --timeout 30 2>/dev/null | awk '/passcodeRequired:/ {print $3}')"
+  case "$lock" in
+    false) d_pass "lock state" "unlocked" ;;
+    true)  d_warn "lock state" "locked: HID reports are accepted but nothing is shown; unlock before tapping" ;;
+    *)     d_unk "lock state" "could not read lockState" ;;
+  esac
+
+  print -r -- "-- HID services (opens a service socket; warms the tunnel if needed)"
+  desc="$(run_uhid cd_connected_descriptors_async_raw 2>&1)" || {
+    d_fail "descriptors" "$(print -r -- "$desc" | grep -E 'refused|failed|error' | head -1 | cut -c1-160)"
+    print -r -- "== result: $DOCTOR_FAILS failure(s) =="
+    return 1
+  }
+  count="$(print -r -- "$desc" | awk '/connected descriptors count=/ {sub(/.*count=/, ""); print}')"
+  d_pass "descriptors" "$count service(s): $(print -r -- "$desc" | grep '^connectedDescriptor' | grep -o 'string:"[^"]*"' | sed 's/string://' | tr '\n' ' ')"
+  gesture=0; print -r -- "$desc" | grep -q touchscreenGesture && gesture=1
+  if [[ "$os_major" == <27-> && $gesture -eq 0 ]]; then d_fail "touchscreenGesture" "expected on iOS $os_major but absent; pointer/scroll-report will fail"
+  elif (( gesture )); then d_pass "touchscreenGesture" "present (pointer, scroll-report available)"
+  else d_line INFO "touchscreenGesture" "absent on iOS $os_major; pointer and scroll-report are iOS 27 only"; fi
+  d_line INFO "tunnel (after)" "$(list_devices 2>/dev/null | awk -F'\t' -v id="$DEVICE" '$1 == id {print $5}')"
+
+  print -r -- "== result: $DOCTOR_FAILS failure(s) =="
+  (( DOCTOR_FAILS == 0 ))
+}
+# ---------------------------------------------------------------------------
+
 cmd="${1:-}"
 [[ -n "$cmd" ]] || { usage; exit 2; }
 shift || true
 
 case "$cmd" in
-  service-ids|ids|help|-h|--help|version|--version|devices) DEVICE="" ;;
+  service-ids|ids|help|-h|--help|version|--version|devices|doctor) DEVICE="" ;;
   *) DEVICE="$(resolve_device)" || exit 3 ;;
 esac
 
@@ -478,6 +585,10 @@ case "$cmd" in
   devices)
     [[ $# -eq 0 ]] || { usage; exit 2; }
     list_devices
+    ;;
+  doctor)
+    [[ $# -eq 0 ]] || { usage; exit 2; }
+    doctor
     ;;
   device)
     [[ $# -eq 0 ]] || { usage; exit 2; }
