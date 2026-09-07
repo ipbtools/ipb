@@ -4,24 +4,26 @@ SDK_PRIVATE_FRAMEWORKS := $(XCODE_PATH)/Contents/Developer/Platforms/MacOSX.plat
 
 BUILD_DIR := build
 SOURCES_DIR := Sources
-TARGET := $(BUILD_DIR)/action_sender_mercury
+TARGET := $(BUILD_DIR)/hdb-helper
 
 OBJS := \
-	$(BUILD_DIR)/action_sender_mercury.o \
+	$(BUILD_DIR)/hdb-helper.o \
 	$(BUILD_DIR)/mercury_glue.o \
 	$(BUILD_DIR)/mercury_abi.o \
 	$(BUILD_DIR)/universalhid_glue.o \
 	$(BUILD_DIR)/universalhid_abi.o \
 	$(BUILD_DIR)/uhid_request_abi.o
 
-.PHONY: all clean smoke
+PREFIX ?= /usr/local
+
+.PHONY: all clean smoke install
 
 all: $(TARGET)
 
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(BUILD_DIR)/action_sender_mercury.o: $(SOURCES_DIR)/action_sender.m | $(BUILD_DIR)
+$(BUILD_DIR)/hdb-helper.o: $(SOURCES_DIR)/action_sender.m | $(BUILD_DIR)
 	clang -fno-objc-arc -fblocks \
 		-F/Library/Developer/PrivateFrameworks \
 		-F$(SDK_PRIVATE_FRAMEWORKS) \
@@ -58,7 +60,14 @@ $(TARGET): $(OBJS)
 		-framework UniversalHID
 
 smoke: all
-	bin/devicehubctl screenshot $(BUILD_DIR)/smoke.png
+	bin/hdb screenshot $(BUILD_DIR)/smoke.png
+
+install: all
+	install -d $(PREFIX)/bin $(PREFIX)/libexec $(PREFIX)/share/hdb
+	install -m 755 bin/hdb $(PREFIX)/bin/hdb
+	install -m 755 $(TARGET) $(PREFIX)/libexec/hdb-helper
+	install -m 644 VERSION $(PREFIX)/share/hdb/VERSION
+	install -m 755 scripts/smoke_matrix.sh $(PREFIX)/share/hdb/smoke_matrix.sh
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -2,7 +2,11 @@
 set -euo pipefail
 
 ROOT="${0:A:h:h}"
-BIN="${DEVICEHUBCTL_BIN:-$ROOT/build/action_sender_mercury}"
+# Helper lives in libexec/ when installed (Homebrew) and in build/ in a source checkout.
+if [[ -n "${HDB_HELPER:-}" ]]; then BIN="$HDB_HELPER"
+elif [[ -x "$ROOT/libexec/hdb-helper" ]]; then BIN="$ROOT/libexec/hdb-helper"
+else BIN="$ROOT/build/hdb-helper"; fi
+HDB_VERSION_FILE="$ROOT/VERSION"; [[ -f "$HDB_VERSION_FILE" ]] || HDB_VERSION_FILE="$ROOT/share/hdb/VERSION"
 UHID_SERVICE_ID="${UHID_SERVICE_ID:-auto}"
 # Set UHID_SERVICE_FALLBACK (for example 0x101) to keep going with a fixed service id when
 # descriptor discovery fails. Unset, discovery failure is an error.
@@ -27,34 +31,37 @@ quiet_env=(HIDCTL_QUIET=1 HIDCTL_WAIT_MS="${HIDCTL_WAIT_MS:-700}")
 usage() {
   cat <<'EOF'
 usage:
-  devicehubctl tap <x> <y>
-  devicehubctl long <x> <y> [seconds]
-  devicehubctl swipe <x1> <y1> <x2> <y2> [seconds] [hold_seconds]
-  devicehubctl scroll <x> <y> <dx> <dy> [seconds]
-  devicehubctl home
-  devicehubctl recents
-  devicehubctl screenshot <path>
-  devicehubctl service-ids
-  devicehubctl service-id <role>
-  devicehubctl descriptors
-  devicehubctl services
-  devicehubctl reset-gesture [service_id]
-  devicehubctl pointer <dx> <dy> [button_mask] [service_id]
-  devicehubctl key <usage_or_name> [hold_seconds] [service_id]
-  devicehubctl key-down <usage_or_name> [service_id]
-  devicehubctl key-up [usage_or_name] [service_id]
-  devicehubctl button <usage_page> <usage_code> [hold_seconds]
-  devicehubctl scroll-event <x> <y> <z> [phase] [momentum] [target]
-  devicehubctl vendor-defined <usage_page> <usage> <version> [hex_payload]
-  devicehubctl pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
-  devicehubctl scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
-  devicehubctl keyboard-report <service_id> <usage_or_name> <pressed>
-  devicehubctl uhid-report <service_id> <x> <y> <touching> [in_range]
-  devicehubctl uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
-  devicehubctl digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
-  devicehubctl nav-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
-  devicehubctl dock-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
-  devicehubctl raw <feature> <helper_kind> [args...]
+  hdb version
+  hdb devices                 # physical devices: uuid, name, os, transport, tunnel
+  hdb device                  # the device the other commands would use
+  hdb tap <x> <y>
+  hdb long <x> <y> [seconds]
+  hdb swipe <x1> <y1> <x2> <y2> [seconds] [hold_seconds]
+  hdb scroll <x> <y> <dx> <dy> [seconds]
+  hdb home
+  hdb recents
+  hdb screenshot <path>
+  hdb service-ids
+  hdb service-id <role>
+  hdb descriptors
+  hdb services
+  hdb reset-gesture [service_id]
+  hdb pointer <dx> <dy> [button_mask] [service_id]
+  hdb key <usage_or_name> [hold_seconds] [service_id]
+  hdb key-down <usage_or_name> [service_id]
+  hdb key-up [usage_or_name] [service_id]
+  hdb button <usage_page> <usage_code> [hold_seconds]
+  hdb scroll-event <x> <y> <z> [phase] [momentum] [target]
+  hdb vendor-defined <usage_page> <usage> <version> [hex_payload]
+  hdb pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
+  hdb scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
+  hdb keyboard-report <service_id> <usage_or_name> <pressed>
+  hdb uhid-report <service_id> <x> <y> <touching> [in_range]
+  hdb uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
+  hdb digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
+  hdb nav-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
+  hdb dock-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
+  hdb raw <feature> <helper_kind> [args...]
 
 Touch coordinates are normalized: 0..1 from top-left to bottom-right.
 Pointer dx/dy are signed relative deltas; button_mask is the raw PointerReport
@@ -64,12 +71,35 @@ otherwise the single wired or tunnelled physical device is used.
 Set UHID_SERVICE_ID to override the UniversalHID service. The default, auto,
 resolves the touchscreen service from descriptors; set UHID_SERVICE_FALLBACK=0x101
 to tolerate discovery failures instead of erroring out.
-Set DEVICEHUBCTL_BIN to override the built helper path.
+Set HDB_HELPER to override the built helper path.
 EOF
 }
 
 devicectl() {
   DEVELOPER_DIR="$XCODE" ${=DEVICECTL} "$@"
+}
+
+# List physical devices: UUID, name, OS, transport, tunnel state (one per line, tab separated).
+list_devices() {
+  local json
+  json="$(mktemp -t hdb-devices)"
+  devicectl list devices --json-output "$json" --quiet >/dev/null 2>&1 || true
+  python3 - "$json" <<'PY'
+import json, sys
+try:
+    devices = json.load(open(sys.argv[1]))["result"]["devices"]
+except Exception as e:
+    print(f"could not list devices: {e}", file=sys.stderr); sys.exit(3)
+for d in devices:
+    hw = d.get("hardwareProperties", {}); cp = d.get("connectionProperties", {}); dp = d.get("deviceProperties", {})
+    if hw.get("reality", "physical") != "physical":
+        continue
+    print("\t".join([d["identifier"], dp.get("name", "?"), f'{dp.get("osVersionNumber", "?")} {dp.get("osBuildUpdate", "")}'.strip(),
+                     cp.get("transportType", "?"), cp.get("tunnelState", "?"), hw.get("marketingName") or hw.get("productType", "?")]))
+PY
+  local rc=$?
+  rm -f "$json"
+  return $rc
 }
 
 # Pick the device: DEVICE_ID wins; otherwise the single wired/tunnelled physical device.
@@ -79,7 +109,7 @@ resolve_device() {
     return 0
   fi
   local json
-  json="$(mktemp -t devicehubctl-devices)"
+  json="$(mktemp -t hdb-devices)"
   devicectl list devices --json-output "$json" --quiet >/dev/null 2>&1 || true
   local picked
   picked="$(python3 - "$json" <<'PY'
@@ -114,7 +144,7 @@ PY
 warm_tunnel() {
   (( TUNNEL_WARMED )) && return 1
   TUNNEL_WARMED=1
-  print -u2 "devicehubctl: device tunnel not connected, warming it via devicectl..."
+  print -u2 "hdb: device tunnel not connected, warming it via devicectl..."
   devicectl device info details --device "$DEVICE" --timeout 30 >/dev/null 2>&1 || true
   return 0
 }
@@ -222,10 +252,10 @@ resolve_service_id() {
   if [[ -n "$resolved" ]]; then
     print -r -- "$resolved"
   elif [[ -n "$UHID_SERVICE_FALLBACK" && -n "$fallback" ]]; then
-    print -u2 "devicehubctl: descriptor discovery failed (rc=$discovery_rc); using fallback $fallback for role $role"
+    print -u2 "hdb: descriptor discovery failed (rc=$discovery_rc); using fallback $fallback for role $role"
     print -r -- "$fallback"
   else
-    print -u2 "devicehubctl: could not resolve service id for role $role (discovery rc=$discovery_rc); set UHID_SERVICE_ID or UHID_SERVICE_FALLBACK"
+    print -u2 "hdb: could not resolve service id for role $role (discovery rc=$discovery_rc); set UHID_SERVICE_ID or UHID_SERVICE_FALLBACK"
     return 3
   fi
 }
@@ -383,7 +413,7 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-  service-ids|ids|help|-h|--help) DEVICE="" ;;
+  service-ids|ids|help|-h|--help|version|--version|devices) DEVICE="" ;;
   *) DEVICE="$(resolve_device)" || exit 3 ;;
 esac
 
@@ -430,6 +460,19 @@ case "$cmd" in
   service-id|resolve-service)
     [[ $# -eq 1 ]] || { usage; exit 2; }
     resolve_service_id "$1"
+    ;;
+  devices)
+    [[ $# -eq 0 ]] || { usage; exit 2; }
+    list_devices
+    ;;
+  device)
+    [[ $# -eq 0 ]] || { usage; exit 2; }
+    print -r -- "$DEVICE"
+    ;;
+  version|--version)
+    v="$(cat "$HDB_VERSION_FILE" 2>/dev/null || print -r -- unknown)"
+    cd_ver="$(plutil -p /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Resources/Info.plist 2>/dev/null | awk -F'"' '/CFBundleVersion/ {print $4}')"
+    print -r -- "hdb $v (macOS $(sw_vers -productVersion) $(sw_vers -buildVersion), CoreDevice ${cd_ver:-absent})"
     ;;
   service-ids|ids)
     [[ $# -eq 0 ]] || { usage; exit 2; }
