@@ -19,8 +19,8 @@ class Ipb < Formula
   def caveats
     <<~EOS
       ipb needs CoreDevice 642.x (installed by Xcode 27 beta) on the host and an
-      iOS 27 or iOS 26.6+ device paired over USB. Run `ipb version` and
-      `ipb service-ids` first; `ipb descriptors` verifies the device path.
+      iOS 27 or iOS 26.6+ device paired over USB, unlocked, Developer Mode on.
+      Start with `ipb doctor`; it checks every layer and names the next step.
     EOS
   end
 

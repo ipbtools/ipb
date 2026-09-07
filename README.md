@@ -29,10 +29,11 @@ The tap `ipbtools/homebrew-ipb` carries the same formula as `Formula/ipb.rb` her
 
 ```sh
 brew tap ipbtools/ipb
-brew install --HEAD ipb
-ipb version          # ipb 0.1.0 (macOS ..., CoreDevice 642.15)
-ipb service-ids      # host-only check
-ipb descriptors      # device path check
+brew trust ipbtools/ipb      # current Homebrew refuses third-party taps until trusted
+brew install --HEAD ipb      # builds from source; ~10 s once Xcode 27 beta's CoreDevice package is present
+ipb version                  # ipb 0.1.0 (macOS ..., CoreDevice 642.15)
+ipb doctor                   # layered self-check, names the next step on failure
+ipb devices                  # then: ipb screenshot before.png; ipb tap 0.15 0.12; ipb home
 ```
 
 `make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`, `libexec/ipb-helper`, `share/ipb/VERSION`, `share/ipb/smoke_matrix.sh`.
