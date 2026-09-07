@@ -41,16 +41,24 @@ shot() {
 echo "host: $(sw_vers -productVersion) $(sw_vers -buildVersion)  DEVICE_ID=${DEVICE_ID:-auto}" | tee -a "$log"
 run "service-ids (host only)" --expect '^mainTouchscreen +0x101' -- "$CTL" service-ids
 run "descriptors" --expect 'connected descriptors count=[1-9]' -- "$CTL" descriptors
-run "descriptors list 5 services" --expect 'connectedDescriptor\[4\]' -- "$CTL" descriptors
+# iOS 27 exposes five services (adds touchscreenGesture 0x501); iOS 26 exposes four.
+run "descriptors list >=4 services" --expect 'connectedDescriptor\[3\]' -- "$CTL" descriptors
+HAS_GESTURE=0
+if "$CTL" descriptors 2>/dev/null | grep -q 'touchscreenGesture'; then HAS_GESTURE=1; fi
+echo "touchscreenGesture service present: $HAS_GESTURE" | tee -a "$log"
 run "service-id touchscreen" --expect '^0x101$' -- "$CTL" service-id touchscreen
-run "service-id gesture"     --expect '^0x501$' -- "$CTL" service-id gesture
+if (( HAS_GESTURE )); then run "service-id gesture" --expect '^0x501$' -- "$CTL" service-id gesture; fi
 run "service-id keyboard"    --expect '^0x200$' -- "$CTL" service-id keyboard
 run "service-id buttons"     --expect '^0x402$' -- "$CTL" service-id buttons
 run "service-id avp"         --expect '^0x500$' -- "$CTL" service-id avp
 shot 00_before
 run "key-up (empty keyboard report)" -- "$CTL" key-up
-run "pointer 0 0" -- "$CTL" pointer 0 0
-run "scroll-report 0x501 0 0" -- "$CTL" scroll-report 0x501 0 0
+if (( HAS_GESTURE )); then
+  run "pointer 0 0" -- "$CTL" pointer 0 0
+  run "scroll-report 0x501 0 0" -- "$CTL" scroll-report 0x501 0 0
+else
+  echo "SKIP: pointer / scroll-report (no touchscreenGesture service on this device)" | tee -a "$log"
+fi
 run "scroll-event 0 0 0" -- "$CTL" scroll-event 0 0 0
 run "vendor-defined 0 0 0" -- "$CTL" vendor-defined 0 0 0
 run "reset-gesture" -- "$CTL" reset-gesture
