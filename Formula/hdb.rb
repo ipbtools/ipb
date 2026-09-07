@@ -1,11 +1,11 @@
 # Homebrew formula for hdb (HID / Hub Debug Bridge for iOS).
-# Install from a tap:  brew tap <owner>/hdb <repo-url> && brew install --HEAD hdb
+# Install:  brew tap hdbtools/hdb && brew install --HEAD hdb
 # Build needs Xcode 27 beta selected (xcode-select or DEVELOPER_DIR); runtime needs the
 # CoreDevice package that Xcode 27 beta installs (/Library/Developer/PrivateFrameworks).
 class Hdb < Formula
   desc "Drive a physical iPhone from a Mac like adb: tap, swipe, keys, home, screenshot"
-  homepage "https://github.com/borealin/devicehubctl"
-  head "https://github.com/borealin/devicehubctl.git", branch: "main"
+  homepage "https://github.com/hdbtools/hdb"
+  head "https://github.com/hdbtools/hdb.git", branch: "main"
   license :cannot_represent # set once the project LICENSE is decided
 
   depends_on :macos
