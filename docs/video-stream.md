@@ -64,6 +64,18 @@ A fully hand-written H.264 receiver is not feasible: it would have to reproduce 
 
 What is done and reusable regardless: the control channel (`stream-info`, `stream-status`, `stream-stop` are shippable now over raw XPC), the offer generation, and this transport map.
 
+## Track C injection: blocked by library validation (2026-09-08)
+
+DeviceHub.app is the only Xcode 27 binary that links the media stack; injecting a dylib to grab its decoded frame was the plan. Static RE (scratchpad `trackC_devicehub_re.md`) found the exact hook: swizzle `-[CALayer setContents:]` on `AVConferenceVideoStreamHelper._layer`, which `CoreDeviceMediaStreamSupport.VideoStreamConfiguration.receiveMirroredPrimary(layer:timeout:)` paints frames onto. A URL scheme `devices://device?id=<UUID>` can select a device (required param `id`, subpath `device` decoded from disassembly; `action` verb candidates `select`/`stream` from reflection strings, not confirmed).
+
+**Runtime result: the injection does not load.** Built an ad-hoc arm64e frame-tap dylib (swizzle setContents:, dump first frames, backtrace once). Launched DeviceHub with `DYLD_INSERT_LIBRARIES` (env confirmed present in the process). dyld ran fully (1242 libraries) but never loaded or mentioned our dylib; the same dylib DOES load into a fresh non-LV arm64e binary (confirmed in DYLD_PRINT_LIBRARIES). DeviceHub carries `CodeDirectory flags=0x2000 (library-validation)`. **SIP is disabled on this Mac but library validation is still enforced** (`nvram boot-args` empty), so AMFI silently drops the non-Apple-team dylib. This corrects the earlier assumption that SIP-off suffices.
+
+To inject into DeviceHub one of these is required, and both are the user's call:
+- `sudo nvram boot-args="amfi_get_out_of_my_way=1"` + reboot (persistently disables library validation / AMFI enforcement machine-wide — a real security-posture change), or
+- sign the dylib with Apple's team id 59GAB85EFG (not available to third parties).
+
+Non-injection fallback that needs neither: capture DeviceHub's rendered mirror window with ScreenCaptureKit. Gives smooth live video but of the Mac window (chrome included, needs cropping) and loses per-frame device metadata. Was previously listed under Rejected alternatives for single screenshots; as a live feed it is the only no-reboot path to moving pixels.
+
 ## Standalone Apple-client blocker: root cause (2026-09-07 night, definitive)
 
 Driving Apple's own media client from our process was pursued because the RTP transport (above) can only be built by Apple's client. It is now root-caused, not merely observed.
@@ -76,6 +88,8 @@ Driving Apple's own media client from our process was pursued because the RTP tr
 **`DeviceKitContext.current` does resolve standalone.** A probe (`scratchpad/dkctx/probe.swift`) loads DeviceKit, reads DeviceKitContext metadata (runtime size 48 bytes = an 8-byte `deviceManager` class ref plus a 40-byte `serviceConnection` existential), and calls the static `current.getter` without trapping; it returns a struct whose first word is a live pointer. So path A is *not* categorically impossible.
 
 **But every step past that needs another hand ABI shim into non-`.swiftinterface` private Swift types** (DeviceKitContext layout, DeviceManager, MediaStreamSession, VideoStreamConfiguration, VideoStreamEvent, the CALayer decode). A second probe that only tried to read the context's manager pointer and compare it to `DeviceManager.shared` already SIGBUSed on raw pointer inspection. This is exactly the fragility AGENTS.md rule 2 forbids in shipping code, and the stop condition the two independent gpt-6-astra reviews set: *if progress requires continuously adding Swift type-layout / generic / async-ABI guesses, stop this product path and keep the helper as a protocol oracle.* We are at that condition.
+
+**Update (2026-09-07, later): `DeviceKitContext.current` is not usable standalone.** A first minimal probe returned without faulting, but a second, fuller build SIGBUSes inside `current.getter` itself, in BOTH init orders (before and after `_coredevice_xpc_init_services`). The one non-faulting return was almost certainly a garbage read that happened not to be dereferenced. So the context is established by DeviceHub's own launch (its BuiltIn*Providers / plugin host), and a bare process cannot fabricate it by calling the getter. Consequence: track A (standalone client) cannot be reached by blind reconstruction; its only reliable route is to observe DeviceHub's actual bootstrap/init order (via track C injection/trace) and replay exactly that. A depends on C.
 
 **Net:** a self-owned, smooth real-time mirror has no path that is both stable and shippable. Reconstructing Apple's private Swift client stack by hand is research-grade and breaks on every Xcode beta (rule 2); injecting into Device Hub ties the product to Xcode.app plus a code-injection step and an unproven headless mirror start. The frame source that ships without the private stack is a screenshot feed, which is not a 15 fps mirror. Which trade-off to accept is a product decision recorded for the user, not one to keep patching toward.
 

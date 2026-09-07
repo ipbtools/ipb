@@ -332,3 +332,12 @@ Host Mac (macOS 26.5.1, Xcode 27.0 b6, CoreDevice 642.15). No device command run
 - `DeviceKit.DeviceKitContext.deviceManager` returns `CoreDevice.DeviceManager`; DeviceKit is the only Xcode 27 b6 binary linking `CoreDeviceMediaStreamSupport`.
 - Probe `scratchpad/dkctx/probe.swift`: `DeviceKitContext.current` resolves standalone (metadata size 48, live first word). A follow-up probe reading the manager pointer SIGBUSed — confirms further progress needs more private Swift ABI shims (AGENTS rule 2 stop condition; two gpt-6-astra reviews concur).
 - Conclusion: no self-owned smooth mirror that is both stable and shippable; decision surfaced to user. Details in `docs/video-stream.md` "Standalone Apple-client blocker".
+
+## 2026-09-08 — track C (inject DeviceHub) blocked by library validation
+
+Host Mac (macOS 26.5.1, Xcode 27 b6), iPhone 13 Pro (iOS 27.0) attached, SIP disabled.
+
+- Built ad-hoc arm64e frame-tap dylib (`scratchpad/inject/dhframetap.dylib`): swizzles `-[CALayer setContents:]`, dumps first frames, backtraces once.
+- Launched DeviceHub with `DYLD_INSERT_LIBRARIES` (verified in process env via `ps eww`). dyld loaded 1242 libraries but never our dylib; no AMFI/sandbox denial surfaced. Same dylib loads into a fresh unsigned arm64e binary (`DYLD_PRINT_LIBRARIES` shows it).
+- DeviceHub CodeDirectory `flags=0x2000 (library-validation)`; `nvram boot-args` empty. Conclusion: library validation blocks the insert; SIP-off does not relax it. Needs `amfi_get_out_of_my_way=1` + reboot, or Apple-team signing.
+- Non-injection fallback identified: ScreenCaptureKit capture of DeviceHub's mirror window.
