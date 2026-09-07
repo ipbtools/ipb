@@ -287,3 +287,17 @@ The CLI is now `bin/hdb` (helper `hdb-helper`, env `HDB_HELPER`), version 0.1.0 
 Gate incident worth keeping: the first run of the renamed gate on Mac-M2 reported `touchscreenGesture service present: 0` for the iOS 27 iPhone 12 mini and skipped the gesture steps, although a direct `hdb descriptors` call showed all five services. Cause: the gate probed capabilities with a second `descriptors` call whose stderr was discarded; on Mac-M2 the tunnel now drops between consecutive calls (every call logs a warm-up), that probe failed, and its failure was read as "service absent". Fix: capabilities are derived from the descriptors step that already passed, the device OS major comes from `hdb devices`, and an iOS 27 device without the gesture service is a failure instead of a skip. Re-run after the fix: 13 Pro (this Mac) and 12 mini (Mac-M2) report `present=1 expected=1`, the 15 Pro on iOS 26.6.1 reports `present=0 expected=0` with the two gesture steps skipped; all three `SMOKE PASSED`.
 
 Observation, not yet root-caused: with two phones attached to Mac-M2, `tunnelState` returns to `disconnected` within seconds of each command, so nearly every `hdb` invocation there pays one warm-up (2–3 s). On this Mac with one wired phone the tunnel stayed up between calls earlier in the day.
+
+## devicectl-backed verbs (2026-09-07, iPhone 13 Pro iOS 27.0, this Mac)
+
+`hdb` now wraps devicectl behind adb-style verbs. Checked against the iPhone 13 Pro:
+
+| Verb | Result |
+| --- | --- |
+| `apps`, `ps`, `info`, `lock-state`, `orientation` | listings returned |
+| `clipboard set "hdb 你好 🚀"` then `clipboard get` | round-trips UTF-8 text, the intended Unicode input path |
+| `open https://www.apple.com`, `launch com.apple.Preferences` | opened Safari / Settings (screenshot) |
+| `location 37.3349 -122.0090`, `location clear` | accepted; negative values must be passed as `--longitude=-122.009`, which the wrapper does |
+| `ls / --app ai.looktech.glasses.memo.lab`, `push` / `pull` round trip | 477 files listed, file content identical after pull |
+| `ls / --app com.apple.Preferences` | refused (`ContainerLookupErrorDomain error 2`): system app containers are not reachable |
+| `screenrecord out.mp4 3` | devicectl requires `.mp4`; the device then answers `Screen Recording is not supported by this device` (CoreDeviceError 1001). Verb kept, passes the error through |

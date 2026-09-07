@@ -41,6 +41,20 @@ usage:
   hdb home
   hdb recents
   hdb screenshot <path>
+  hdb screenrecord <path> [seconds]          # devicectl capture screen-record
+  hdb apps | ps | info | lock-state          # devicectl info apps/processes/details/lockState
+  hdb install <app|ipa>  | uninstall <bundle-id>
+  hdb launch <bundle-id> [args...]           # terminates a running instance first
+  hdb open <url>                             # open a URL / deep link
+  hdb kill <pid> [signal]                    # devicectl process signal
+  hdb ls <remote-path> [--app <bundle-id>]   # list files (app data container with --app)
+  hdb push <local> <remote> [--app <bundle-id>]
+  hdb pull <remote> <local> [--app <bundle-id>]
+  hdb clipboard get | clipboard set <text>   # device pasteboard
+  hdb location <lat> <lon> | location clear  # simulate location
+  hdb orientation [portrait|landscapeLeft|landscapeRight|portraitUpsideDown]
+  hdb reboot | sysdiagnose <dir> | pair | unpair
+  hdb devicectl <args...>                    # raw devicectl with --device filled in
   hdb service-ids
   hdb service-id <role>
   hdb descriptors
@@ -565,6 +579,69 @@ case "$cmd" in
     [[ $# -le 3 ]] || { usage; exit 2; }
     service_id="$(resolve_uhid_service_id "${1:-$UHID_SERVICE_ID}")"
     run_uhid cd_recents_dock "$service_id" "${2:-0x01}" "${3:-0x03}"
+    ;;
+  screenrecord)
+    [[ $# -eq 1 || $# -eq 2 ]] || { usage; exit 2; }
+    duration_opt=(); [[ -n "${2:-}" ]] && duration_opt=(--duration "$2")
+    devicectl device capture screen-record --device "$DEVICE" --destination "$1" "${duration_opt[@]}"
+    ;;
+  apps)        devicectl device info apps --device "$DEVICE" "$@" ;;
+  ps)          devicectl device info processes --device "$DEVICE" "$@" ;;
+  info)        devicectl device info details --device "$DEVICE" "$@" ;;
+  lock-state)  devicectl device info lockState --device "$DEVICE" "$@" ;;
+  install)
+    [[ $# -eq 1 ]] || { usage; exit 2; }
+    devicectl device install app --device "$DEVICE" "$1"
+    ;;
+  uninstall)
+    [[ $# -eq 1 ]] || { usage; exit 2; }
+    devicectl device uninstall app --device "$DEVICE" "$1"
+    ;;
+  launch)
+    [[ $# -ge 1 ]] || { usage; exit 2; }
+    devicectl device process launch --device "$DEVICE" --terminate-existing --activate "$@"
+    ;;
+  open|open-url)
+    [[ $# -eq 1 ]] || { usage; exit 2; }
+    devicectl device process openURL --device "$DEVICE" "$1"
+    ;;
+  kill)
+    [[ $# -eq 1 || $# -eq 2 ]] || { usage; exit 2; }
+    devicectl device process signal --device "$DEVICE" --pid "$1" --signal "${2:-SIGKILL}"
+    ;;
+  ls|push|pull)
+    # optional trailing "--app <bundle-id>" selects that app's data container
+    # iOS exposes no global filesystem; every file verb targets one app's data container.
+    if [[ $# -ge 3 && "${@[-2]}" == "--app" ]]; then app_domain=(--domain-type appDataContainer --domain-identifier "${@[-1]}"); set -- "${@[1,-3]}"
+    else print -u2 "hdb $cmd: add --app <bundle-id> (iOS files live in per-app containers)"; exit 2; fi
+    case "$cmd" in
+      ls)   [[ $# -eq 1 ]] || { usage; exit 2; }; devicectl device info files --device "$DEVICE" "${app_domain[@]}" --subdirectory "$1" ;;
+      push) [[ $# -eq 2 ]] || { usage; exit 2; }; devicectl device copy to --device "$DEVICE" "${app_domain[@]}" --source "$1" --destination "$2" ;;
+      pull) [[ $# -eq 2 ]] || { usage; exit 2; }; devicectl device copy from --device "$DEVICE" "${app_domain[@]}" --source "$1" --destination "$2" ;;
+    esac
+    ;;
+  clipboard|pasteboard)
+    case "${1:-}" in
+      get)  devicectl device pasteboard paste --device "$DEVICE" ;;
+      set)  [[ $# -eq 2 ]] || { usage; exit 2; }; print -rn -- "$2" | devicectl device pasteboard copy --device "$DEVICE" ;;
+      *) usage; exit 2 ;;
+    esac
+    ;;
+  location)
+    if [[ "${1:-}" == "clear" ]]; then devicectl device simulate location clear --device "$DEVICE"
+    else [[ $# -eq 2 ]] || { usage; exit 2; }; devicectl device simulate location coordinate --device "$DEVICE" --latitude="$1" --longitude="$2"; fi
+    ;;
+  orientation)
+    if [[ $# -eq 0 ]]; then devicectl device orientation get --device "$DEVICE"
+    else devicectl device orientation set --device "$DEVICE" "$1"; fi
+    ;;
+  reboot)      devicectl device reboot --device "$DEVICE" ;;
+  sysdiagnose) [[ $# -eq 1 ]] || { usage; exit 2; }; devicectl device sysdiagnose --device "$DEVICE" --destination "$1" ;;
+  pair)        devicectl manage pair --device "$DEVICE" ;;
+  unpair)      devicectl manage unpair --device "$DEVICE" ;;
+  devicectl)
+    [[ $# -ge 1 ]] || { usage; exit 2; }
+    devicectl "$@" --device "$DEVICE"
     ;;
   raw)
     [[ $# -ge 2 ]] || { usage; exit 2; }
