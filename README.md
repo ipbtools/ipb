@@ -1,6 +1,6 @@
-# devicehubctl
+# hdb
 
-`devicehubctl` is a small CLI for driving basic iOS 27 device interactions through CoreDevice private services, without XCUITest or WebDriverAgent.
+`hdb` is a small CLI for driving basic iOS 27 device interactions through CoreDevice private services, without XCUITest or WebDriverAgent.
 
 It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, keyboard keys, pointer reports, scroll reports, raw scroll events, vendor-defined HID events, Home, App Switcher, screenshots, and descriptor-based HID service discovery.
 
@@ -23,6 +23,20 @@ export DEVELOPER_DIR=/path/to/Xcode-beta.app/Contents/Developer
 
 Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefer.
 
+## Install (Homebrew, stage 1 distribution)
+
+The formula in `Formula/hdb.rb` builds from source, so the machine needs Xcode 27 beta selected for the build and its CoreDevice package for runtime:
+
+```sh
+brew tap <owner>/hdb https://github.com/borealin/devicehubctl
+brew install --HEAD hdb
+hdb version          # hdb 0.1.0 (macOS ..., CoreDevice 642.15)
+hdb service-ids      # host-only check
+hdb descriptors      # device path check
+```
+
+`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/hdb`, `libexec/hdb-helper`, `share/hdb/VERSION`, `share/hdb/smoke_matrix.sh`.
+
 ## Build
 
 ```sh
@@ -32,7 +46,7 @@ make
 The helper binary is written to:
 
 ```sh
-build/action_sender_mercury
+build/hdb-helper
 ```
 
 ## Usage
@@ -40,30 +54,32 @@ build/action_sender_mercury
 Touch coordinates are normalized from top-left to bottom-right, in the `0..1` range. Pointer deltas are signed relative integers.
 
 ```sh
-bin/devicehubctl tap 0.5 0.5
-bin/devicehubctl long 0.615 0.675 1.2
-bin/devicehubctl scroll 0.5 0.75 0 0.30
-bin/devicehubctl swipe 0.5 0.75 0.5 0.35
-bin/devicehubctl home
-bin/devicehubctl recents
-bin/devicehubctl screenshot build/current.png
-bin/devicehubctl service-ids
-bin/devicehubctl services
-bin/devicehubctl service-id touchscreen
-bin/devicehubctl reset-gesture
-bin/devicehubctl pointer 0 0
-bin/devicehubctl scroll-report 0x501 0 0
-bin/devicehubctl scroll-event 0 0 0
-bin/devicehubctl vendor-defined 0 0 0
-bin/devicehubctl key escape
-bin/devicehubctl button 0x0c 0x40
-bin/devicehubctl raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
+bin/hdb devices                 # physical devices: uuid, name, os, transport, tunnel
+bin/hdb device                  # the device the other commands would use
+bin/hdb tap 0.5 0.5
+bin/hdb long 0.615 0.675 1.2
+bin/hdb scroll 0.5 0.75 0 0.30
+bin/hdb swipe 0.5 0.75 0.5 0.35
+bin/hdb home
+bin/hdb recents
+bin/hdb screenshot build/current.png
+bin/hdb service-ids
+bin/hdb services
+bin/hdb service-id touchscreen
+bin/hdb reset-gesture
+bin/hdb pointer 0 0
+bin/hdb scroll-report 0x501 0 0
+bin/hdb scroll-event 0 0 0
+bin/hdb vendor-defined 0 0 0
+bin/hdb key escape
+bin/hdb button 0x0c 0x40
+bin/hdb raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
 ```
 
 `DEVICE_ID` is optional. Without it the wrapper picks the single wired or tunnelled physical device; with several devices it lists them and exits. Use the CoreDevice UUID from `devicectl list devices --json-output` (the 642.x table view prints UDIDs, which the service rejects):
 
 ```sh
-DEVICE_ID=<coredevice-uuid> bin/devicehubctl tap 0.5 0.5
+DEVICE_ID=<coredevice-uuid> bin/hdb tap 0.5 0.5
 ```
 
 Useful runtime overrides:
@@ -74,7 +90,7 @@ UHID_SERVICE_ID=auto                 # or a fixed id such as 0x101
 UHID_SERVICE_FALLBACK=0x101          # opt in to a fixed id when descriptor discovery fails; unset = error
 DEVELOPER_DIR=/path/to/Xcode-beta.app/Contents/Developer   # only needed for `make`; runtime uses the CoreDevice package
 DEVICECTL=/path/to/devicectl         # defaults to the copy inside CoreDevice.framework
-DEVICEHUBCTL_BIN=/path/to/action_sender_mercury
+HDB_HELPER=/path/to/hdb-helper
 HIDCTL_WAIT_MS=700                   # settle time after each send
 HIDCTL_TIMEOUT_S=30                  # watchdog for a single helper run
 ```
@@ -86,11 +102,11 @@ Exit codes from the helper: 0 ok, 1 a dispatched operation or the remote connect
 Supported `service-id` roles:
 
 ```sh
-bin/devicehubctl service-id touchscreen
-bin/devicehubctl service-id gesture
-bin/devicehubctl service-id keyboard
-bin/devicehubctl service-id buttons
-bin/devicehubctl service-id avp
+bin/hdb service-id touchscreen
+bin/hdb service-id gesture
+bin/hdb service-id keyboard
+bin/hdb service-id buttons
+bin/hdb service-id avp
 ```
 
 ## Smoke gate

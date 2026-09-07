@@ -1,9 +1,9 @@
 #!/usr/bin/env zsh
-# Smoke gate for devicehubctl. Exits non-zero if any step fails.
+# Smoke gate for hdb. Exits non-zero if any step fails.
 # usage: [DEVICE_ID=<uuid>] [SMOKE_INTERACTIVE=1] [TAP_XY="0.15 0.12"] [LONG_XY="0.15 0.12"] smoke_matrix.sh <repo_root> <out_dir>
 set -uo pipefail
 ROOT="${1:?repo root}"; OUT="${2:?out dir}"; mkdir -p "$OUT"
-CTL="$ROOT/bin/devicehubctl"
+CTL="$ROOT/bin/hdb"
 log="$OUT/smoke.log"; : > "$log"
 failures=0
 TAP_XY="${TAP_XY:-0.15 0.12}"     # first home-screen icon on an iPhone 12 mini / 13 Pro grid
@@ -20,6 +20,7 @@ run() {
   printf '\n### %s\n$ %s\n' "$name" "$*" | tee -a "$log"
   local start=$(date +%s) rc=0 out
   out="$("$@" 2>>"$log")" || rc=$?
+  LAST_OUT="$out"
   printf '%s\n' "$out" >>"$log"
   printf 'rc=%d (%ds)\n' "$rc" $(( $(date +%s) - start )) | tee -a "$log"
   if (( rc != 0 )); then fail "$name: rc=$rc"; return 1; fi
@@ -41,11 +42,24 @@ shot() {
 echo "host: $(sw_vers -productVersion) $(sw_vers -buildVersion)  DEVICE_ID=${DEVICE_ID:-auto}" | tee -a "$log"
 run "service-ids (host only)" --expect '^mainTouchscreen +0x101' -- "$CTL" service-ids
 run "descriptors" --expect 'connected descriptors count=[1-9]' -- "$CTL" descriptors
-# iOS 27 exposes five services (adds touchscreenGesture 0x501); iOS 26 exposes four.
+# Capability expectations come from the device OS: iOS 27 exposes five HID services (adds
+# touchscreenGesture 0x501), iOS 26 exposes four. Derived from the descriptors step that just ran,
+# never from a separate probe whose failure could pass for "absent".
 run "descriptors list >=4 services" --expect 'connectedDescriptor\[3\]' -- "$CTL" descriptors
-HAS_GESTURE=0
-if "$CTL" descriptors 2>/dev/null | grep -q 'touchscreenGesture'; then HAS_GESTURE=1; fi
-echo "touchscreenGesture service present: $HAS_GESTURE" | tee -a "$log"
+HAS_GESTURE=0; print -r -- "$LAST_OUT" | grep -q 'touchscreenGesture' && HAS_GESTURE=1
+SEL="$("$CTL" device 2>/dev/null || true)"
+OS_MAJOR="$("$CTL" devices 2>/dev/null | awk -F'\t' -v id="$SEL" '$1 == id {split($3, v, "."); print v[1]}')"
+EXPECT_GESTURE="${EXPECT_GESTURE:-}"
+if [[ -z "$EXPECT_GESTURE" ]]; then
+  case "$OS_MAJOR" in
+    <27->) EXPECT_GESTURE=1 ;;
+    <1-26>) EXPECT_GESTURE=0 ;;
+    *) EXPECT_GESTURE=unknown ;;
+  esac
+fi
+echo "device $SEL iOS major ${OS_MAJOR:-?}; touchscreenGesture present=$HAS_GESTURE expected=$EXPECT_GESTURE" | tee -a "$log"
+if [[ "$EXPECT_GESTURE" == 1 && $HAS_GESTURE -eq 0 ]]; then fail "touchscreenGesture service missing on an iOS ${OS_MAJOR} device"; fi
+if [[ "$EXPECT_GESTURE" == unknown ]]; then echo "WARN: could not determine the device OS; gesture steps follow the descriptor set" | tee -a "$log"; fi
 run "service-id touchscreen" --expect '^0x101$' -- "$CTL" service-id touchscreen
 if (( HAS_GESTURE )); then run "service-id gesture" --expect '^0x501$' -- "$CTL" service-id gesture; fi
 run "service-id keyboard"    --expect '^0x200$' -- "$CTL" service-id keyboard

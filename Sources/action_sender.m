@@ -1143,7 +1143,7 @@ static int report_service_socket_error(xpc_object_t reply) {
 
 static void watchdog_handler(int signo) {
     (void)signo;
-    const char message[] = "devicehubctl helper: timed out waiting for CoreDevice/RemoteXPC (HIDCTL_TIMEOUT_S)\n";
+    const char message[] = "hdb helper: timed out waiting for CoreDevice/RemoteXPC (HIDCTL_TIMEOUT_S)\n";
     write(STDERR_FILENO, message, sizeof(message) - 1);
     _exit(5);
 }
