@@ -34,6 +34,21 @@ Verified replies:
 
 Host client facts (ObjC runtime dump, `Experiments/tools/dumpavc.m`): `AVCMediaStreamNegotiator` (`initWithMode:options:error:`, `createOffer`, `offer` NSData, `setAnswer:withError:`, `generateMediaStreamConfigurationWithError:`), `AVCMediaStreamConfig` (local/remote `AVCNetworkAddress`, SSRCs, SRTP/SRTCP cipher suites, send/receive master and media keys, RTCP settings), `AVCVideoStream` (`initWithLocalEndpoint:options:error:`, `configure:error:`, `start`, `stop`, `requestLastDecodedFrame`, delegate `AVCVideoStreamDelegate`), `AVCRemoteVideoClient` (`initWithStreamToken:delegate:`, `setVideoLayer:forMode:`, `remoteVideoAttributes`, `hasReceivedFirstFrame`). The Swift spike (`Experiments/videostream/spike.swift`) proved `DeviceManager.shared`/`allDevices()`/`listUsageAssertions()` work from our process through `@_silgen_name` shims, but `MediaStreamSupport.supportInfo` crashes inside `ActionDeclaration.forward(to:)`, so the ObjC route above is the one to pursue.
 
+## Breakthrough: the ObjC path avoids the CoreDevice Swift client (2026-09-07 night)
+
+The private frameworks ship no `.swiftinterface`, so Apple's Swift client (`CoreDeviceMediaStreamSupport`) can only be reached through hand-written `@_silgen_name` shims. Those crash: `MediaStreamSupport.supportInfo` faults inside `ActionDeclaration.forward(to:)` reading an uninitialised registry, because a bare process lacks the DeviceKit client bootstrap (a `CoreDeviceServiceConnection` existential plus a `DeviceManager` check-in lifecycle, `waitForPostPluginLoadCheckIn`). Reconstructing that through shims is the brittle sprawl AGENTS.md rule 2 forbids, so that route is abandoned.
+
+The negotiation is actually done by **AVConference** (`/System/Library/PrivateFrameworks/AVConference.framework`, the FaceTime media stack), which is plain ObjC and standalone — it needs no CoreDevice client. That gives a robust architecture:
+
+1. `AVCMediaStreamNegotiator initWithMode:options:error:` then `createOffer` / `offer`. Verified: modes 1, 2, 4 initialise (0 and 3 fail with GKVoiceChat 32032); `createOffer` returns a 432–543 byte `bplist00` offer. `Experiments/tools/avc_negotiator_probe.m`.
+2. Open the `startmediastream` service socket and send the `mediastreamstart` action envelope with `negotiatorOffer` = that offer (raw XPC, no Swift). `Experiments/videostream/neg_start.m`.
+3. Device replies with `negotiatorAnswer`; `AVCMediaStreamNegotiator setAnswer:withError:` then `generateMediaStreamConfigurationWithError:` yields an `AVCMediaStreamConfig` (local/remote `AVCNetworkAddress`, SRTP/SRTCP cipher suites, send/receive keys, SSRCs, RTCP).
+4. `AVCVideoStream initWithLocalEndpoint:options:error:` / `configure:error:` / `start`; its delegate (`AVCVideoStreamDelegate`, `vcMediaStream:didGetLastDecodedFrame:`) receives decoded frames; `requestLastDecodedFrame` pulls one.
+
+Current state: with a real offer the device gets past format validation to **transport setup**, failing with `NSPOSIXErrorDomain 49` (EADDRNOTAVAIL) for every working mode. So the offer format is accepted; what remains is the RTP endpoint exchange — the offer must carry the host's actual bound RTP socket address (on the CoreDevice tunnel, host `utun` `fdd2:…::2`, device `fdd2:…::1`), which means creating the local `AVCVideoStream`/endpoint first so its address goes into the offer, rather than passing placeholder `receiverIP`/`senderIP`. The screenshot loop is not an alternative: `devicectl` screenshot is ~1.4 s/frame (0.7 fps), and pymobiledevice3 offers only single-frame capture.
+
+## Design
+
 ## Design
 
 Two deliverables, in order.
