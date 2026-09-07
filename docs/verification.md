@@ -323,3 +323,12 @@ This Mac had never had ipb installed (only the scratch builds). Sequence and tim
 - The installed `share/ipb/smoke_matrix.sh` run interactively against the iPhone 13 Pro: `SMOKE PASSED`.
 
 Stage 1–2 "out of the box" items now all have evidence: install path, doctor, gate, and first-use loop. Not covered by this run: a machine without the CoreDevice package (doctor's Apple-stack FAIL lines are the intended path there, untested end to end).
+
+## 2026-09-07 (night) — live-stream standalone-client blocker root-caused
+
+Host Mac (macOS 26.5.1, Xcode 27.0 b6, CoreDevice 642.15). No device command run; static + spike-crash analysis only.
+
+- Symbolicated `~/Library/Logs/DiagnosticReports/spike3-2026-09-07-215613.ips`: `supportInfo.getter` -> `MediaStreamFunctions.mediaStreamSupportInfo` -> `ActionDeclaration.forward(to:)` -> `OSAllocatedUnfairLock.read()` -> `EXC_BAD_ACCESS 0x00f0000000008068`. Async ABI honoured; fault is an uninitialised-coordinator lock, i.e. missing client bootstrap.
+- `DeviceKit.DeviceKitContext.deviceManager` returns `CoreDevice.DeviceManager`; DeviceKit is the only Xcode 27 b6 binary linking `CoreDeviceMediaStreamSupport`.
+- Probe `scratchpad/dkctx/probe.swift`: `DeviceKitContext.current` resolves standalone (metadata size 48, live first word). A follow-up probe reading the manager pointer SIGBUSed — confirms further progress needs more private Swift ABI shims (AGENTS rule 2 stop condition; two gpt-6-astra reviews concur).
+- Conclusion: no self-owned smooth mirror that is both stable and shippable; decision surfaced to user. Details in `docs/video-stream.md` "Standalone Apple-client blocker".

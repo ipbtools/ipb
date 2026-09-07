@@ -64,6 +64,21 @@ A fully hand-written H.264 receiver is not feasible: it would have to reproduce 
 
 What is done and reusable regardless: the control channel (`stream-info`, `stream-status`, `stream-stop` are shippable now over raw XPC), the offer generation, and this transport map.
 
+## Standalone Apple-client blocker: root cause (2026-09-07 night, definitive)
+
+Driving Apple's own media client from our process was pursued because the RTP transport (above) can only be built by Apple's client. It is now root-caused, not merely observed.
+
+**Crash is a missing client bootstrap, not an ABI mismatch.** Symbolicating the spike crash (`spike3-2026-09-07-215613.ips`) gives the full async chain, in order:
+`MediaStreamSupport.supportInfo.getter` -> `CoreDevice.MediaStreamFunctions.mediaStreamSupportInfo.getter` -> `(extension) CoreDeviceUtilities.ActionDeclaration.forward<Input==()>(to:reportingProgressUsing:)` -> `OSAllocatedUnfairLock.read()` -> `ManagedBuffer.headerAddress` -> `EXC_BAD_ACCESS` reading `0x00f0000000008068` (`esr 0x92000004`, translation fault). The async call convention is honoured: execution runs on a real Swift concurrency task and reaches deep inside Apple code before faulting. The fault is a lock read through an object a bare process never initialised. Disassembling the getter confirms it is a genuine async getter (`...ResponseVvg` plus its `...ResponseVvgTu` async function pointer); declaring it `async throws` in the shim is correct.
+
+**`DeviceManager.shared` is not the bootstrapped manager.** The only Apple entry that hands out a fully wired `CoreDevice.DeviceManager` is `DeviceKit.DeviceKitContext` (`deviceManager.getter : CoreDevice.DeviceManager`, `serviceConnection.getter : CoreDevice.CoreDeviceServiceConnection`). DeviceKit is the *only* binary in Xcode 27 b6 that links `CoreDeviceMediaStreamSupport`; Device Hub reaches the media stack through it.
+
+**`DeviceKitContext.current` does resolve standalone.** A probe (`scratchpad/dkctx/probe.swift`) loads DeviceKit, reads DeviceKitContext metadata (runtime size 48 bytes = an 8-byte `deviceManager` class ref plus a 40-byte `serviceConnection` existential), and calls the static `current.getter` without trapping; it returns a struct whose first word is a live pointer. So path A is *not* categorically impossible.
+
+**But every step past that needs another hand ABI shim into non-`.swiftinterface` private Swift types** (DeviceKitContext layout, DeviceManager, MediaStreamSession, VideoStreamConfiguration, VideoStreamEvent, the CALayer decode). A second probe that only tried to read the context's manager pointer and compare it to `DeviceManager.shared` already SIGBUSed on raw pointer inspection. This is exactly the fragility AGENTS.md rule 2 forbids in shipping code, and the stop condition the two independent gpt-6-astra reviews set: *if progress requires continuously adding Swift type-layout / generic / async-ABI guesses, stop this product path and keep the helper as a protocol oracle.* We are at that condition.
+
+**Net:** a self-owned, smooth real-time mirror has no path that is both stable and shippable. Reconstructing Apple's private Swift client stack by hand is research-grade and breaks on every Xcode beta (rule 2); injecting into Device Hub ties the product to Xcode.app plus a code-injection step and an unproven headless mirror start. The frame source that ships without the private stack is a screenshot feed, which is not a 15 fps mirror. Which trade-off to accept is a product decision recorded for the user, not one to keep patching toward.
+
 ## Design
 
 ## Design
@@ -88,7 +103,7 @@ Host requirement stays macOS with the CoreDevice package; stage 4 (no Xcode, non
 ## Open items
 
 - Confirm the control exchange from a real Device Hub session (host `log stream` capture on <macos27-host>; CoreDevice logging profile if fields are redacted).
-- Why `ActionDeclaration.forward(to:)` crashes for our `RemoteDevice` objects (only if the Swift route is revisited; the ObjC route does not need it).
+- ~~Why `ActionDeclaration.forward(to:)` crashes for our `RemoteDevice` objects~~ ANSWERED: missing full-client bootstrap; `DeviceManager.shared` lacks the coordinator whose `OSAllocatedUnfairLock` `forward(to:)` reads. See "Standalone Apple-client blocker" above.
 - Which address the device rejects with POSIX 49 (check `dtremotedisplayd` in the device syslog while sending a start request).
 - Building a real `negotiatorOffer` with `AVCMediaStreamNegotiator` from ObjC and the answer/`streamConfig` handling that follows.
 - Format of `receivedLastDecodedFrame(Data)` / `stream:didGetLastDecodedFrame:`.
