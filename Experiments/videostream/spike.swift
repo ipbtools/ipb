@@ -48,9 +48,8 @@ struct MediaStreamSupportShim {
     var device: RemoteDeviceShim
     @_silgen_name("$s28CoreDeviceMediaStreamSupport0cdE0V6deviceAC0aB006RemoteB0C_tcfC")
     init(device: RemoteDeviceShim)
-    // Generic result => address-only => passed as an explicit @out buffer (x0), matching the real getter.
     @_silgen_name("$s28CoreDeviceMediaStreamSupport0cdE0V11supportInfo0aB00bcD0V0eG8ResponseVvg")
-    func supportInfo<T>() async throws -> T
+    func supportInfo() async throws -> SupportInfo168
 }
 func describeAs(_ typeName: String, _ value: SupportInfo168) -> String {
     guard let t = _typeByName(typeName) else { return "<type \(typeName) absent>" }
@@ -73,7 +72,7 @@ if let device = devices.first(where: { wanted.isEmpty ? true : $0.describe().con
     var done = false
     Task {
         do {
-            let info: SupportInfo168 = try await support.supportInfo()
+            let info = try await support.supportInfo()
             print("supportInfo =", describeAs("10CoreDevice17DeviceMediaStreamV19SupportInfoResponseV", info))
         } catch { print("supportInfo error:", error) }
         done = true
