@@ -15,6 +15,8 @@ ipb (iOS Physical-device Bridge; GitHub home `ipbtools/ipb`, Homebrew tap `ipbto
 | `README.md` | Project purpose, requirements, build, usage, exit codes, smoke gate, pointers to everything below | Any user-facing behaviour or requirement changes |
 | `docs/protocol.md` | Protocol map: transport, features, Swift symbol evidence, service IDs, **captured wire format** (the `Wire Format` section is the authoritative reference for message shapes) | Any new message, field, feature, or evidence |
 | `docs/verification.md` | Dated, host+device-specific verification records and the compatibility matrix; what was proven, how, with what artefacts | Every verification run; never edit older records, append |
+| `docs/video-stream.md` | Live video/audio stream plan: captured control-channel protocol, AVConference client facts, staged design | When the stream work advances |
+| `Experiments/` | Throwaway evidence tools (probe, interposer, symbolicator, AVConference dumper, video spike); Swift ABI shims allowed here only | As probes are added |
 | `docs/standalone-distribution.md` | Plan for shipping without Xcode.app (host options A/B/C, recommendation, open items, rejected alternatives) | When the distribution plan changes |
 | `docs/research/adb-capability-boundary.md` | What adb offers and what an iOS equivalent must provide | Reference; rarely |
 | `docs/research/agent-frameworks.md` | Arbigent, Maestro, Appium MCP, mobile-mcp, agent-device, research agents, benchmarks; what primitives agents consume | Reference; refresh when the landscape moves |

@@ -5,3 +5,8 @@ build/
 *.log
 *.png
 work/
+
+# Experiment build outputs
+Experiments/**/build/
+Experiments/**/*.o
+Experiments/**/*.dSYM/
