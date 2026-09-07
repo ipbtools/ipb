@@ -3,10 +3,10 @@ set -euo pipefail
 
 ROOT="${0:A:h:h}"
 # Helper lives in libexec/ when installed (Homebrew) and in build/ in a source checkout.
-if [[ -n "${HDB_HELPER:-}" ]]; then BIN="$HDB_HELPER"
-elif [[ -x "$ROOT/libexec/hdb-helper" ]]; then BIN="$ROOT/libexec/hdb-helper"
-else BIN="$ROOT/build/hdb-helper"; fi
-HDB_VERSION_FILE="$ROOT/VERSION"; [[ -f "$HDB_VERSION_FILE" ]] || HDB_VERSION_FILE="$ROOT/share/hdb/VERSION"
+if [[ -n "${IPB_HELPER:-}" ]]; then BIN="$IPB_HELPER"
+elif [[ -x "$ROOT/libexec/ipb-helper" ]]; then BIN="$ROOT/libexec/ipb-helper"
+else BIN="$ROOT/build/ipb-helper"; fi
+IPB_VERSION_FILE="$ROOT/VERSION"; [[ -f "$IPB_VERSION_FILE" ]] || IPB_VERSION_FILE="$ROOT/share/ipb/VERSION"
 UHID_SERVICE_ID="${UHID_SERVICE_ID:-auto}"
 # Set UHID_SERVICE_FALLBACK (for example 0x101) to keep going with a fixed service id when
 # descriptor discovery fails. Unset, discovery failure is an error.
@@ -31,51 +31,51 @@ quiet_env=(HIDCTL_QUIET=1 HIDCTL_WAIT_MS="${HIDCTL_WAIT_MS:-700}")
 usage() {
   cat <<'EOF'
 usage:
-  hdb version
-  hdb devices                 # physical devices: uuid, name, os, transport, tunnel
-  hdb device                  # the device the other commands would use
-  hdb tap <x> <y>
-  hdb long <x> <y> [seconds]
-  hdb swipe <x1> <y1> <x2> <y2> [seconds] [hold_seconds]
-  hdb scroll <x> <y> <dx> <dy> [seconds]
-  hdb home
-  hdb recents
-  hdb screenshot <path>
-  hdb screenrecord <path> [seconds]          # devicectl capture screen-record
-  hdb apps | ps | info | lock-state          # devicectl info apps/processes/details/lockState
-  hdb install <app|ipa>  | uninstall <bundle-id>
-  hdb launch <bundle-id> [args...]           # terminates a running instance first
-  hdb open <url>                             # open a URL / deep link
-  hdb kill <pid> [signal]                    # devicectl process signal
-  hdb ls <remote-path> [--app <bundle-id>]   # list files (app data container with --app)
-  hdb push <local> <remote> [--app <bundle-id>]
-  hdb pull <remote> <local> [--app <bundle-id>]
-  hdb clipboard get | clipboard set <text>   # device pasteboard
-  hdb location <lat> <lon> | location clear  # simulate location
-  hdb orientation [portrait|landscapeLeft|landscapeRight|portraitUpsideDown]
-  hdb reboot | sysdiagnose <dir> | pair | unpair
-  hdb devicectl <args...>                    # raw devicectl with --device filled in
-  hdb service-ids
-  hdb service-id <role>
-  hdb descriptors
-  hdb services
-  hdb reset-gesture [service_id]
-  hdb pointer <dx> <dy> [button_mask] [service_id]
-  hdb key <usage_or_name> [hold_seconds] [service_id]
-  hdb key-down <usage_or_name> [service_id]
-  hdb key-up [usage_or_name] [service_id]
-  hdb button <usage_page> <usage_code> [hold_seconds]
-  hdb scroll-event <x> <y> <z> [phase] [momentum] [target]
-  hdb vendor-defined <usage_page> <usage> <version> [hex_payload]
-  hdb pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
-  hdb scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
-  hdb keyboard-report <service_id> <usage_or_name> <pressed>
-  hdb uhid-report <service_id> <x> <y> <touching> [in_range]
-  hdb uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
-  hdb digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
-  hdb nav-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
-  hdb dock-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
-  hdb raw <feature> <helper_kind> [args...]
+  ipb version
+  ipb devices                 # physical devices: uuid, name, os, transport, tunnel
+  ipb device                  # the device the other commands would use
+  ipb tap <x> <y>
+  ipb long <x> <y> [seconds]
+  ipb swipe <x1> <y1> <x2> <y2> [seconds] [hold_seconds]
+  ipb scroll <x> <y> <dx> <dy> [seconds]
+  ipb home
+  ipb recents
+  ipb screenshot <path>
+  ipb screenrecord <path> [seconds]          # devicectl capture screen-record
+  ipb apps | ps | info | lock-state          # devicectl info apps/processes/details/lockState
+  ipb install <app|ipa>  | uninstall <bundle-id>
+  ipb launch <bundle-id> [args...]           # terminates a running instance first
+  ipb open <url>                             # open a URL / deep link
+  ipb kill <pid> [signal]                    # devicectl process signal
+  ipb ls <remote-path> [--app <bundle-id>]   # list files (app data container with --app)
+  ipb push <local> <remote> [--app <bundle-id>]
+  ipb pull <remote> <local> [--app <bundle-id>]
+  ipb clipboard get | clipboard set <text>   # device pasteboard
+  ipb location <lat> <lon> | location clear  # simulate location
+  ipb orientation [portrait|landscapeLeft|landscapeRight|portraitUpsideDown]
+  ipb reboot | sysdiagnose <dir> | pair | unpair
+  ipb devicectl <args...>                    # raw devicectl with --device filled in
+  ipb service-ids
+  ipb service-id <role>
+  ipb descriptors
+  ipb services
+  ipb reset-gesture [service_id]
+  ipb pointer <dx> <dy> [button_mask] [service_id]
+  ipb key <usage_or_name> [hold_seconds] [service_id]
+  ipb key-down <usage_or_name> [service_id]
+  ipb key-up [usage_or_name] [service_id]
+  ipb button <usage_page> <usage_code> [hold_seconds]
+  ipb scroll-event <x> <y> <z> [phase] [momentum] [target]
+  ipb vendor-defined <usage_page> <usage> <version> [hex_payload]
+  ipb pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
+  ipb scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
+  ipb keyboard-report <service_id> <usage_or_name> <pressed>
+  ipb uhid-report <service_id> <x> <y> <touching> [in_range]
+  ipb uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
+  ipb digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
+  ipb nav-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
+  ipb dock-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
+  ipb raw <feature> <helper_kind> [args...]
 
 Touch coordinates are normalized: 0..1 from top-left to bottom-right.
 Pointer dx/dy are signed relative deltas; button_mask is the raw PointerReport
@@ -85,7 +85,7 @@ otherwise the single wired or tunnelled physical device is used.
 Set UHID_SERVICE_ID to override the UniversalHID service. The default, auto,
 resolves the touchscreen service from descriptors; set UHID_SERVICE_FALLBACK=0x101
 to tolerate discovery failures instead of erroring out.
-Set HDB_HELPER to override the built helper path.
+Set IPB_HELPER to override the built helper path.
 EOF
 }
 
@@ -96,7 +96,7 @@ devicectl() {
 # List physical devices: UUID, name, OS, transport, tunnel state (one per line, tab separated).
 list_devices() {
   local json
-  json="$(mktemp -t hdb-devices)"
+  json="$(mktemp -t ipb-devices)"
   devicectl list devices --json-output "$json" --quiet >/dev/null 2>&1 || true
   python3 - "$json" <<'PY'
 import json, sys
@@ -123,7 +123,7 @@ resolve_device() {
     return 0
   fi
   local json
-  json="$(mktemp -t hdb-devices)"
+  json="$(mktemp -t ipb-devices)"
   devicectl list devices --json-output "$json" --quiet >/dev/null 2>&1 || true
   local picked
   picked="$(python3 - "$json" <<'PY'
@@ -158,7 +158,7 @@ PY
 warm_tunnel() {
   (( TUNNEL_WARMED )) && return 1
   TUNNEL_WARMED=1
-  print -u2 "hdb: device tunnel not connected, warming it via devicectl..."
+  print -u2 "ipb: device tunnel not connected, warming it via devicectl..."
   devicectl device info details --device "$DEVICE" --timeout 30 >/dev/null 2>&1 || true
   return 0
 }
@@ -266,10 +266,10 @@ resolve_service_id() {
   if [[ -n "$resolved" ]]; then
     print -r -- "$resolved"
   elif [[ -n "$UHID_SERVICE_FALLBACK" && -n "$fallback" ]]; then
-    print -u2 "hdb: descriptor discovery failed (rc=$discovery_rc); using fallback $fallback for role $role"
+    print -u2 "ipb: descriptor discovery failed (rc=$discovery_rc); using fallback $fallback for role $role"
     print -r -- "$fallback"
   else
-    print -u2 "hdb: could not resolve service id for role $role (discovery rc=$discovery_rc); set UHID_SERVICE_ID or UHID_SERVICE_FALLBACK"
+    print -u2 "ipb: could not resolve service id for role $role (discovery rc=$discovery_rc); set UHID_SERVICE_ID or UHID_SERVICE_FALLBACK"
     return 3
   fi
 }
@@ -484,9 +484,9 @@ case "$cmd" in
     print -r -- "$DEVICE"
     ;;
   version|--version)
-    v="$(cat "$HDB_VERSION_FILE" 2>/dev/null || print -r -- unknown)"
+    v="$(cat "$IPB_VERSION_FILE" 2>/dev/null || print -r -- unknown)"
     cd_ver="$(plutil -p /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Resources/Info.plist 2>/dev/null | awk -F'"' '/CFBundleVersion/ {print $4}')"
-    print -r -- "hdb $v (macOS $(sw_vers -productVersion) $(sw_vers -buildVersion), CoreDevice ${cd_ver:-absent})"
+    print -r -- "ipb $v (macOS $(sw_vers -productVersion) $(sw_vers -buildVersion), CoreDevice ${cd_ver:-absent})"
     ;;
   service-ids|ids)
     [[ $# -eq 0 ]] || { usage; exit 2; }
@@ -613,7 +613,7 @@ case "$cmd" in
     # optional trailing "--app <bundle-id>" selects that app's data container
     # iOS exposes no global filesystem; every file verb targets one app's data container.
     if [[ $# -ge 3 && "${@[-2]}" == "--app" ]]; then app_domain=(--domain-type appDataContainer --domain-identifier "${@[-1]}"); set -- "${@[1,-3]}"
-    else print -u2 "hdb $cmd: add --app <bundle-id> (iOS files live in per-app containers)"; exit 2; fi
+    else print -u2 "ipb $cmd: add --app <bundle-id> (iOS files live in per-app containers)"; exit 2; fi
     case "$cmd" in
       ls)   [[ $# -eq 1 ]] || { usage; exit 2; }; devicectl device info files --device "$DEVICE" "${app_domain[@]}" --subdirectory "$1" ;;
       push) [[ $# -eq 2 ]] || { usage; exit 2; }; devicectl device copy to --device "$DEVICE" "${app_domain[@]}" --source "$1" --destination "$2" ;;

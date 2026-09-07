@@ -17,26 +17,26 @@ Device:
 Commands verified:
 
 ```sh
-bin/hdb tap 0.5 0.5
-bin/hdb long 0.615 0.675 1.2
-bin/hdb scroll 0.5 0.75 0 0.30
-bin/hdb swipe 0.5 0.75 0.5 0.35
-bin/hdb home
-bin/hdb recents
-bin/hdb screenshot build/smoke.png
-bin/hdb service-ids
-bin/hdb descriptors
-bin/hdb services
-bin/hdb service-id touchscreen
-bin/hdb service-id gesture
-bin/hdb service-id keyboard
-bin/hdb pointer-report 0x501 0 0 0
-bin/hdb pointer 0 0
-bin/hdb scroll-report 0x501 0 0
-bin/hdb scroll-event 0 0 0 undefined undefined digital-crown
-bin/hdb vendor-defined 0 0 0
-bin/hdb key-up
-bin/hdb key escape 0.02
+bin/ipb tap 0.5 0.5
+bin/ipb long 0.615 0.675 1.2
+bin/ipb scroll 0.5 0.75 0 0.30
+bin/ipb swipe 0.5 0.75 0.5 0.35
+bin/ipb home
+bin/ipb recents
+bin/ipb screenshot build/smoke.png
+bin/ipb service-ids
+bin/ipb descriptors
+bin/ipb services
+bin/ipb service-id touchscreen
+bin/ipb service-id gesture
+bin/ipb service-id keyboard
+bin/ipb pointer-report 0x501 0 0 0
+bin/ipb pointer 0 0
+bin/ipb scroll-report 0x501 0 0
+bin/ipb scroll-event 0 0 0 undefined undefined digital-crown
+bin/ipb vendor-defined 0 0 0
+bin/ipb key-up
+bin/ipb key escape 0.02
 ```
 
 The original investigation also captured screenshots after each command, but those are intentionally not committed to keep the repository small and reviewable.
@@ -44,20 +44,20 @@ The original investigation also captured screenshots after each command, but tho
 Additional protocol probe commands now exposed:
 
 ```sh
-bin/hdb probe-services
-HIDCTL_VERBOSE_DESCRIPTORS=1 bin/hdb descriptors
-bin/hdb reset-gesture 0x101
-bin/hdb button 0x0c 0x40
-bin/hdb keyboard-report 0x200 escape 1
-bin/hdb pointer-report 0x501 0 0 0
-bin/hdb scroll-report 0x501 0 0
-bin/hdb scroll-event 0 0 0
-bin/hdb vendor-defined 0 0 0
-bin/hdb uhid-report 0x101 0.5 0.5 0 0
-bin/hdb digitizer-event 0.5 0.5 0 0 1 2 0
-bin/hdb digitizer-event 0.5 0.5 0 0 1 end none
-bin/hdb raw com.apple.coredevice.feature.remote.hid.digitizer cd_digitizer_ext 0.5 0.5 0 0 1 end none
-bin/hdb digitizer-event 0.5 0.5 0 0 1 impossible none -> unknown digitizer event type: impossible
+bin/ipb probe-services
+HIDCTL_VERBOSE_DESCRIPTORS=1 bin/ipb descriptors
+bin/ipb reset-gesture 0x101
+bin/ipb button 0x0c 0x40
+bin/ipb keyboard-report 0x200 escape 1
+bin/ipb pointer-report 0x501 0 0 0
+bin/ipb scroll-report 0x501 0 0
+bin/ipb scroll-event 0 0 0
+bin/ipb vendor-defined 0 0 0
+bin/ipb uhid-report 0x101 0.5 0.5 0 0
+bin/ipb digitizer-event 0.5 0.5 0 0 1 2 0
+bin/ipb digitizer-event 0.5 0.5 0 0 1 end none
+bin/ipb raw com.apple.coredevice.feature.remote.hid.digitizer cd_digitizer_ext 0.5 0.5 0 0 1 end none
+bin/ipb digitizer-event 0.5 0.5 0 0 1 impossible none -> unknown digitizer event type: impossible
 ```
 
 `services` is now an alias of the verified descriptor-discovery path. `probe-services` reaches the UniversalHID Mercury peer but does not decode the synchronous `connectedServices` wrapper successfully. The verified DeviceHub discovery path is `descriptors`, which calls `CoreDevice.UniversalHIDService.connectedServiceDescriptors()` through a Swift async ABI bridge and decodes the returned descriptor dictionaries.
@@ -97,25 +97,25 @@ connectedDescriptor[4] serviceID:0x501 string:"CoreDevice touchscreenGesture"
 `service-ids` is host-side and does not require an active device socket. It is verified to return `mainTouchscreen = 0x101`, and that resolved value has been used successfully with:
 
 ```sh
-service_id=$(bin/hdb service-ids | awk '/^mainTouchscreen/ {print $2}')
-UHID_SERVICE_ID="$service_id" bin/hdb uhid-report "$service_id" 0.5 0.5 0 0
-UHID_SERVICE_ID="$service_id" bin/hdb reset-gesture
+service_id=$(bin/ipb service-ids | awk '/^mainTouchscreen/ {print $2}')
+UHID_SERVICE_ID="$service_id" bin/ipb uhid-report "$service_id" 0.5 0.5 0 0
+UHID_SERVICE_ID="$service_id" bin/ipb reset-gesture
 ```
 
 `UHID_SERVICE_ID=auto` is also verified for role resolution:
 
 ```text
-bin/hdb service-id touchscreen -> 0x101
-bin/hdb service-id gesture -> 0x501
-bin/hdb service-id keyboard -> 0x200
-bin/hdb service-id buttons -> 0x402
+bin/ipb service-id touchscreen -> 0x101
+bin/ipb service-id gesture -> 0x501
+bin/ipb service-id keyboard -> 0x200
+bin/ipb service-id buttons -> 0x402
 ```
 
 Keyboard report verification:
 
 ```text
-bin/hdb key-up
-bin/hdb key escape 0.02
+bin/ipb key-up
+bin/ipb key escape 0.02
 ```
 
 `key-up` sends an empty `UniversalHID.KeyboardReport` to service `0x200`; `key escape` sends usage `0x29` down, then an empty release report, followed by a UniversalHID barrier.
@@ -123,9 +123,9 @@ bin/hdb key escape 0.02
 Pointer report verification:
 
 ```text
-bin/hdb pointer-report 0x501 0 0 0
-bin/hdb pointer 0 0
-bin/hdb pointer-report 0x501 0 0 0 0 0 1
+bin/ipb pointer-report 0x501 0 0 0
+bin/ipb pointer 0 0
+bin/ipb pointer-report 0x501 0 0 0 0 0 1
 ```
 
 The zero-movement pointer reports are non-destructive smoke tests for construction and delivery of `UniversalHID.PointerReport` to the `CoreDevice touchscreenGesture` service. `flags=1` exercises the UInt32-backed `PointerReport.Flags.accelerated` path; other flag bits still need behavior enumeration.
@@ -133,8 +133,8 @@ The zero-movement pointer reports are non-destructive smoke tests for constructi
 Scroll report verification:
 
 ```text
-bin/hdb scroll-report 0x501 0 0
-bin/hdb scroll-report 0x501 0 0 256 -> Unable to build UniversalHID scroll HIDReport
+bin/ipb scroll-report 0x501 0 0
+bin/ipb scroll-report 0x501 0 0 256 -> Unable to build UniversalHID scroll HIDReport
 ```
 
 The zero-movement scroll report is a non-destructive smoke test for construction and delivery of `UniversalHID.ScrollReport` plus `ScrollCollection` to the `CoreDevice touchscreenGesture` service. The `phase=256` probe verifies local `UInt8` raw-value validation.
@@ -142,9 +142,9 @@ The zero-movement scroll report is a non-destructive smoke test for construction
 Standalone HIDScroll verification:
 
 ```text
-bin/hdb scroll-event 0 0 0 undefined undefined digital-crown
-bin/hdb scroll-event 0 0 0 impossible -> unknown scroll phase: impossible
-bin/hdb scroll-event 0 0 0 0x10000 -> HIDScroll raw values out of range
+bin/ipb scroll-event 0 0 0 undefined undefined digital-crown
+bin/ipb scroll-event 0 0 0 impossible -> unknown scroll phase: impossible
+bin/ipb scroll-event 0 0 0 0x10000 -> HIDScroll raw values out of range
 ```
 
 The zero-movement scroll event is a non-destructive smoke test for opening `com.apple.coredevice.feature.remote.hid.scroll`, dispatching `CoreDevice.HIDScroll.send(point:phase:momentum:target:)`, and following with `sendBarrier()`. The invalid phase probe verifies shell-side enum-name validation; the out-of-range probe verifies C-side raw-width validation.
@@ -152,9 +152,9 @@ The zero-movement scroll event is a non-destructive smoke test for opening `com.
 Standalone HIDVendorDefined verification:
 
 ```text
-bin/hdb vendor-defined 0 0 0
-bin/hdb vendor-defined 0 0 0 abc -> coredevice vendor-defined: invalid hex payload
-bin/hdb vendor-defined 0x10000 0 0 -> HIDVendorDefined raw values out of range
+bin/ipb vendor-defined 0 0 0
+bin/ipb vendor-defined 0 0 0 abc -> coredevice vendor-defined: invalid hex payload
+bin/ipb vendor-defined 0x10000 0 0 -> HIDVendorDefined raw values out of range
 ```
 
 The zero-length vendor-defined event is a non-destructive smoke test for opening `com.apple.coredevice.feature.remote.hid.vendordefined`, dispatching `CoreDevice.HIDVendorDefined.send(usagePage:usage:version:data:)`, and following with `sendBarrier()`. The other probes verify payload and raw-width validation before send.
@@ -216,7 +216,7 @@ Verified there without a device:
 
 - All 113 private symbols the sources bind (link-time `_$s...` references plus the `dlsym` names) still exist in CoreDevice, CoreDeviceUtilities, UniversalHID, and Mercury 642.15/78.
 - `make` builds cleanly with `DEVELOPER_DIR` pointing at the beta 6 app, no `XCODE_PATH` override needed after the Makefile default change.
-- `bin/hdb service-ids` prints the same service table as on beta 2.
+- `bin/ipb service-ids` prints the same service table as on beta 2.
 - The `createservicesocket` XPC request shape is still accepted by CoreDeviceService 642.15 when the client reports version 636.3 or 642.15; against an offline paired device the answer is `CoreDeviceError 4000, RemoteServiceDiscovery connectivity is not available`, i.e. the request got past decoding and version checks.
 - Passing a UDID instead of the CoreDevice UUID yields `CoreDevice.ActionError: Value for key CoreDevice.deviceIdentifier not found`. The 642.15 `devicectl list devices` table prints UDIDs, so read the UUID from `devicectl list devices --json-output` for `DEVICE_ID`.
 - Wire names are unchanged: the host still carries `com.apple.coredevice.hid.universal`; the DDI daemon `dtuhidd` registers `com.apple.coredevice.hid.universalhidservice`, `...hid.universalhid`, and `...hid.indigo` (button, scroll, digitizer, vendordefined) as RemoteXPC services behind the same six feature identifiers.
@@ -227,12 +227,12 @@ Not verified there: every command that needs a device. No iOS 27 device was atta
 ```sh
 export DEVELOPER_DIR=~/Downloads/Xcode-beta.app/Contents/Developer
 DEVICE_ID=$(xcrun devicectl list devices --json-output /tmp/d.json >/dev/null && python3 -c 'import json;print([d["identifier"] for d in json.load(open("/tmp/d.json"))["result"]["devices"] if d["connectionProperties"].get("tunnelState")=="connected"][0])')
-DEVICE_ID=$DEVICE_ID bin/hdb descriptors
-DEVICE_ID=$DEVICE_ID bin/hdb key-up
-DEVICE_ID=$DEVICE_ID bin/hdb screenshot build/before.png
-DEVICE_ID=$DEVICE_ID bin/hdb home
-DEVICE_ID=$DEVICE_ID bin/hdb tap 0.5 0.5
-DEVICE_ID=$DEVICE_ID bin/hdb screenshot build/after.png
+DEVICE_ID=$DEVICE_ID bin/ipb descriptors
+DEVICE_ID=$DEVICE_ID bin/ipb key-up
+DEVICE_ID=$DEVICE_ID bin/ipb screenshot build/before.png
+DEVICE_ID=$DEVICE_ID bin/ipb home
+DEVICE_ID=$DEVICE_ID bin/ipb tap 0.5 0.5
+DEVICE_ID=$DEVICE_ID bin/ipb screenshot build/after.png
 ```
 
 `scripts/smoke_matrix.sh <repo> <out_dir>` runs the non-destructive subset above and captures before/after screenshots; add `SMOKE_INTERACTIVE=1` to also exercise `home`, `tap`, `recents`, `swipe`, `scroll`, `long`, and `key`. The first thing to check in `descriptors` output is that the five services still decode with readable product strings; the `CodableValue` tag table in `docs/protocol.md` is the part most exposed to enum reordering between seeds.
@@ -280,24 +280,28 @@ Host <macos27-host> (macOS 27.0 beta 8, Xcode 27 beta 6, CoreDevice 642.15), dev
 
 Conclusion: the framework does not require iOS 27 on the device. With the Xcode 27 DDI, iOS 26.6.1 supports the touchscreen, keyboard, button, Indigo digitizer/scroll/vendor paths; only the trackpad-style `touchscreenGesture` service is iOS 27-specific. Older iOS versions are untested; `dtuhidd`'s `minos 17.0` is a build fact, not a verified matrix entry.
 
-## Rename to hdb and gate hardening (2026-09-07, evening)
+## Rename to ipb and gate hardening (2026-09-07, evening)
 
-The CLI is now `bin/hdb` (helper `hdb-helper`, env `HDB_HELPER`), version 0.1.0 (`hdb version`), with `make install PREFIX=` producing `bin/hdb`, `libexec/hdb-helper`, `share/hdb/`, and a Homebrew tap formula in `Formula/hdb.rb`. The installed layout was exercised from a scratch prefix on this Mac against the iPhone 13 Pro: `SMOKE PASSED`.
+The CLI is now `bin/ipb` (helper `ipb-helper`, env `IPB_HELPER`), version 0.1.0 (`ipb version`), with `make install PREFIX=` producing `bin/ipb`, `libexec/ipb-helper`, `share/ipb/`, and a Homebrew tap formula in `Formula/ipb.rb`. The installed layout was exercised from a scratch prefix on this Mac against the iPhone 13 Pro: `SMOKE PASSED`.
 
-Gate incident worth keeping: the first run of the renamed gate on <macos27-host> reported `touchscreenGesture service present: 0` for the iOS 27 iPhone 12 mini and skipped the gesture steps, although a direct `hdb descriptors` call showed all five services. Cause: the gate probed capabilities with a second `descriptors` call whose stderr was discarded; on <macos27-host> the tunnel now drops between consecutive calls (every call logs a warm-up), that probe failed, and its failure was read as "service absent". Fix: capabilities are derived from the descriptors step that already passed, the device OS major comes from `hdb devices`, and an iOS 27 device without the gesture service is a failure instead of a skip. Re-run after the fix: 13 Pro (this Mac) and 12 mini (<macos27-host>) report `present=1 expected=1`, the 15 Pro on iOS 26.6.1 reports `present=0 expected=0` with the two gesture steps skipped; all three `SMOKE PASSED`.
+Gate incident worth keeping: the first run of the renamed gate on <macos27-host> reported `touchscreenGesture service present: 0` for the iOS 27 iPhone 12 mini and skipped the gesture steps, although a direct `ipb descriptors` call showed all five services. Cause: the gate probed capabilities with a second `descriptors` call whose stderr was discarded; on <macos27-host> the tunnel now drops between consecutive calls (every call logs a warm-up), that probe failed, and its failure was read as "service absent". Fix: capabilities are derived from the descriptors step that already passed, the device OS major comes from `ipb devices`, and an iOS 27 device without the gesture service is a failure instead of a skip. Re-run after the fix: 13 Pro (this Mac) and 12 mini (<macos27-host>) report `present=1 expected=1`, the 15 Pro on iOS 26.6.1 reports `present=0 expected=0` with the two gesture steps skipped; all three `SMOKE PASSED`.
 
-Observation, not yet root-caused: with two phones attached to <macos27-host>, `tunnelState` returns to `disconnected` within seconds of each command, so nearly every `hdb` invocation there pays one warm-up (2–3 s). On this Mac with one wired phone the tunnel stayed up between calls earlier in the day.
+Observation, not yet root-caused: with two phones attached to <macos27-host>, `tunnelState` returns to `disconnected` within seconds of each command, so nearly every `ipb` invocation there pays one warm-up (2–3 s). On this Mac with one wired phone the tunnel stayed up between calls earlier in the day.
 
 ## devicectl-backed verbs (2026-09-07, iPhone 13 Pro iOS 27.0, this Mac)
 
-`hdb` now wraps devicectl behind adb-style verbs. Checked against the iPhone 13 Pro:
+`ipb` now wraps devicectl behind adb-style verbs. Checked against the iPhone 13 Pro:
 
 | Verb | Result |
 | --- | --- |
 | `apps`, `ps`, `info`, `lock-state`, `orientation` | listings returned |
-| `clipboard set "hdb 你好 🚀"` then `clipboard get` | round-trips UTF-8 text, the intended Unicode input path |
+| `clipboard set "ipb 你好 🚀"` then `clipboard get` | round-trips UTF-8 text, the intended Unicode input path |
 | `open https://www.apple.com`, `launch com.apple.Preferences` | opened Safari / Settings (screenshot) |
 | `location 37.3349 -122.0090`, `location clear` | accepted; negative values must be passed as `--longitude=-122.009`, which the wrapper does |
 | `ls / --app ai.looktech.glasses.memo.lab`, `push` / `pull` round trip | 477 files listed, file content identical after pull |
 | `ls / --app com.apple.Preferences` | refused (`ContainerLookupErrorDomain error 2`): system app containers are not reachable |
 | `screenrecord out.mp4 3` | devicectl requires `.mp4`; the device then answers `Screen Recording is not supported by this device` (CoreDeviceError 1001). Verb kept, passes the error through |
+
+## Rename to ipb (2026-09-07, late)
+
+`hdb` was too close to HarmonyOS's `hdc`, so the tool is now `ipb` (iOS Physical-device Bridge): `bin/ipb`, `ipb-helper`, `IPB_HELPER`, `Formula/ipb.rb`, org `ipbtools`, tap `ipbtools/homebrew-ipb`. Dated records above keep their original command names. Availability was checked on Homebrew, PyPI, npm, crates.io, GitHub, and the local command namespace before choosing.

@@ -1,10 +1,10 @@
-# AGENTS.md — hdb
+# AGENTS.md — ipb
 
 Guidance for any AI agent (Claude, Codex, others) working in this repository. Repository-local rules here override the machine-wide `~/.claude/CLAUDE.md`.
 
 ## What this project is
 
-hdb (HID / Hub Debug Bridge; GitHub home `hdbtools/hdb`, Homebrew tap `hdbtools/homebrew-hdb`) drives a physical iPhone from a Mac the way `adb` drives an Android phone: tap, swipe, long press, keys, Home, App Switcher, screenshot. It does this **without XCTest and without any third-party server on the phone**, by speaking to the HID daemon (`dtuhidd`) that Apple ships inside the Xcode 27 developer disk image, over the same CoreDevice / RemoteXPC path Xcode 27's Device Hub uses. The long-term goal is an adb-class tool for the agent era; see the roadmap below.
+ipb (iOS Physical-device Bridge; GitHub home `ipbtools/ipb`, Homebrew tap `ipbtools/homebrew-ipb`) drives a physical iPhone from a Mac the way `adb` drives an Android phone: tap, swipe, long press, keys, Home, App Switcher, screenshot. It does this **without XCTest and without any third-party server on the phone**, by speaking to the HID daemon (`dtuhidd`) that Apple ships inside the Xcode 27 developer disk image, over the same CoreDevice / RemoteXPC path Xcode 27's Device Hub uses. The long-term goal is an adb-class tool for the agent era; see the roadmap below.
 
 **Current release scope (v1, "simple validation build"): macOS 27 + Xcode 27 beta host, iOS 27 or iOS 26.6+ device.** Nothing else is a supported target. Do not add compatibility shims for other combinations without a matrix entry in `docs/verification.md` proving they work.
 
@@ -20,7 +20,7 @@ hdb (HID / Hub Debug Bridge; GitHub home `hdbtools/hdb`, Homebrew tap `hdbtools/
 | `docs/research/agent-frameworks.md` | Arbigent, Maestro, Appium MCP, mobile-mcp, agent-device, research agents, benchmarks; what primitives agents consume | Reference; refresh when the landscape moves |
 | `docs/research/ios-peer-tools.md` | idb, pymobiledevice3, go-ios, libimobiledevice, WDA, devicectl, Device Hub, device clouds | Reference |
 | `docs/research/direction-brief-2026-09-07.md`, `direction-review-astra-2026-09-07.md` | Evidence brief and the independent (Codex gpt-6-astra) direction review with a four-week plan | Superseded by newer reviews; keep for history |
-| `Formula/hdb.rb`, `VERSION`, `make install` | Homebrew tap formula, product version, and the install layout (`bin/hdb`, `libexec/hdb-helper`, `share/hdb/`) | Any release |
+| `Formula/ipb.rb`, `VERSION`, `make install` | Homebrew tap formula, product version, and the install layout (`bin/ipb`, `libexec/ipb-helper`, `share/ipb/`) | Any release |
 | `scripts/smoke_matrix.sh` | The acceptance gate: exits non-zero on any failed step or unexpected output; interactive mode captures screenshots | Whenever a command's contract changes |
 
 Plan documents for feature-level work go in `docs/` next to the ones above, named after the feature; small fixes are recorded in `docs/verification.md`, not in new files. Overwrite plans in place; history lives in git.
@@ -49,7 +49,7 @@ Each fact in `docs/protocol.md` says which of the three it rests on and on which
 
 Before changing code to fix a problem:
 
-1. Reproduce it with a command from this repo (ideally a `scripts/smoke_matrix.sh` step or a one-line `bin/hdb` invocation) and record host, device, and builds.
+1. Reproduce it with a command from this repo (ideally a `scripts/smoke_matrix.sh` step or a one-line `bin/ipb` invocation) and record host, device, and builds.
 2. State how a user reaches it: which command, in which device state. "Could happen in theory" is not a bug report.
 
 Review findings are triaged by **reachability × self-recovery**: a finding is worth a fix on top of the planned work only if a normal user hits it (high reachability) and the system does not recover by itself (low self-recovery, e.g. a stuck tunnel, a silent wrong tap, a misleading exit code). Edge cases with low reachability or that self-heal on the next call are recorded in `docs/verification.md` under "known, not fixed" and are not patched one by one. Do not chase corner cases with successive patches; if the same area needs a third patch, redesign the area.
@@ -62,7 +62,7 @@ A change is done when `scripts/smoke_matrix.sh` passes on the supported matrix a
 
 - Device identity is the CoreDevice UUID from `devicectl list devices --json-output`; the 642.x table view prints UDIDs, which the service rejects.
 - A fresh or idle device has `tunnelState = disconnected`; HID sockets fail with CoreDeviceError 4000 until any `devicectl device ...` call warms the tunnel. The wrapper does this once on exit code 4.
-- `bin/hdb` (zsh) is the CLI; `build/hdb-helper` (ObjC + Swift glue + arm64 shims) is the helper; both are invoked by `scripts/smoke_matrix.sh`.
+- `bin/ipb` (zsh) is the CLI; `build/ipb-helper` (ObjC + Swift glue + arm64 shims) is the helper; both are invoked by `scripts/smoke_matrix.sh`.
 - The macOS 27 test host is <macos27-host> (see the machine-level memory notes); it sleeps after one idle minute, run `caffeinate` for long sessions.
 
 ## Roadmap

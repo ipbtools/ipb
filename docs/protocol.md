@@ -107,7 +107,7 @@ mainTouchscreen(0x101)
 The CLI can still use this as an explicit `UHID_SERVICE_ID=0x101`, but the wrapper default is now `UHID_SERVICE_ID=auto`. In auto mode, the CLI calls `connectedServiceDescriptors()` and selects the descriptor whose product is `CoreDevice touchscreen(nil)`, falling back to `0x101` if discovery fails. The static value is also verified by calling CoreDeviceUtilities `HIDServiceID` getters through an indirect-return ABI shim:
 
 ```sh
-bin/hdb service-ids
+bin/ipb service-ids
 ```
 
 Observed output:
@@ -320,7 +320,7 @@ The returned value is native Swift Array storage for `[CoreDevice.HIDServiceDesc
 | `0x9` | `HIDServiceID` | boxed UInt64 service id |
 | `0xa` | string | boxed Swift `String` |
 
-On the verified iPhone 13 Pro/iOS 27 device, `bin/hdb descriptors` decodes:
+On the verified iPhone 13 Pro/iOS 27 device, `bin/ipb descriptors` decodes:
 
 | Service | Product | Primary usage page | Primary usage | Notable fields |
 | --- | --- | --- | --- | --- |
@@ -330,18 +330,18 @@ On the verified iPhone 13 Pro/iOS 27 device, `bin/hdb descriptors` decodes:
 | `0x500` | `CoreDevice avpCustom` | `65377` | `91` | AVP/vendor custom service |
 | `0x501` | `CoreDevice touchscreenGesture` | `1` | `2` | `DeviceTypeHint=Trackpad`, suppresses mouse pointer |
 
-`HIDCTL_VERBOSE_DESCRIPTORS=1 bin/hdb descriptors` prints raw Array, metadata, and value-witness details for future ABI checks.
+`HIDCTL_VERBOSE_DESCRIPTORS=1 bin/ipb descriptors` prints raw Array, metadata, and value-witness details for future ABI checks.
 
 The shell wrapper exposes descriptor-derived service resolution:
 
 ```sh
-bin/hdb services              # alias of descriptors
-bin/hdb descriptors
-bin/hdb service-id touchscreen
-bin/hdb service-id gesture
-bin/hdb service-id keyboard
-bin/hdb service-id buttons
-bin/hdb service-id avp
+bin/ipb services              # alias of descriptors
+bin/ipb descriptors
+bin/ipb service-id touchscreen
+bin/ipb service-id gesture
+bin/ipb service-id keyboard
+bin/ipb service-id buttons
+bin/ipb service-id avp
 ```
 
 High-level UniversalHID commands (`tap`, `swipe`, `scroll`, `reset-gesture`, `recents-nav`, and `recents-dock`) pass through this resolver when `UHID_SERVICE_ID=auto`.
@@ -377,16 +377,16 @@ Currently generated via `UniversalHID.framework` private Swift symbols:
 Low-level CLI commands:
 
 ```sh
-bin/hdb uhid-report 0x101 0.5 0.5 1 1
-bin/hdb uhid-swipe-report 0x101 0.5 0.5 1 1 0 0 0
-bin/hdb keyboard-report 0x200 escape 1
-bin/hdb pointer-report 0x501 0 0 0
-bin/hdb scroll-report 0x501 0 0
-bin/hdb scroll-event 0 0 0
-bin/hdb vendor-defined 0 0 0
-bin/hdb key-up
-bin/hdb nav-report 0x101 1 1 0x0d 5 0.0 0.5 0.99
-bin/hdb dock-report 0x101 1 1 0x0d 3 0.0 0.5 0.99
+bin/ipb uhid-report 0x101 0.5 0.5 1 1
+bin/ipb uhid-swipe-report 0x101 0.5 0.5 1 1 0 0 0
+bin/ipb keyboard-report 0x200 escape 1
+bin/ipb pointer-report 0x501 0 0 0
+bin/ipb scroll-report 0x501 0 0
+bin/ipb scroll-event 0 0 0
+bin/ipb vendor-defined 0 0 0
+bin/ipb key-up
+bin/ipb nav-report 0x101 1 1 0x0d 5 0.0 0.5 0.99
+bin/ipb dock-report 0x101 1 1 0x0d 3 0.0 0.5 0.99
 ```
 
 ## CoreDevice HID Vendor-Defined Feature
@@ -422,7 +422,7 @@ Runtime metadata shows `IndigoHIDVendorDefined` stores the normal HIDXPC service
 CLI usage:
 
 ```sh
-bin/hdb vendor-defined <usage_page> <usage> <version> [hex_payload]
+bin/ipb vendor-defined <usage_page> <usage> <version> [hex_payload]
 ```
 
 The optional payload is a hex string. Separators ` `, `:`, `_`, and `-` are accepted; odd-length or non-hex payloads are rejected before send.
@@ -430,9 +430,9 @@ The optional payload is a hex string. Separators ` `, `:`, `_`, and `-` are acce
 Verified non-destructive sequence:
 
 ```sh
-bin/hdb vendor-defined 0 0 0
-bin/hdb vendor-defined 0 0 0 abc
-bin/hdb vendor-defined 0x10000 0 0
+bin/ipb vendor-defined 0 0 0
+bin/ipb vendor-defined 0 0 0 abc
+bin/ipb vendor-defined 0x10000 0 0
 ```
 
 The first command sends an empty vendor-defined event and follows it with `sendBarrier()`. The latter two commands verify invalid payload and raw-width validation.
@@ -486,8 +486,8 @@ Raw values confirmed from `CoreDeviceUtilities.framework` disassembly:
 Verified non-destructive sequence:
 
 ```sh
-bin/hdb scroll-event 0 0 0 undefined undefined digital-crown
-bin/hdb scroll-event 0 0 0 impossible
+bin/ipb scroll-event 0 0 0 undefined undefined digital-crown
+bin/ipb scroll-event 0 0 0 impossible
 ```
 
 The first command sends a zero-movement event through `CoreDevice.HIDScroll` and follows it with `sendBarrier()`. The second command verifies shell-side name validation before a socket is opened.
@@ -518,8 +518,8 @@ The CLI constructs `UniversalHID.HIDReport(bitCount:id:)`, wraps it with `Univer
 Verified non-destructive sequence:
 
 ```sh
-bin/hdb scroll-report 0x501 0 0
-bin/hdb scroll-report 0x501 0 0 256
+bin/ipb scroll-report 0x501 0 0
+bin/ipb scroll-report 0x501 0 0 256
 ```
 
 The first command sends a zero-movement scroll report successfully. The second command verifies local validation: `phase`, `momentum`, and `flags` are `UInt8`-sized raw values, so `phase=256` is rejected before a report is sent.
@@ -547,10 +547,10 @@ The CLI constructs `UniversalHID.HIDReport(bitCount:id:)`, wraps it with `Univer
 Verified non-destructive sequence:
 
 ```sh
-bin/hdb service-id gesture
-bin/hdb pointer-report 0x501 0 0 0
-bin/hdb pointer-report 0x501 0 0 0 0 0 1
-bin/hdb pointer 0 0
+bin/ipb service-id gesture
+bin/ipb pointer-report 0x501 0 0 0
+bin/ipb pointer-report 0x501 0 0 0 0 0 1
+bin/ipb pointer 0 0
 ```
 
 `PointerReport.Flags` is a UInt32-backed Swift `OptionSet`. Its setter takes an indirect `Flags` value, so the CLI uses a small ABI shim that places the raw UInt32 value on the stack and passes that address to the private setter. `flags=1` matches the framework's static `accelerated` getter; other flag bits still need behavior enumeration.
@@ -574,10 +574,10 @@ The CLI constructs `UniversalHID.HIDReport(bitCount: 0xf8, id: 0x01)`, sets the 
 Verified sequences:
 
 ```sh
-bin/hdb key escape
-bin/hdb key-down escape
-bin/hdb key-up
-bin/hdb keyboard-report 0x200 0x29 1
+bin/ipb key escape
+bin/ipb key-down escape
+bin/ipb key-up
+bin/ipb keyboard-report 0x200 0x29 1
 ```
 
 ## CoreDevice Keyboard / Pointer Capability Adapters
@@ -640,7 +640,7 @@ down -> up -> barrier
 Generic CLI:
 
 ```sh
-bin/hdb button 0x0c 0x40
+bin/ipb button 0x0c 0x40
 ```
 
 ## HID Digitizer
@@ -671,7 +671,7 @@ Observed edge values:
 The CLI exposes the raw digitizer event:
 
 ```sh
-bin/hdb digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
+bin/ipb digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
 ```
 
 The raw numeric values are still accepted for protocol probing. The named event values are verified through long-press/tap sequencing; `bottom` is verified through the App Switcher edge gesture. Other `DigitizerEdge` and `DigitizerTarget` values are intentionally left raw until enumerated.

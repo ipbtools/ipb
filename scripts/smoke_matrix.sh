@@ -1,9 +1,9 @@
 #!/usr/bin/env zsh
-# Smoke gate for hdb. Exits non-zero if any step fails.
+# Smoke gate for ipb. Exits non-zero if any step fails.
 # usage: [DEVICE_ID=<uuid>] [SMOKE_INTERACTIVE=1] [TAP_XY="0.15 0.12"] [LONG_XY="0.15 0.12"] smoke_matrix.sh <repo_root> <out_dir>
 set -uo pipefail
 ROOT="${1:?repo root}"; OUT="${2:?out dir}"; mkdir -p "$OUT"
-CTL="$ROOT/bin/hdb"
+CTL="$ROOT/bin/ipb"
 log="$OUT/smoke.log"; : > "$log"
 failures=0
 TAP_XY="${TAP_XY:-0.15 0.12}"     # first home-screen icon on an iPhone 12 mini / 13 Pro grid

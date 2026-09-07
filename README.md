@@ -1,6 +1,6 @@
-# hdb
+# ipb
 
-`hdb` is a small CLI for driving basic iOS 27 device interactions through CoreDevice private services, without XCUITest or WebDriverAgent.
+`ipb` (iOS Physical-device Bridge, "the adb for iPhone"; formerly devicehubctl and briefly hdb) is a small CLI for driving basic iOS 27 device interactions through CoreDevice private services, without XCUITest or WebDriverAgent.
 
 It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, keyboard keys, pointer reports, scroll reports, raw scroll events, vendor-defined HID events, Home, App Switcher, screenshots, and descriptor-based HID service discovery.
 
@@ -25,17 +25,17 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 ## Install (Homebrew, stage 1 distribution)
 
-The tap `hdbtools/homebrew-hdb` carries the same formula as `Formula/hdb.rb` here; it builds from source, so the machine needs Xcode 27 beta selected for the build and its CoreDevice package for runtime:
+The tap `ipbtools/homebrew-ipb` carries the same formula as `Formula/ipb.rb` here; it builds from source, so the machine needs Xcode 27 beta selected for the build and its CoreDevice package for runtime:
 
 ```sh
-brew tap hdbtools/hdb
-brew install --HEAD hdb
-hdb version          # hdb 0.1.0 (macOS ..., CoreDevice 642.15)
-hdb service-ids      # host-only check
-hdb descriptors      # device path check
+brew tap ipbtools/ipb
+brew install --HEAD ipb
+ipb version          # ipb 0.1.0 (macOS ..., CoreDevice 642.15)
+ipb service-ids      # host-only check
+ipb descriptors      # device path check
 ```
 
-`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/hdb`, `libexec/hdb-helper`, `share/hdb/VERSION`, `share/hdb/smoke_matrix.sh`.
+`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`, `libexec/ipb-helper`, `share/ipb/VERSION`, `share/ipb/smoke_matrix.sh`.
 
 ## Build
 
@@ -46,7 +46,7 @@ make
 The helper binary is written to:
 
 ```sh
-build/hdb-helper
+build/ipb-helper
 ```
 
 ## Usage
@@ -54,37 +54,37 @@ build/hdb-helper
 Touch coordinates are normalized from top-left to bottom-right, in the `0..1` range. Pointer deltas are signed relative integers.
 
 ```sh
-bin/hdb devices                 # physical devices: uuid, name, os, transport, tunnel
-bin/hdb device                  # the device the other commands would use
-bin/hdb tap 0.5 0.5
-bin/hdb launch com.apple.Preferences
-bin/hdb open https://www.apple.com
-bin/hdb clipboard set "你好 🚀" && bin/hdb clipboard get
-bin/hdb apps | bin/hdb ps | bin/hdb lock-state | bin/hdb orientation
-bin/hdb push local.txt /Documents/x.txt --app <bundle-id>
-bin/hdb long 0.615 0.675 1.2
-bin/hdb scroll 0.5 0.75 0 0.30
-bin/hdb swipe 0.5 0.75 0.5 0.35
-bin/hdb home
-bin/hdb recents
-bin/hdb screenshot build/current.png
-bin/hdb service-ids
-bin/hdb services
-bin/hdb service-id touchscreen
-bin/hdb reset-gesture
-bin/hdb pointer 0 0
-bin/hdb scroll-report 0x501 0 0
-bin/hdb scroll-event 0 0 0
-bin/hdb vendor-defined 0 0 0
-bin/hdb key escape
-bin/hdb button 0x0c 0x40
-bin/hdb raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
+bin/ipb devices                 # physical devices: uuid, name, os, transport, tunnel
+bin/ipb device                  # the device the other commands would use
+bin/ipb tap 0.5 0.5
+bin/ipb launch com.apple.Preferences
+bin/ipb open https://www.apple.com
+bin/ipb clipboard set "你好 🚀" && bin/ipb clipboard get
+bin/ipb apps | bin/ipb ps | bin/ipb lock-state | bin/ipb orientation
+bin/ipb push local.txt /Documents/x.txt --app <bundle-id>
+bin/ipb long 0.615 0.675 1.2
+bin/ipb scroll 0.5 0.75 0 0.30
+bin/ipb swipe 0.5 0.75 0.5 0.35
+bin/ipb home
+bin/ipb recents
+bin/ipb screenshot build/current.png
+bin/ipb service-ids
+bin/ipb services
+bin/ipb service-id touchscreen
+bin/ipb reset-gesture
+bin/ipb pointer 0 0
+bin/ipb scroll-report 0x501 0 0
+bin/ipb scroll-event 0 0 0
+bin/ipb vendor-defined 0 0 0
+bin/ipb key escape
+bin/ipb button 0x0c 0x40
+bin/ipb raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
 ```
 
 `DEVICE_ID` is optional. Without it the wrapper picks the single wired or tunnelled physical device; with several devices it lists them and exits. Use the CoreDevice UUID from `devicectl list devices --json-output` (the 642.x table view prints UDIDs, which the service rejects):
 
 ```sh
-DEVICE_ID=<coredevice-uuid> bin/hdb tap 0.5 0.5
+DEVICE_ID=<coredevice-uuid> bin/ipb tap 0.5 0.5
 ```
 
 Useful runtime overrides:
@@ -95,7 +95,7 @@ UHID_SERVICE_ID=auto                 # or a fixed id such as 0x101
 UHID_SERVICE_FALLBACK=0x101          # opt in to a fixed id when descriptor discovery fails; unset = error
 DEVELOPER_DIR=/path/to/Xcode-beta.app/Contents/Developer   # only needed for `make`; runtime uses the CoreDevice package
 DEVICECTL=/path/to/devicectl         # defaults to the copy inside CoreDevice.framework
-HDB_HELPER=/path/to/hdb-helper
+IPB_HELPER=/path/to/ipb-helper
 HIDCTL_WAIT_MS=700                   # settle time after each send
 HIDCTL_TIMEOUT_S=30                  # watchdog for a single helper run
 ```
@@ -107,11 +107,11 @@ Exit codes from the helper: 0 ok, 1 a dispatched operation or the remote connect
 Supported `service-id` roles:
 
 ```sh
-bin/hdb service-id touchscreen
-bin/hdb service-id gesture
-bin/hdb service-id keyboard
-bin/hdb service-id buttons
-bin/hdb service-id avp
+bin/ipb service-id touchscreen
+bin/ipb service-id gesture
+bin/ipb service-id keyboard
+bin/ipb service-id buttons
+bin/ipb service-id avp
 ```
 
 ## Smoke gate
@@ -123,35 +123,35 @@ SMOKE_INTERACTIVE=1 TAP_XY="0.15 0.12" scripts/smoke_matrix.sh . build/smoke   #
 
 Every step must exit 0 and, where stated, print the expected output; the script exits non-zero otherwise. Screenshots before and after each interactive step land in the output directory; identical consecutive frames are reported as warnings because a system alert can legitimately freeze the screen.
 
-## Feature matrix: hdb vs adb vs idb vs devicectl
+## Feature matrix: ipb vs adb vs idb vs devicectl
 
-Physical devices only. "own" means hdb implements the feature itself over the CoreDevice HID socket; "devicectl" means hdb is a thin adb-style verb over `xcrun devicectl`. idb columns reflect its documented real-device behaviour (its `ui` commands are simulator-only).
+Physical devices only. "own" means ipb implements the feature itself over the CoreDevice HID socket; "devicectl" means ipb is a thin adb-style verb over `xcrun devicectl`. idb columns reflect its documented real-device behaviour (its `ui` commands are simulator-only).
 
-| Capability | adb | hdb | idb (real device) | devicectl |
+| Capability | adb | ipb | idb (real device) | devicectl |
 | --- | --- | --- | --- | --- |
-| List devices | `adb devices` | `hdb devices` (devicectl) | `idb list-targets` | `list devices` |
-| Tap / swipe / long press | `input tap/swipe` | `hdb tap/swipe/long` (own) | no | no |
-| Scroll | `input swipe` | `hdb scroll` (own) | no | no |
-| Key / text | `input keyevent/text` | `hdb key` (HID usages, own); Unicode via `hdb clipboard set` + paste | no | no |
-| Home / App Switcher | `keyevent HOME/APP_SWITCH` | `hdb home` / `hdb recents` (own) | no | no |
-| Screenshot | `screencap` | `hdb screenshot` (devicectl) | yes | `capture screenshot` |
-| Screen recording | `screenrecord` | `hdb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
+| List devices | `adb devices` | `ipb devices` (devicectl) | `idb list-targets` | `list devices` |
+| Tap / swipe / long press | `input tap/swipe` | `ipb tap/swipe/long` (own) | no | no |
+| Scroll | `input swipe` | `ipb scroll` (own) | no | no |
+| Key / text | `input keyevent/text` | `ipb key` (HID usages, own); Unicode via `ipb clipboard set` + paste | no | no |
+| Home / App Switcher | `keyevent HOME/APP_SWITCH` | `ipb home` / `ipb recents` (own) | no | no |
+| Screenshot | `screencap` | `ipb screenshot` (devicectl) | yes | `capture screenshot` |
+| Screen recording | `screenrecord` | `ipb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
 | UI hierarchy | `uiautomator dump` | no (captions only via accessibility, no frames) | `ui describe-all` (simulator) | no |
-| Install / uninstall | `install` / `uninstall` | `hdb install` / `hdb uninstall` (devicectl) | yes | `install app` / `uninstall app` |
-| Launch / kill / ps | `am start` / `am force-stop` / `ps` | `hdb launch` / `hdb kill <pid>` / `hdb ps` (devicectl) | launch / terminate | `process launch/signal`, `info processes` |
-| Open URL / deep link | `am start -a VIEW -d` | `hdb open <url>` (devicectl) | `open` | `process openURL` |
-| Installed apps | `pm list packages` | `hdb apps` (devicectl) | `list-apps` | `info apps` |
-| Files | `push` / `pull` / `shell ls` | `hdb push/pull/ls ... --app <bundle>` (data container of developer-signed apps; system app containers are refused, devicectl) | `file push/pull` (app container) | `copy to/from`, `info files` |
-| Clipboard | `shell cmd clipboard` (limited) | `hdb clipboard get/set` (devicectl, Unicode ok) | no | `pasteboard` |
-| Location | emulator only | `hdb location <lat> <lon>` / `clear` (devicectl) | `set-location` (simulator) | `simulate location` |
-| Orientation | `settings put` | `hdb orientation [value]` (devicectl) | no | `orientation` |
-| Device info / lock state | `getprop` | `hdb info` / `hdb lock-state` (devicectl) | `describe` | `info details/lockState` |
+| Install / uninstall | `install` / `uninstall` | `ipb install` / `ipb uninstall` (devicectl) | yes | `install app` / `uninstall app` |
+| Launch / kill / ps | `am start` / `am force-stop` / `ps` | `ipb launch` / `ipb kill <pid>` / `ipb ps` (devicectl) | launch / terminate | `process launch/signal`, `info processes` |
+| Open URL / deep link | `am start -a VIEW -d` | `ipb open <url>` (devicectl) | `open` | `process openURL` |
+| Installed apps | `pm list packages` | `ipb apps` (devicectl) | `list-apps` | `info apps` |
+| Files | `push` / `pull` / `shell ls` | `ipb push/pull/ls ... --app <bundle>` (data container of developer-signed apps; system app containers are refused, devicectl) | `file push/pull` (app container) | `copy to/from`, `info files` |
+| Clipboard | `shell cmd clipboard` (limited) | `ipb clipboard get/set` (devicectl, Unicode ok) | no | `pasteboard` |
+| Location | emulator only | `ipb location <lat> <lon>` / `clear` (devicectl) | `set-location` (simulator) | `simulate location` |
+| Orientation | `settings put` | `ipb orientation [value]` (devicectl) | no | `orientation` |
+| Device info / lock state | `getprop` | `ipb info` / `ipb lock-state` (devicectl) | `describe` | `info details/lockState` |
 | Logs | `logcat` | no (planned: syslog via RemoteXPC) | `log` | no |
 | Shell | `adb shell` | no (iOS has no shell) | no | no |
 | Port forward | `forward` / `reverse` | no | no | no |
-| Reboot / sysdiagnose / pair | `reboot` | `hdb reboot` / `hdb sysdiagnose` / `hdb pair` (devicectl) | no | `reboot`, `sysdiagnose`, `manage pair` |
+| Reboot / sysdiagnose / pair | `reboot` | `ipb reboot` / `ipb sysdiagnose` / `ipb pair` (devicectl) | no | `reboot`, `sysdiagnose`, `manage pair` |
 | Needs on-device server / XCTest | no (adbd is OS-provided) | no (Apple DDI daemon only) | yes for UI (XCTest) | n/a |
-| Raw escape hatch | `adb shell <cmd>` | `hdb devicectl <args>` | | |
+| Raw escape hatch | `adb shell <cmd>` | `ipb devicectl <args>` | | |
 
 ## Interaction Backends
 
@@ -192,7 +192,7 @@ See [docs/verification.md](docs/verification.md) for the exact command set used.
 
 ## License and notice
 
-MIT (see `LICENSE`). hdb talks to undocumented Apple interfaces (CoreDevice, RemoteXPC, the developer disk image's HID daemon) and redistributes no Apple components; the CoreDevice package and the disk image come from Xcode on the user's machine. Apple may change these interfaces between releases. A future Python client built on pymobiledevice3 (GPL-3.0) will live in a separate repository so this one stays MIT.
+MIT (see `LICENSE`). ipb talks to undocumented Apple interfaces (CoreDevice, RemoteXPC, the developer disk image's HID daemon) and redistributes no Apple components; the CoreDevice package and the disk image come from Xcode on the user's machine. Apple may change these interfaces between releases. A future Python client built on pymobiledevice3 (GPL-3.0) will live in a separate repository so this one stays MIT.
 
 See [docs/protocol.md](docs/protocol.md) for the current protocol map, symbol evidence, and known gaps.
 
