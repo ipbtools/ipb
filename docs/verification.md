@@ -269,12 +269,13 @@ Pairing note: a phone that has never trusted the host shows up in `devicectl lis
 
 Xcode-free client spike (see `docs/standalone-distribution.md`): with pymobiledevice3 11.8.0 and its userspace tunnel, and no CoreDevice host stack in the loop, `dtuhidd` on the iPhone 13 Pro answered `connectedServices` with the same five services, and two raw `send` dictionaries (digitizer report id 0x09, 40 bytes) tapped the App Library search field at (0.15, 0.12). The `{isBarrier: true}` message got no reply within 5 s over that path.
 
-## Open question: does the device need iOS 27?
+## iOS 26 device with the Xcode 27 DDI (answered 2026-09-07)
 
-Evidence so far (2026-09-07):
+Host Mac-M2 (macOS 27.0 beta 8, Xcode 27 beta 6, CoreDevice 642.15), device iPhone 15 Pro on iOS 26.6.1 (23G83), USB, previously paired.
 
-- `dtuhidd` in the Xcode 27 beta 6 DDI is built with `LC_BUILD_VERSION minos 17.0, sdk 27.0`, and the DDI is the single personalized image Apple uses for iOS 17+, so the binary itself is not iOS 27 specific.
-- An iPhone 11 on iOS 26.6.1 (23G83), paired to Mac-M2 but reachable only over the local network, could not mount that DDI: `devicectl device info ddiServices` returned CoreDeviceError 12040 and the HID socket was refused with 1001. This does not separate "iOS 26 unsupported" from "network-only mount unsupported"; a USB-attached iOS 26 device is required to answer it.
-- On iOS 27 the device fetched the 642.15 DDI by itself as a `com.apple.MobileAsset.DDI` cryptex; whether iOS 26 does the same or relies on the host-supplied image is untested.
+- `devicectl device info ddiServices` mounted the beta 6 DDI (`buildUpdate 27A5252f`, `CoreDevice-642.15`, `isUsable: true`, `contentIsCompatible: true`). `dtuhidd` is built with `LC_BUILD_VERSION minos 17.0`, consistent with running there.
+- `descriptors` returns **four** services on iOS 26: `0x101 touchscreen(nil)`, `0x200 keyboard`, `0x402 mainScreenButtons`, `0x500 avpCustom`. The `0x501 touchscreenGesture` service present on both iOS 27 phones is absent, so `service-id gesture`, `pointer`, and `scroll-report` fail with exit 3 (unresolved role). The smoke gate now skips those steps when the service is missing.
+- Everything else passed: key-up, scroll-event, vendor-defined, reset-gesture, screenshot, and the full interactive set with all 13 frames distinct; `tap 0.15 0.12` launched the top-left app (Days Matter), `recents` showed the App Switcher, `home` returned to SpringBoard.
+- Earlier attempt over the local network on an iOS 26.6.1 iPhone 11 failed at DDI mount (CoreDeviceError 12040); the difference was the transport, not the OS.
 
-Until a USB test exists, the supported matrix stays macOS 27 + Xcode 27 beta + iOS 27.
+Conclusion: the framework does not require iOS 27 on the device. With the Xcode 27 DDI, iOS 26.6.1 supports the touchscreen, keyboard, button, Indigo digitizer/scroll/vendor paths; only the trackpad-style `touchscreenGesture` service is iOS 27-specific. Older iOS versions are untested; `dtuhidd`'s `minos 17.0` is a build fact, not a verified matrix entry.

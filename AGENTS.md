@@ -70,4 +70,4 @@ A change is done when `scripts/smoke_matrix.sh` passes on the supported matrix a
 2. Python client on pymobiledevice3 (CLI + MCP sharing one session layer), keeping the helper as the protocol oracle; persistent session, screenshot contract with frame id/orientation, Unicode input via pasteboard.
 3. Decide on a native single-binary implementation only if licence, performance, or install cost measured in step 2 demand it.
 
-Open question tracked in `docs/verification.md`: whether the framework requires iOS 27 on the device, or whether the Xcode 27 DDI (whose `dtuhidd` is built with `minos 17.0`) also enables it on iOS 26 devices. Answer it with a USB-attached iOS 26 device, not by inference.
+Answered 2026-09-07 (`docs/verification.md`): the device does **not** need iOS 27. With the Xcode 27 DDI, an iOS 26.6.1 iPhone 15 Pro passed the full interactive smoke; the only OS-dependent difference is that the `touchscreenGesture` (0x501) service, used by `pointer` and `scroll-report`, exists on iOS 27 only. Widening the v1 support statement beyond iOS 27 is a product decision; the smoke gate already handles both service sets.

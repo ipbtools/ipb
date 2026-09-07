@@ -10,7 +10,7 @@ The basic interaction path is verified, and the CLI now uses DeviceHub's async d
 
 - A host whose installed CoreDevice package is 636.x or newer. This ships with Xcode 27 beta (`XcodeSystemResources.pkg`); it is what puts `UniversalHIDService`, the `HIDServiceID` helpers, and the embedded `UniversalHID.framework` into `/Library/Developer/PrivateFrameworks`.
 - Xcode 27 beta on the host. Its minimum macOS is 26.4, so macOS 26.4+ hosts qualify as well as macOS 27 beta hosts. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
-- A connected iOS 27 device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted.
+- A connected iOS 27 device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted. iOS 26.6.1 also passes the smoke gate with that DDI, minus the `touchscreenGesture` service (`pointer`, `scroll-report`); see `docs/verification.md`.
 - GitHub-hosted code should be treated as beta/private-ABI research, because Apple may change these interfaces between seeds.
 
 Xcode 26.x hosts cannot run this tool as-is: CoreDevice 518.x lacks the UniversalHID service protocol, and the Xcode 26 DDI ships no HID daemon, so every `feature.remote.hid.*` / `universalhidservice` socket request is refused with "Create Service Socket is not supported by this device".
