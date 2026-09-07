@@ -2,6 +2,11 @@
 #import <objc/runtime.h>
 #include <xpc/xpc.h>
 #include <uuid/uuid.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <string.h>
 #include <dlfcn.h>
 extern void _coredevice_xpc_add_bundle(NSBundle *bundle);
 extern void _coredevice_xpc_init_services(void);
@@ -68,10 +73,20 @@ int main(int argc, char **argv) {
 
     // build start input
     xpc_object_t in = xpc_dictionary_create_empty();
+    // bind a real UDP receiver on the host tunnel address
+    int rtp = socket(AF_INET6, SOCK_DGRAM, 0);
+    struct sockaddr_in6 la; memset(&la,0,sizeof la); la.sin6_len=sizeof la; la.sin6_family=AF_INET6; la.sin6_port=0;
+    inet_pton(AF_INET6, rxip, &la.sin6_addr);
+    unsigned scope = if_nametoindex(getenv("HDB_UTUN") ?: "utun9"); la.sin6_scope_id = scope;
+    int br = bind(rtp, (struct sockaddr*)&la, sizeof la);
+    socklen_t sl = sizeof la; getsockname(rtp, (struct sockaddr*)&la, &sl);
+    uint16_t rxport = ntohs(la.sin6_port);
+    printf("host RTP socket bound rc=%d on [%s%%%u]:%u\n", br, rxip, scope, rxport);
+    uint16_t txport = argc>5 ? atoi(argv[5]) : 51000;
     xpc_dictionary_set_string(in, "receiverIP", rxip);
-    xpc_dictionary_set_uint64(in, "receiverPort", 0);   // let device pick
+    xpc_dictionary_set_uint64(in, "receiverPort", rxport);
     xpc_dictionary_set_string(in, "senderIP", txip);
-    xpc_dictionary_set_uint64(in, "senderPort", 0);
+    xpc_dictionary_set_uint64(in, "senderPort", txport);
     xpc_dictionary_set_uint64(in, "timeout", 30);
     xpc_dictionary_set_string(in, "type", "video");
     xpc_dictionary_set_string(in, "direction", "output");
@@ -84,7 +99,13 @@ int main(int argc, char **argv) {
     // trim
     NSString *s = [NSString stringWithUTF8String:sd]; free(sd);
     s = [[s componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] componentsJoinedByString:@" "];
-    printf("start reply: %.1200s\n", s.UTF8String);
+    printf("start reply: %.900s\n", s.UTF8String);
+    // poll for inbound RTP for 3s
+    struct timeval tv={3,0}; setsockopt(rtp,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof tv);
+    uint8_t pkt[2048]; struct sockaddr_in6 from; socklen_t fl=sizeof from;
+    ssize_t n = recvfrom(rtp, pkt, sizeof pkt, 0, (struct sockaddr*)&from, &fl);
+    if (n>0){ char fb[64]; inet_ntop(AF_INET6,&from.sin6_addr,fb,sizeof fb); printf("RTP packet: %zd bytes from [%s]:%u  first: %02x %02x %02x %02x\n", n, fb, ntohs(from.sin6_port), pkt[0],pkt[1],pkt[2],pkt[3]); }
+    else printf("no RTP packet within 3s (n=%zd)\n", n);
     xpc_object_t so = xpc_dictionary_get_dictionary(srep, "CoreDevice.output");
     if (so) {
         size_t alen = 0; const void *ans = xpc_dictionary_get_data(so, "negotiatorAnswer", &alen);

@@ -47,6 +47,25 @@ The negotiation is actually done by **AVConference** (`/System/Library/PrivateFr
 
 Current state: with a real offer the device gets past format validation to **transport setup**, failing with `NSPOSIXErrorDomain 49` (EADDRNOTAVAIL) for every working mode. So the offer format is accepted; what remains is the RTP endpoint exchange — the offer must carry the host's actual bound RTP socket address (on the CoreDevice tunnel, host `utun` `fdd2:…::2`, device `fdd2:…::1`), which means creating the local `AVCVideoStream`/endpoint first so its address goes into the offer, rather than passing placeholder `receiverIP`/`senderIP`. The screenshot loop is not an alternative: `devicectl` screenshot is ~1.4 s/frame (0.7 fps), and pymobiledevice3 offers only single-frame capture.
 
+## Transport boundary (2026-09-07 night, definitive)
+
+The offer is understood end to end. `Experiments/tools/avc_offer_dump.m`: the negotiator offer is a `bplist00` of `{avcMediaStreamNegotiatorMediaBlob (zlib), avcMediaStreamNegotiatorMode, avcMediaStreamOptionRemoteEndpointInfo (protobuf host identity: model "Mac17,9", avc "2205.3.1", build "25F80"), avcMediaStreamOptionCallID}`. The media blob inflates (zlib) to a 352-byte protobuf codec description: encoder "Viceroy 1.7.0", H.264 settings `FLS;MS:-1;LF:-1;LTR;CABAC;POS:0;EOD:1;HTS:2;RR:3`, and a ladder of bitrate/resolution tiers. No transport address is in the offer.
+
+The transport is the wall. `AVCMediaStreamConfig` carries `rtpNWConnectionClientID` / `rtcpNWConnectionClientID`: the RTP/RTCP flow over **Network.framework `nw_connection`s that CoreDevice's tunnel manager (`remoted`) establishes**, referenced by client id in the start options, not over raw UDP that a client opens. Proof: the `mediastreamstart` `receiverIP`/`senderIP` are the control-tunnel ULA addresses devicectl reports (`fdd2:…::2` host, `::1` device), but that address is not bindable by any user process (`bind` → EADDRNOTAVAIL, code 49) and the `utun` carrying it is torn down and recreated between calls (`if_nametoindex` returns 0 seconds later). The device answers `mediastreamstart` with the same POSIX 49 for exactly this reason: neither side can bind the control-tunnel address for RTP; the real client never tries — it hands the daemon `nw_connection` client ids it got from the tunnel manager.
+
+So there is no raw-socket route to the frames. The mirror is only reachable through **Apple's own media client** (`CoreDeviceMediaStreamSupport` / DeviceKit's `AVConferenceVideoStreamHelper`), which drives the tunnel manager to create those connections, runs the AVConference negotiation and SRTP, and decodes H.264 into a `CALayer`. That client, in turn, needs the full CoreDevice client bootstrap (a connected `CoreDeviceServiceConnection`, a `DeviceManager` check-in, `waitForPostPluginLoadCheckIn`) — which a bare process lacks, causing the earlier `ActionDeclaration.forward` crash.
+
+### Conclusion and options
+
+A fully hand-written H.264 receiver is not feasible: it would have to reproduce CoreDevice's tunnel-managed `nw_connection` transport and AVConference's SRTP negotiation. The two realistic paths, both larger than the HID work:
+
+1. **Drive Apple's client (recommended for a real mirror).** Link `DeviceKit.framework` and use `AVConferenceVideoStreamHelper(device:clientSessionID:)` + `DisplayViewFramebufferAVC`, or `CoreDeviceMediaStreamSupport.MediaStreamSession`, after building the CoreDevice client bootstrap the way DeviceKit does. Stable across seeds because it uses Apple's supported classes rather than hand-shimmed ABI; the effort is the bootstrap, not the media. Frames arrive decoded in a `CALayer`; read them with `requestLastDecodedFrame` / `receivedLastDecodedFrame(Data)`.
+2. **Ship a self-owned frame feed instead of the H.264 mirror.** No mirror transport at all: hold the `capturescreenshot` path open and serve frames for an agent loop. Fully ours and seed-robust, but bounded by screenshot latency (`devicectl` is ~1.4 s/frame today; a persistent socket + JPEG needs measuring), so a few fps at best, not a live mirror.
+
+What is done and reusable regardless: the control channel (`stream-info`, `stream-status`, `stream-stop` are shippable now over raw XPC), the offer generation, and this transport map.
+
+## Design
+
 ## Design
 
 ## Design
