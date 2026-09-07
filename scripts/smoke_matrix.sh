@@ -79,6 +79,10 @@ run "reset-gesture" -- "$CTL" reset-gesture
 shot 01_after_nondestructive
 
 if [[ "${SMOKE_INTERACTIVE:-0}" == 1 ]]; then
+  # A locked phone accepts HID reports but shows nothing; refuse to grade gestures against the lock screen.
+  if "$CTL" lock-state 2>/dev/null | grep -q 'passcodeRequired: true'; then
+    fail "device is locked (passcodeRequired: true); unlock it before the interactive steps"
+  else
   run "home" -- "$CTL" home; sleep 1; shot 02_home
   run "tap $TAP_XY (icon)" -- "$CTL" tap ${=TAP_XY}; sleep 1.5; shot 03_after_tap
   run "home" -- "$CTL" home; sleep 1; shot 04_home
@@ -99,6 +103,7 @@ if [[ "${SMOKE_INTERACTIVE:-0}" == 1 ]]; then
     [[ -n "$prev" && "$h" == "$prev" ]] && printf 'WARN: %s identical to previous frame; inspect the screenshots\n' "$(basename "$f")" | tee -a "$log"
     prev="$h"
   done
+  fi
 fi
 
 echo; echo "=== summary"; grep -E '^(###|rc=)' "$log" | paste - - | awk -F'\t' '{printf "%-45s %s\n", substr($1,5), $2}'
