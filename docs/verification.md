@@ -652,3 +652,82 @@ consumer stalls) but has not been measured directly; a link-level loss study is 
 Test procedure used: `./bin/ipb` from the repo, not the Homebrew `ipb` on PATH, since the fix is not
 released. The new build is identifiable by its exit line, which the old one lacks:
 `saved N ...; dropped M frame(s) due to backpressure; invalidPTS X; nonIncreasingPTS Y`.
+
+## 2026-09-08 — mirror M1: media + HID coexist in one process; host-side input p99 = 2.2 ms
+
+This Mac (macOS 26.5.1, CoreDevice 642.15), iPhone 13 Pro (iOS 27.0), wired, GUI session.
+Probe: `Experiments/mirror/mirror_probe.m` -> `build/ipb-mirror-probe`. One process holds the
+AVConference media session **and** a UHID service socket, with input on its own serial queue
+(state machine Idle->Pressed->Ending->Idle, bounded 64-event pending queue, generation
+invalidation, `usleep` removed from the per-event path, barrier only at gesture end).
+
+### Q1 — does the media stream degrade when the same process also drives HID?
+
+Same binary, `--no-input` as the baseline:
+
+| | media only | + 546 input events |
+| --- | --- | --- |
+| frames | 407 | 412 |
+| frame interval p50 | 17.039 ms | 17.063 ms |
+| frame interval p95 | 50.056 ms | 50.083 ms |
+| drops / errors | 0 / 0 | 0 / 0 |
+
+**No measurable interference.** The probe's media numbers also match an independent
+`ipb stream` baseline taken the same session (p50 17.0-17.1 ms, p95 50.0-50.2 ms over 3 runs).
+
+### Q2 — host-side per-event latency with the sleeps removed and the connection reused
+
+| rate | events | queue+entry p50/p95/p99 | host total p50/p95/p99 | overload | max queue depth |
+| --- | --- | --- | --- | --- | --- |
+| 60 Hz | 546 | 0.013 / 0.055 / 0.134 ms | **0.921 / 1.486 / 2.197 ms** | 0 | 2 |
+| 120 Hz | 724 | — | **0.453 / 1.172 / 1.658 ms** | 0 | 2 |
+| 240 Hz | 1444 | — | **0.598 / 1.214 / 1.473 ms** | 0 | 2 |
+
+`submitted == executed` at every rate (546/546, 724/724, 1444/1444); zero rejected, zero
+overload. Gesture tail (UP -> barrier return) p50 4.05 ms, n=3.
+
+**The 220 ms that dominated `ipb pointer` was entirely blind `usleep`.** The external sender
+costs ~0.9 ms and is not an expensive synchronous block. A 60 Hz drag uses ~1 ms of its
+16.7 ms budget; there is at least 4x headroom past 240 Hz.
+
+This supersedes the earlier "~0-14 ms host-side" figure, which was a subtraction estimate from
+`126-120` and `108-100` and is not a measured distribution.
+
+### What this does NOT establish
+
+- **Not end-to-end latency.** The probe's own banner says it: host sender return is not device
+  acknowledgement. Glass-to-glass (finger -> pixel) is unmeasured, and the four timestamps do
+  not cover AppKit callback delay before `t_submit` or the device's screen response after.
+- **Relative pointer, not absolute touch.** `cd_pointer_report` sends deltas, so the trajectory
+  mapping is an experimental approximation and does not establish absolute screen position.
+  A real drag must use the absolute touch path; its timing is assumed similar (same sender) but
+  not measured.
+- Synthetic events at a fixed rate are not a real mouse's arrival pattern, and not an agent's
+  bursty one. Longer sessions, idle sockets, screen-off and unplug are untested.
+
+### Frame-loss characterisation (answers the "slight frame drop like DeviceHub" observation)
+
+Over 1681 intervals from three media-only runs, classified by PTS continuity — the only sound
+criterion, since arrival gaps conflate loss with bunching:
+
+| PTS gap | count (one run) | meaning |
+| --- | --- | --- |
+| 1x 16.7 ms | 425 | normal |
+| 2x | 13 | one frame absent |
+| 3x | 127 | two frames absent |
+| 4x | 1 | three absent |
+
+**~32% of the device's 60 Hz slots never appear in the PTS sequence at all.** The device has a
+60 Hz timebase but emits roughly two thirds of the slots, giving the ~41 fps effective rate.
+Separately, arrival is bunched: 18 intervals in one run arrived with ~0 gap, so arrival order
+and PTS order do not line up.
+
+The frames are absent at the source, not lost by our client: our RTP socket has no
+retransmission, and link loss would not produce gaps this regular. **Client-side data cannot
+distinguish device capture throttling from encoder frame-dropping** — that needs device-side
+logs. The user reports DeviceHub showing the same behaviour on this device, which is consistent
+with a device-side producer.
+
+Consequence for the mirror: since our wire format carries no timestamps, a viewer paces by
+arrival, so the bunching shows as stutter. `AVSampleBufferDisplayLayer` schedules by PTS
+natively, so M2 may look smoother than the current `ffplay` path for free — to be verified.

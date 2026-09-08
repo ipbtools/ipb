@@ -6,6 +6,8 @@ BUILD_DIR := build
 SOURCES_DIR := Sources
 TARGET := $(BUILD_DIR)/ipb-helper
 VIDEO_TARGET := $(BUILD_DIR)/ipb-video
+MIRROR_TARGET := $(BUILD_DIR)/ipb-mirror-probe
+MIRROR_GLUE = $(filter-out $(BUILD_DIR)/ipb-helper.o,$(OBJS))
 
 OBJS := \
 	$(BUILD_DIR)/ipb-helper.o \
@@ -19,7 +21,7 @@ PREFIX ?= /usr/local
 
 .PHONY: all clean smoke install
 
-all: $(TARGET) $(VIDEO_TARGET)
+all: $(TARGET) $(VIDEO_TARGET) $(MIRROR_TARGET)
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -67,6 +69,24 @@ $(VIDEO_TARGET): $(SOURCES_DIR)/video_stream.m | $(BUILD_DIR)
 		-framework Foundation -framework CoreMedia -framework CoreVideo -lobjc \
 		-Xlinker -undefined -Xlinker dynamic_lookup
 	codesign -s - -f $@ >/dev/null 2>&1 || true   # in-process path needs no entitlement
+
+# M1 evidence probe: reuse released Swift/assembly glue; no action_sender main.
+$(BUILD_DIR)/mirror_probe.o: Experiments/mirror/mirror_probe.m | $(BUILD_DIR)
+	clang -fobjc-arc -fblocks -Wall -Wextra -Wno-unused-parameter \
+		-c $< -o $@
+
+$(MIRROR_TARGET): $(BUILD_DIR)/mirror_probe.o $(MIRROR_GLUE)
+	swiftc $^ -o $@ \
+		-F/Library/Developer/PrivateFrameworks \
+		-F/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks \
+		-F/Library/Apple/System/Library/PrivateFrameworks \
+		-F$(SDK_PRIVATE_FRAMEWORKS) \
+		-framework Foundation -framework CoreFoundation \
+		-framework CoreMedia -framework CoreVideo \
+		-framework CoreDevice -framework CoreDeviceUtilities \
+		-framework RemoteXPC -framework Mercury -framework UniversalHID \
+		-Xlinker -undefined -Xlinker dynamic_lookup
+	codesign -s - -f $@
 
 smoke: all
 	bin/ipb screenshot $(BUILD_DIR)/smoke.png
