@@ -731,3 +731,113 @@ with a device-side producer.
 Consequence for the mirror: since our wire format carries no timestamps, a viewer paces by
 arrival, so the bunching shows as stutter. `AVSampleBufferDisplayLayer` schedules by PTS
 natively, so M2 may look smoother than the current `ffplay` path for free — to be verified.
+
+## 2026-09-08 — mirror M2/M3: window, drag, aspect-locked scaling, button shortcuts
+
+This Mac (macOS 26.5.1), iPhone 13 Pro (iOS 27.0), wired, GUI session.
+`Experiments/mirror/mirror_app.m` -> `build/ipb-mirror`: AppKit window rendering decoded
+`CMSampleBuffer`s through `AVSampleBufferDisplayLayer` (no JPEG round-trip), real mouse events
+driving the **absolute touch** path (`uhid_make_digitizer_hid_report`, service 0x101), reusing
+M1's serial input queue, bounded pending queue, generation invalidation and four-point timing.
+
+### Coordinate mapping was inverted in Y — root cause and fix
+
+Reported as "coordinates do not line up". Diagnosed with synthesised clicks
+(`CGEventCreateMouseEvent` at known screen points, window bounds from `CGWindowListCopyWindowInfo`):
+
+| clicked (window fraction) | computed before fix |
+| --- | --- |
+| 0.5 | 0.502 |
+| **0.1** | **0.905** |
+| **0.9** | **0.101** |
+
+Root cause, isolated in a standalone AppKit test: `-convertPointToBacking:` and
+`-convertRectToBacking:` map into the **unflipped** backing store, so on a flipped view the y
+coordinate is negated. Measured in isolation: view y=20 (near the top) became backing y=-40
+against a bounds origin of -1688, normalising to 0.976 instead of 0.024. The midpoint is
+symmetric, which is why only the ends were visibly wrong.
+
+The backing conversion was never needed — the normalisation is a ratio, so the scale cancels.
+Fix: stay in the view's own flipped point space. Re-measured on the real mirror: clicking 0.1 /
+0.5 / 0.9 now yields 0.067 / 0.497 / 0.926 (residual offset is the test's title-bar estimate,
+not the mapping).
+
+### Aspect-locked scaling
+
+`window.contentAspectRatio` is set from the video size once the first frame arrives, so resizing
+keeps the device ratio. Verified: window content 387x844 (0.4585) against video 1184x2576
+(0.4596), 0.24% apart, and `black_bar_rejections` went 5 -> **0**. Before the lock, a fixed
+420x840 window letterboxed ~16 px each side, which is why a click at window fraction 0.2 landed
+at content fraction 0.174 — arithmetically correct, but not what a scrcpy user expects.
+
+**Known uncompensated offset:** the video frame is 1184x2576 while the 13 Pro screen is
+1170x2532. The encoder pads to a 16-pixel multiple and the format description carries **no clean
+aperture** (measured: `presentation=1184x2576 raw=1184x2576`), so normalising over the full frame
+carries ~1.2% x / ~1.7% y error. Not compensated: we have no evidence for which side the padding
+is on, and guessing could make it worse.
+
+### Button shortcuts — evidence per shortcut
+
+| shortcut | action | evidence |
+| --- | --- | --- |
+| `Cmd-H` | Home (`0x0c` / `0x40`, button feature) | **screenshot**: device left the Mail welcome screen for the home screen |
+| `Cmd-Shift-H` | App Switcher (digitizer swipe, same parameters as `bin/ipb recents`) | **screenshot**: card-style switcher |
+| `Cmd-Up` | Volume up (`0x0c` / `0xE9`) | **screenshot**: volume HUD visible |
+| `Cmd-Down` | Volume down (`0x0c` / `0xEA`) | standard paired usage, sent rc=0; the HUD looks identical to volume up, so this was **not** separately distinguished |
+
+`0x0c` / `0xE9` was confirmed by sending it standalone through `bin/ipb button` and screenshotting
+the volume HUD before it was wired into the mirror.
+
+**Action Button and Camera Control are deliberately not implemented.** There is no documented
+usage code for either in this repo, and this device has neither (Action Button is iPhone 15 Pro
+and later; Camera Control is iPhone 16). Guessing a usage code would violate rule 1. Adding them
+needs a separate evidence pass on hardware that has the button.
+
+Buttons and the switcher use the `hid.button` and `hid.digitizer` features, so the mirror opens
+two additional service sockets at startup and reuses them (M1 measured a socket at 14-18 ms).
+A shortcut pressed mid-drag sends UP + barrier first, then the shortcut, keeping the touch state
+machine consistent.
+
+### Still open
+
+- The device's 5 HID descriptors expose no Consumer page (0x0C) service; Home and volume work
+  through the button *feature* rather than a descriptor-backed service. Why the two paths differ
+  is not investigated.
+- `--present timed` vs `immediate` has not been judged; the visual comparison is the user's.
+- Synthetic `CGEvent` clicks only register when the window is frontmost; several runs recorded no
+  events until the app was explicitly activated. This is a test-harness limitation, not a mirror bug.
+
+### 2026-09-08 — mirror M4: `timed` presentation removed, shortcuts aligned to DeviceHub
+
+**Supersedes the shortcut table in the M2/M3 record above.**
+
+`--present timed` is gone. It was not defective — instrumenting the timebase showed **no drift**
+(`pts - timebase` stayed at +26 to +68 ms for a whole 20 s run, `status=1 ready=1` throughout).
+That gap *is* the deliberate 50 ms headroom: every frame waits for its PTS before display, so
+timed mode adds a constant ~50 ms. The user's verdict was that dragging felt disconnected in
+timed and fine in immediate, so the path was deleted rather than kept behind a flag
+(AGENTS.md rule 2). Frames now always carry `kCMSampleAttachmentKey_DisplayImmediately` on our
+own copy.
+
+Shortcuts were realigned to Apple's own DeviceHub rather than the invented set. The previous
+`Cmd-Shift-H` for App Switcher **collided with DeviceHub's Home**, which is worse than merely
+differing. DeviceHub's real menu was read at runtime through the Accessibility API
+(`AXMenuItemCmdChar` / `AXMenuItemCmdModifiers`) on Xcode 27 beta 6 with the 13 Pro attached;
+the full table is in `docs/research/ios-peer-tools.md`.
+
+| shortcut | action | verification |
+| --- | --- | --- |
+| `Cmd-Shift-H` | Home | **screenshot**: device on the home screen |
+| `Cmd-Ctrl-Shift-H` | App Switcher | **screenshot**: switcher cards |
+| `Cmd-Up` / `Cmd-Down` | Volume up / down | up verified by HUD screenshot earlier |
+| `Cmd-Shift-S` | Screenshot | **saved 1184x2576 PNG with correct colour**, from the latest decoded frame; no `devicectl` round trip (that costs ~1.4 s) |
+| `Cmd-0` / `Cmd-1` | Zoom to fit / actual size | window went 387x872 -> 468x1050; 1:1 needs 592x1288 pt which exceeds the screen, so it falls back to fit as designed |
+
+Volume is the one binding where DeviceHub, scrcpy and the original guess all agree.
+
+Not implemented, and why: Lock (`Cmd-L`), Siri (`Cmd-Opt-Shift-H`), Record Screen
+(`Cmd-Shift-R`), Action Button and Camera Control. Each needs a usage code we have no evidence
+for. DeviceKit.framework does contain `hardwareGestureControls.actionButton` and `.sideButton`
+menu identifiers, but they do not appear in the menu with a 13 Pro attached — the framework uses
+`ConditionalKeyboardShortcut` to show them per device. That both confirms the 13 Pro lacks an
+Action Button and gives the route to obtain its usage code: attach a 15 Pro and observe.

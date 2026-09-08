@@ -26,6 +26,36 @@
 - `devicectl` 目前**没有独立的 screenshot 子命令**（只能拿到 `screenViewingURL` 之类的元信息），也**没有公开的输入注入接口**；它是 Device Hub 的命令行对应物，主要用于 CI 流水线里装包/拉起而非交互控制。
 - Xcode 27 的 Device Hub 把模拟器与真机管理界面合并，提供真机远程屏幕镜像/控制、系统更新触发等能力，但**社区反馈的重要限制**：屏幕镜像仅支持 iOS 27+ 真机（旧系统版本不支持）；不支持拖拽文件到模拟器（相对旧版是倒退）；缺少精确像素缩放和 Debug 菜单。目前没有公开的 CoreDevice `UniversalHID`/`dtuhidd` 逆向文档——这部分协议仍是黑盒，社区搜索未发现相关逆向成果。（[The Swift Dev](https://www.theswift.dev/posts/debug-ios-device-bugs-with-xcode-27-device-hub/)、[mjtsai 博客标题确认](https://mjtsai.com/blog/2026/06/25/xcode-27s-device-hub/)）
 
+### 6.1 Device Hub 的快捷键约定（2026-09-08 实测，Xcode 27 beta 6 + iPhone 13 Pro）
+
+我们做 `ipb mirror` 时需要一套键位约定。与其自创，不如照抄 Apple 自己的。
+用 Accessibility API（`AXMenuItemCmdChar` / `AXMenuItemCmdModifiers`）读 DeviceHub 运行时的真实菜单：
+
+| 功能 | 键位 | 备注 |
+| --- | --- | --- |
+| Home | ⇧⌘H | |
+| App Switcher | ⌃⇧⌘H | |
+| Siri | ⇧⌥⌘H | Home/Siri/AppSwitcher 共用 H，靠修饰键区分 |
+| Lock | ⌘L | |
+| 音量 + / − | ⌘↑ / ⌘↓ | 与 scrcpy 的 `MOD+Up/Down` 一致 |
+| 截图 | ⇧⌘S | |
+| 录屏 | ⇧⌘R | |
+| 键盘捕获 / 软键盘 | ⌘K / ⌥⌘K | |
+| 缩放适应 / 实际大小 | ⌘0 / ⌘1 | 另有 ⌘+ / ⌘− 缩放 |
+
+对照 scrcpy 4.1（其 `--shortcut-mod` 默认 `lalt,lsuper`，macOS 上 Super 即 ⌘）：
+Home = `MOD+h`、App Switcher = `MOD+s`、音量 = `MOD+Up/Down`、BACK = `MOD+b`／右键。
+**音量三家一致；Home 的字母一致但 DeviceHub 多一个 Shift；App Switcher 两家完全不同。**
+iOS 没有 BACK 键，scrcpy 的 `MOD+b`／右键没有直接等价物。
+
+`ipb mirror` 选择对齐 DeviceHub，因为它是设备原厂语义，用户的肌肉记忆更可能在那边。
+
+**取证线索：**DeviceKit.framework 里存在菜单标识符
+`com.apple.devicekit.menu.controls.hardwareGestureControls.actionButton` 和 `.sideButton`，
+但连 iPhone 13 Pro 时这两项不出现在菜单里（框架内有 `ConditionalKeyboardShortcut`，按设备条件显示）。
+这既证实 13 Pro 没有 Action Button，也说明**换一台 15 Pro 连 DeviceHub 就能观察到它的实现**，
+是后续为 Action Button 取 usage code 的可行路径。
+
 ## 7. iPhone Mirroring（macOS 15+）与商业设备云
 - **iPhone Mirroring 官方无自动化 API**（Apple DTS 明确答复无此 API）；社区方案（如 midscene-ios、"iPhone Mirroir" MCP）本质是**截图 + 坐标映射到 Mac 屏幕再模拟鼠标点击**，即操作的是 macOS 侧的镜像窗口而非设备本身的注入通道。
 - Sauce Labs / BrowserStack / AWS Device Farm 真机云的输入注入路径统一：**Appium → XCUITest driver → WebDriverAgent → XCTest**，或直接跑开发者自己的 XCTest UI bundle；AWS Device Farm 用 Amazon 托管的 macOS host 动态连接真机跑这套链路，没有绕开 XCTest 的旁路方案。（[AWS 文档](https://docs.aws.amazon.com/devicefarm/latest/developerguide/test-types-ios-xctest-ui.html)、[BrowserStack](https://www.browserstack.com/guide/appium-ios-tutorial)）

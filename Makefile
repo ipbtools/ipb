@@ -21,7 +21,7 @@ PREFIX ?= /usr/local
 
 .PHONY: all clean smoke install
 
-all: $(TARGET) $(VIDEO_TARGET) $(MIRROR_TARGET)
+all: $(TARGET) $(VIDEO_TARGET) $(MIRROR_TARGET) $(BUILD_DIR)/ipb-mirror
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -82,6 +82,25 @@ $(MIRROR_TARGET): $(BUILD_DIR)/mirror_probe.o $(MIRROR_GLUE)
 		-F/Library/Apple/System/Library/PrivateFrameworks \
 		-F$(SDK_PRIVATE_FRAMEWORKS) \
 		-framework Foundation -framework CoreFoundation \
+		-framework CoreMedia -framework CoreVideo \
+		-framework CoreDevice -framework CoreDeviceUtilities \
+		-framework RemoteXPC -framework Mercury -framework UniversalHID \
+		-Xlinker -undefined -Xlinker dynamic_lookup
+	codesign -s - -f $@
+
+# M2 GUI prototype: the same existing oracle glue, with AppKit presentation.
+$(BUILD_DIR)/mirror_app.o: Experiments/mirror/mirror_app.m | $(BUILD_DIR)
+	clang -fobjc-arc -fblocks -Wall -Wextra -Wno-unused-parameter \
+		-Wno-deprecated-declarations -c $< -o $@
+
+$(BUILD_DIR)/ipb-mirror: $(BUILD_DIR)/mirror_app.o $(MIRROR_GLUE)
+	swiftc $^ -o $@ \
+		-F/Library/Developer/PrivateFrameworks \
+		-F/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks \
+		-F/Library/Apple/System/Library/PrivateFrameworks \
+		-F$(SDK_PRIVATE_FRAMEWORKS) \
+		-framework Foundation -framework CoreFoundation \
+		-framework AppKit -framework AVFoundation -framework QuartzCore -framework CoreImage \
 		-framework CoreMedia -framework CoreVideo \
 		-framework CoreDevice -framework CoreDeviceUtilities \
 		-framework RemoteXPC -framework Mercury -framework UniversalHID \
