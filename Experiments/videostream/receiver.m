@@ -59,6 +59,10 @@ extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc
 @end
 
 static int gFrames=0;
+static int gPullMode=0, gPullCount=0; static double gT0=0, gLast=0; static id gVS=nil;
+static double nowSec(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); return ts.tv_sec+ts.tv_nsec/1e9; }
+static unsigned long gBytes=0; static unsigned gDistinct=0; static unsigned long gPrevHash=0;
+static unsigned long fnv(const void*d,size_t n){ const unsigned char*p=d; unsigned long h=1469598103934665603UL; for(size_t i=0;i<n;i+=997){h^=p[i];h*=1099511628211UL;} return h; }
 static void saveFrame(CVImageBufferRef px){
     if(!px||gFrames>=8) return;
     @autoreleasepool{
@@ -156,9 +160,20 @@ static void hookRecv(void){
     if(t==CVPixelBufferGetTypeID()){ saveFrame((CVImageBufferRef)(__bridge void*)f); return; }
     if(t==CMSampleBufferGetTypeID()){ CVImageBufferRef px=CMSampleBufferGetImageBuffer((CMSampleBufferRef)(__bridge void*)f); if(px) saveFrame(px); return; }
     if([f isKindOfClass:[NSData class]]){
+        NSData*D=(NSData*)f;
+        if(gPullMode){
+            double t=nowSec(); gPullCount++; gBytes+=D.length;
+            unsigned long h=fnv(D.bytes,D.length); if(h!=gPrevHash){gDistinct++; gPrevHash=h;}
+            if(gPullCount<=3||gPullCount%20==0) fprintf(stderr,"pull #%d dt=%.0fms %lu bytes\n",gPullCount,(t-gLast)*1000.0,(unsigned long)D.length);
+            if(gPullCount==1||gPullCount==150||gPullCount==300||gPullCount==600||gPullCount==900){
+                [D writeToFile:[NSString stringWithFormat:@"/tmp/ipbseq_%04d.jpg",gPullCount] atomically:YES]; }
+            gLast=t;
+            if(t-gT0 < 10.0 && gVS) [(AVCVideoStream*)gVS requestLastDecodedFrame];   // pipeline next
+            return;
+        }
         NSString*p=[NSString stringWithFormat:@"/tmp/ipbframe_raw%03d.bin",gFrames++];
-        [(NSData*)f writeToFile:p atomically:YES];
-        fprintf(stderr,"*** wrote raw frame %s (%lu bytes)\n",p.UTF8String,(unsigned long)[(NSData*)f length]); return; }
+        [D writeToFile:p atomically:YES];
+        fprintf(stderr,"*** wrote raw frame %s (%lu bytes)\n",p.UTF8String,(unsigned long)D.length); return; }
     fprintf(stderr,"    frame CFTypeID=%lu desc=%s\n",(unsigned long)t,[[(__bridge NSString*)CFCopyTypeIDDescription(t) description] UTF8String]);
 }
 - (void)vcMediaStreamDidStop:(id)s { fprintf(stderr,"DELEGATE vcMediaStreamDidStop\n"); }
@@ -381,8 +396,22 @@ skip_probe:
                 if(nn && (strcasestr(nn,"vcMediaStream")||strcasestr(nn,"Frame")||strcasestr(nn,"avc")))
                     fprintf(stderr,"NOTE %s userInfo=%s\n", nn, n.userInfo?[[n.userInfo allKeys] description].UTF8String:"nil");
             }];
-            for(int i=0;i<24;i++){ [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
-                if(i%6==5){ [vs requestLastDecodedFrame]; fprintf(stderr,"pulled requestLastDecodedFrame\n"); } }
+            if(getenv("PULLTEST")){
+                // warm up: let the stream deliver its first remote frame before pulling
+                for(int w=0; w<50; w++) [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+                gPullMode=1; gVS=vs; gT0=gLast=nowSec();
+                [vs requestLastDecodedFrame];
+                // watchdog: if a pull is ever dropped, re-arm so the loop cannot stall silently
+                __block double lastSeen=gLast;
+                while(nowSec()-gT0 < 11.0){ [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+                    if(nowSec()-gLast > 1.0 && nowSec()-gT0 < 10.0){ fprintf(stderr,"re-arm pull (stalled %.1fs)\n",nowSec()-gLast); gLast=nowSec(); [vs requestLastDecodedFrame]; } }
+                double el=gLast-gT0;
+                LOG("PULLTEST: %d frames in %.1fs = %.1f fps | distinct=%u | avg %lu KB | avg interval %.0f ms",
+                    gPullCount, el, el>0?gPullCount/el:0.0, gDistinct, gBytes/(gPullCount?gPullCount:1)/1024, el>0?(el*1000.0/(gPullCount?gPullCount:1)):0.0);
+            } else {
+                for(int i=0;i<24;i++){ [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+                    if(i%6==5){ [vs requestLastDecodedFrame]; fprintf(stderr,"pulled requestLastDecodedFrame\n"); } }
+            }
             [vs stop];
             LOG("stage2 stopped");
         }

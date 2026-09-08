@@ -487,3 +487,18 @@ The frames are **ready-to-use baseline JPEGs of the device screen at native reso
 **Entitlement is a hard gate, and this is the honest distribution caveat.** Without it the daemon cancels the XPC connection and the delegate only sees `streamDidServerDie:`. Signing the helper ad-hoc with `com.apple.videoconference.allow-conferencing` makes it work *on this machine*, which has SIP disabled AND `amfi_get_out_of_my_way=1`. On a stock Mac, AMFI will not honour an ad-hoc binary claiming that Apple-private entitlement, so this path as-is is not distributable to normal users. That constraint is unresolved and must be stated in any release.
 
 Still open: frame rate/latency of the pull path is unmeasured (3 pulls, ~3 s apart in this run, driven by our own timer, not a measured ceiling).
+
+### 2026-09-08 — pull path characterised: ~40 distinct fps, 7-9 ms latency
+
+Same host/device. `receiver.m` with `PULLTEST=1 OOP=1 STAGE2=1` (pipelined: re-request as soon as a frame arrives; a watchdog re-arms if a pull is ever dropped, so a stall cannot masquerade as a slow rate).
+
+| screen state | pulls/s | distinct frames | avg frame |
+| --- | --- | --- | --- |
+| static (Settings, untouched) | 138 | 8 in 10 s | 309 KB |
+| changing (`ipb recents`/`home` alternating during capture) | 108 | **405 in 10 s (~40 fps)** | 393 KB |
+
+So the pull is not the bottleneck: ~7-9 ms per `requestLastDecodedFrame` round trip, and the distinct-frame rate simply tracks how much the screen actually changes. On a static screen it correctly yields ~1 new frame/s instead of burning bandwidth on duplicates; on a moving screen it delivers ~40 fps of genuinely different baseline JPEGs at native 1184x2576.
+
+Frame freshness was verified independently of pixel comparison: the EXIF `DateTime` in sampled frames advances across a fast pull loop (15:03:57 -> 15:04:04), so identical bytes on a static screen mean "nothing changed", not "cached".
+
+Note for reproduction: `ipb scroll` silently did nothing until `make` was run (the reboot wiped `build/`, and the wrapper reported `ipb-helper: No such file or directory` only on stderr). `ipb home` / `ipb recents` are reliable ways to force screen change for this measurement.
