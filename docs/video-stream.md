@@ -76,6 +76,25 @@ To inject into DeviceHub one of these is required, and both are the user's call:
 
 Non-injection fallback that needs neither: capture DeviceHub's rendered mirror window with ScreenCaptureKit. Gives smooth live video but of the Mac window (chrome included, needs cropping) and loses per-frame device metadata. Was previously listed under Rejected alternatives for single screenshots; as a live feed it is the only no-reboot path to moving pixels.
 
+## Standalone path found: raw XPC + plain UDP socket + ObjC AVCVideoStream (2026-09-08, gpt-6-astra source review)
+
+A deep source review (`docs/research/standalone-review-astra-2026-09-08.md`) found a standalone client path that Apple's own `CoreDeviceMediaStreamSupport` uses, and RETRACTED several earlier blocking conclusions. Addresses are from this seed (CoreDevice 642.15; AVConference shared-cache VAs).
+
+**Retracted / corrected:**
+- The `ActionDeclaration.forward` crash lock is `RemoteDevice._stateStorage` (ivar-offset var CD `0x647248`, initialised by `RemoteDevice.init(snapshot:)` CD `0x12b020`), NOT a missing global coordinator. Root cause of the corruption is still open, most likely a Swift-ABI issue in `MediaStreamSupport.init(device:)` (MSS `0x65608`, indirect result `str x0,[x8]`) or the `supportInfo.getter` self.
+- "No raw-socket media path" is REFUTED. `CoreDeviceUtilities.NetworkUtils` does exactly: `getSocket` (CD... `0x3a4db4`) `socket(AF_INET6, SOCK_DGRAM, 0)` + `SO_REUSEPORT/REUSEADDR/NOSIGPIPE` + `bind`; `getConnectedSocket` `0x3a59f0` `connect`; `withSharedSocketDictionary` `0x3a6dc8` `xpc_dictionary_set_fd(dict, "avcKeySharedSocket", fd)`. No NWConnectionClientID faking, no writing `rtpHandle` (which is a `calloc(1,0x6c98)` RTP context, AVConference `_RTPCreateHandle` `0x1BD6F9C90`, not an fd).
+- `DeviceKitContext.current` is NOT DeviceHub-only: once-init DK `0x6bc834`; the earlier "manager is the first struct word" read was WRONG — manager is at context `+0x28`.
+- ObjC PULL entry exists: `-[AVCVideoStream requestLastDecodedFrame]` `0x1BDBA4948` (only sends in out-of-process mode).
+
+**In-process mode confirmed:** `-[AVCVideoStream shouldRunInProcessWithOptions:]` `0x1BDBA1770` reads `kAVCMediaStreamOptionRunInProcess`; `configure:error:` `0x1BDBA35C4` branches configureInProcess/OutOfProcess. So decode+callback can run in OUR process. DeviceHub runs out-of-process (decode in `avconferenced`), which is why its in-process `VCVideoStreamReceiver` hooks never fired. Frame callbacks: `-[AVCVideoStream videoReceiverDelegateFunctions]` `0x1BDAE3710` -> `_VCVideoStream_DidReceiveSampleBuffer` `0x1BDAE3734` / `__VCVideoStream_DidReceiveRemoteFrame` `0x1BDAE39A0`.
+
+**The target chain (Apple's own order):**
+`raw RemoteXPC support/start/stop` -> `AVCMediaStreamNegotiator createOffer` -> `mediastreamstart` -> `setAnswer:withError:` -> `generateMediaStreamConfigurationWithError:` -> `generateMediaStreamInitOptionsWithError:` -> own IPv6 UDP socket (bind valid tunnel addr, connect device) -> pass fd via `xpc_dictionary_set_fd(dict,"avcKeySharedSocket",fd)` -> `-[AVCVideoStream initWithNetworkSockets:options:error:]` (RunInProcess) -> `configure:error:` -> `setDelegate:` -> `start` -> in-process decode callback = our frame. MSS call sites: init `0x15c3c`, negotiation `0x141a8`/`0x14724`/`0x14ed8`, socket dict `0x16f24`.
+
+**Open risks:** (1) entitlement `com.apple.videoconference.allow-conferencing` is really checked by `+[AVConferenceXPCServer entitlementStatusForToken:]` `0x1BD9F7288` (status==1) via audit token — ad-hoc signing it is necessary but the service must accept it; unproven, needs a runtime rejection trace. (2) "no Apple media service at all" is not proven (VideoToolbox decode may still use a service even in-process). (3) `Experiments/videostream/neg_start.m` must first be fixed: stop on bind/getsockname failure, use the real tunnel address (not `utun9`), do not `recvfrom`-compete with AVC on the shared socket, and stop returning 0 unconditionally (line 122).
+
+Implementation stays ObjC in `Experiments/` (rule 2); the Swift client remains only a protocol/lifecycle reference.
+
 ## Standalone Apple-client blocker: root cause (2026-09-07 night, definitive)
 
 Driving Apple's own media client from our process was pursued because the RTP transport (above) can only be built by Apple's client. It is now root-caused, not merely observed.
