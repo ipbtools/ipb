@@ -372,3 +372,15 @@ Host Mac (macOS 26.5.1, Xcode 27 b6), iPhone 13 Pro iOS 27.0, live tunnel `fdXX:
 - **Device rejects `mediastreamstart`**: `CoreDevice.error` code `32033` domain `GKVoiceChatServiceErrorDomain`, userInfo `NSErrorUserInfoDetailedError = 7`, no reason string. Reproducible, clean device state (no DeviceHub running). So the control path works and the device processes our start; the rejection is at AVConference media negotiation.
 - Oracle attempts to capture DeviceHub's WORKING `mediastreamstart` all failed: DYLD_INTERPOSE misses CoreDevice-internal calls; fishhook GOT-rebind (rebound 1102 images) also misses, because CoreDevice is in the dyld shared cache (inter-image calls prelinked/direct, no GOT entry); and DeviceHub does the negotiation out-of-process in `avconferenced` (its in-process `AVCMediaStreamNegotiator` hooks never fire). `avconferenced` is signed flags=0x0 (no library validation) so it is injectable, but it is a root launchd daemon.
 - Open: crack `GKVoiceChat 32033 / detailed 7`. Candidates: (a) inject/observe `avconferenced` to capture the working negotiation params; (b) incorporate `mediastreamgetsupportinfo` output into the offer / fix negotiator mode+options; (c) decode AVConference error 32033.
+
+## 2026-09-08 (cont.) — standalone start negotiation: down to options CodableValue encoding
+
+Same host/device/tunnel. `Experiments/videostream/receiver.m` now drives the negotiation and the errors advance layer by layer as fields are corrected:
+
+- Negotiator mode matters: `initWithMode:1` (send) -> device `GKVoiceChatServiceError 32033/7`; `mode 2` (receive) -> CoreDevice-level errors (correct mode). `mode 0/3` -> negotiator init fails `32032`.
+- Mode 2 offer is a bplist with keys `avcMediaStreamOptionCallID`, `avcMediaStreamOptionRemoteEndpointInfo`, `avcMediaStreamNegotiatorMode`(=2), `avcMediaStreamNegotiatorMediaBlob`. The negotiator's `_dataSessionID` == the offer's `avcMediaStreamOptionCallID` (same UUID) — so CallID == ClientSessionID == the negotiator session id, read from the negotiator after `createOffer`.
+- Empty `options` -> `CoreDeviceError 9005 "Missing ClientName, CallID, or ClientSessionID. Invalid Options passed."`
+- `options` with plain-string CallID/ClientSessionID/ClientName -> `NSCocoaError 4864` (NSCoderReadCorruptError), `NSDebugDescription "dictionary required here"`, `NSCodingPath [options, CallID]` — i.e. the device decodes `options` as CoreDevice `[String: CodableValue]` and CallID's value must be a CodableValue dictionary, not a raw string.
+- Wrapping each value as `{"string": <value>}` (the documented CodableValue wire shape, protocol.md) -> back to `9005 "Missing"`. So the exact CodableValue encoding for the options values is not yet right (key name / case-index / value shape). This is the current, narrow blocker; everything upstream (transport bind, control socket, negotiation mode, offer, session/call id) now works.
+
+Next: pin CoreDevice.CodableValue's Codable encoding (CodingKeys) for a string case, or capture MSS's exact options dict; then re-send and expect an answer + RTP, then hand the socket to AVCVideoStream (RunInProcess) for in-process decode.

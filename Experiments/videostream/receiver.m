@@ -22,6 +22,8 @@ extern void xpc_remote_connection_activate(xrc_t);
 extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc_object_t);
 
 @interface AVCMediaStreamNegotiator : NSObject
+@end
+@interface AVCMediaStreamNegotiator (X)
 - (instancetype)initWithMode:(long)mode options:(NSDictionary*)o error:(NSError**)e;
 - (BOOL)createOffer; - (NSData*)offer;
 - (BOOL)setAnswer:(NSData*)a withError:(NSError**)e;
@@ -48,7 +50,7 @@ int main(int argc,char**argv){
     setbuf(stdout,NULL); setbuf(stderr,NULL);
     if(argc<5){ LOG("usage: receiver <coredevice-uuid> <utun> <hostIP> <deviceIP>"); return 2; }
     const char*dev=argv[1]; const char*utun=argv[2]; const char*rxip=argv[3]; const char*txip=argv[4];
-    long mode=1;
+    long mode = getenv("MODE")? atol(getenv("MODE")) : 2;
 
     if(!dlopen("/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice",RTLD_NOW)) DIE("CoreDevice dlopen: %s",dlerror());
     if(!dlopen("/System/Library/PrivateFrameworks/AVConference.framework/Versions/A/AVConference",RTLD_NOW)) DIE("AVConference dlopen: %s",dlerror());
@@ -63,6 +65,10 @@ int main(int argc,char**argv){
     if(![neg createOffer]) DIE("createOffer failed");
     NSData*offer=[neg offer]; if(!offer.length) DIE("empty offer");
     LOG("offer: %lu bytes",(unsigned long)offer.length);
+    Ivar sv=class_getInstanceVariable([neg class],"_dataSessionID"); NSString*callID = sv? object_getIvar(neg,sv):nil;
+    if(!callID.length) DIE("no _dataSessionID");
+    const char*clientName = getenv("CLIENTNAME") ?: "ipb";
+    LOG("callID/sessionID = %s  clientName=%s", callID.UTF8String, clientName);
 
     // createservicesocket -> RemoteXPC to dtremotedisplayd
     dispatch_queue_t q=dispatch_queue_create("cds",0);
@@ -101,11 +107,16 @@ int main(int argc,char**argv){
     xpc_dictionary_set_string(in,"type","video"); xpc_dictionary_set_string(in,"direction","output");
     xpc_dictionary_set_data(in,"negotiatorOffer",offer.bytes,offer.length);
     xpc_dictionary_set_uint64(in,"clientSupportedFeatures",972);
-    xpc_dictionary_set_value(in,"options",xpc_dictionary_create_empty());
+    #define CV_STR(s) ({ xpc_object_t _d=xpc_dictionary_create_empty(); xpc_dictionary_set_string(_d,"string",(s)); _d; })
+    xpc_object_t opts=xpc_dictionary_create_empty();
+    xpc_dictionary_set_value(opts,"ClientName",CV_STR(clientName));
+    xpc_dictionary_set_value(opts,"CallID",CV_STR(callID.UTF8String));
+    xpc_dictionary_set_value(opts,"ClientSessionID",CV_STR(callID.UTF8String));
+    xpc_dictionary_set_value(in,"options",opts);
     xpc_object_t srep=xpc_remote_connection_send_message_with_reply_sync(rc,action_env("com.apple.coredevice.action.mediastreamstart",dev,in));
     if(!srep){ LOG("mediastreamstart: null reply"); return 2; }
     char*sd=xpc_copy_description(srep);
-    LOG("start reply: %.700s",sd); free(sd);
+    LOG("start reply: %.3500s",sd); free(sd);
     xpc_object_t so=xpc_dictionary_get_dictionary(srep,"CoreDevice.output");
     { xpc_object_t err=xpc_dictionary_get_dictionary(srep,"CoreDevice.error");
       if(err){ int64_t code=xpc_dictionary_get_int64(err,"code"); const char*dom=xpc_dictionary_get_string(err,"domain");
