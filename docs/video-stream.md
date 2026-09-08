@@ -76,6 +76,28 @@ To inject into DeviceHub one of these is required, and both are the user's call:
 
 Non-injection fallback that needs neither: capture DeviceHub's rendered mirror window with ScreenCaptureKit. Gives smooth live video but of the Mac window (chrome included, needs cropping) and loses per-frame device metadata. Was previously listed under Rejected alternatives for single screenshots; as a live feed it is the only no-reboot path to moving pixels.
 
+## Shipped: `ipb stream` (2026-09-08)
+
+`ipb stream` is the productized form of the standalone pipeline. `bin/ipb` resolves the CoreDevice
+tunnel automatically (device `tunnelIPAddress` from `devicectl`, host address = the local `utun`
+carrying the same `/64`) and runs `libexec/ipb-video` (`Sources/video_stream.m`).
+
+```
+ipb stream --dir DIR [--count N] [--fps F] [--seconds S]
+ipb stream --stdout            # repeated [uint32 BE length][jpeg bytes] on stdout
+```
+
+Frames are native-resolution baseline JPEG. Only distinct frames are written (a static screen yields
+~1/s, a changing screen ~40/s). Exit codes: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down,
+5 negotiation rejected, 6 stream did not start, 7 no frames.
+
+**Distribution caveat (unresolved):** `ipb-video` must be ad-hoc signed with
+`com.apple.videoconference.allow-conferencing` (Makefile does this). `avconferenced` checks that
+entitlement on the client; it is accepted here only because this Mac has SIP disabled and
+`amfi_get_out_of_my_way=1`. On a stock Mac AMFI will reject an ad-hoc binary claiming that
+Apple-private entitlement, so `ipb stream` is not yet usable by ordinary users. See the entitlement
+investigation in `docs/research/`.
+
 ## Standalone path found: raw XPC + plain UDP socket + ObjC AVCVideoStream (2026-09-08, gpt-6-astra source review)
 
 A deep source review (`docs/research/standalone-review-astra-2026-09-08.md`) found a standalone client path that Apple's own `CoreDeviceMediaStreamSupport` uses, and RETRACTED several earlier blocking conclusions. Addresses are from this seed (CoreDevice 642.15; AVConference shared-cache VAs).

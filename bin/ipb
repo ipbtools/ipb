@@ -43,6 +43,7 @@ usage:
   ipb home
   ipb recents
   ipb screenshot <path>
+  ipb stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout   # live screen frames (JPEG), no DeviceHub
   ipb screenrecord <path> [seconds]          # devicectl capture screen-record
   ipb apps | ps | info | lock-state          # devicectl info apps/processes/details/lockState
   ipb install <app|ipa>  | uninstall <bundle-id>
@@ -163,6 +164,50 @@ warm_tunnel() {
   print -u2 "ipb: device tunnel not connected, warming it via devicectl..."
   devicectl device info details --device "$DEVICE" --timeout 30 >/dev/null 2>&1 || true
   return 0
+}
+
+# Resolve the CoreDevice tunnel (device IP, host IP, host utun interface) for the media stream.
+# The device address is connectionProperties.tunnelIPAddress; the host address is the utun
+# interface on this Mac that carries the same /64 (its ::2). Prints "hostIP utun deviceIP".
+resolve_tunnel() {
+  local json
+  json="$(mktemp -t ipb-tunnel)"
+  devicectl list devices --json-output "$json" --quiet >/dev/null 2>&1 || true
+  local devip
+  devip="$(python3 - "$json" "$DEVICE" <<'PY2'
+import json, sys
+try:
+    devs = json.load(open(sys.argv[1]))["result"]["devices"]
+except Exception:
+    sys.exit(3)
+for d in devs:
+    if d.get("identifier") == sys.argv[2]:
+        ip = d.get("connectionProperties", {}).get("tunnelIPAddress")
+        if ip: print(ip); sys.exit(0)
+sys.exit(3)
+PY2
+)" || { rm -f "$json"; return 3; }
+  rm -f "$json"
+  [[ -n "$devip" ]] || return 3
+  # device IP is <prefix>::1; find the host utun holding <prefix>::2
+  local prefix="${devip%::*}"
+  python3 - "$prefix" <<'PY3'
+import subprocess, sys
+prefix = sys.argv[1].lower()
+out = subprocess.run(["ifconfig"], capture_output=True, text=True).stdout
+iface = None
+for line in out.splitlines():
+    if line and not line[0].isspace():
+        iface = line.split(":")[0]
+    s = line.strip()
+    if s.startswith("inet6 ") and iface and iface.startswith("utun"):
+        addr = s.split()[1].split("%")[0].lower()
+        if addr.startswith(prefix + "::"):
+            print(f"{addr} {iface} {prefix}::1")
+            sys.exit(0)
+sys.exit(3)
+PY3
+  return $?
 }
 
 # Run the helper; if the service socket cannot be created because the tunnel is down,
@@ -565,6 +610,20 @@ case "$cmd" in
   recents|app-switcher|switcher)
     [[ $# -eq 0 ]] || { usage; exit 2; }
     run_digitizer cd_digitizer_swipe 0.5 0.995 0.5 0.74 bottom 0 0 0.36 1.05
+    ;;
+  stream)
+    # ipb stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout
+    (( $# >= 1 )) || { usage; exit 2; }
+    warm_tunnel >/dev/null 2>&1 || true
+    tun="$(resolve_tunnel)" || { print -u2 "ipb: could not resolve the device tunnel (is the device connected?)"; exit 4; }
+    hostip="${tun%% *}"; rest="${tun#* }"; utun="${rest%% *}"; devip="${rest##* }"
+    VBIN="${IPB_VIDEO_HELPER:-}"
+    if [[ -z "$VBIN" ]]; then
+      if [[ -x "$ROOT/libexec/ipb-video" ]]; then VBIN="$ROOT/libexec/ipb-video"
+      else VBIN="$ROOT/build/ipb-video"; fi
+    fi
+    [[ -x "$VBIN" ]] || { print -u2 "ipb: video helper not built; run 'make' (expected $VBIN)"; exit 2; }
+    exec "$VBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$@"
     ;;
   screenshot)
     [[ $# -eq 1 ]] || { usage; exit 2; }
