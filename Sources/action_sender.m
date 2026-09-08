@@ -1167,7 +1167,14 @@ int main(int argc, const char *argv[]) {
     setbuf(stderr, NULL);
     g_quiet = getenv("HIDCTL_QUIET") != NULL;
     g_sync_remote = getenv("HIDCTL_SYNC") != NULL;
-    const char *device = argc > 1 ? argv[1] : "<device-uuid>";
+    // No default device: the helper is always invoked by bin/ipb, which resolves the
+    // CoreDevice UUID (DEVICE_ID, or the single connected device). Refuse rather than
+    // silently target some other machine's device.
+    if (argc <= 1 || argv[1][0] == '\0') {
+        fprintf(stderr, "ipb-helper: no device identifier given (argv[1]); run via bin/ipb or pass a CoreDevice UUID\n");
+        return HIDCTL_EXIT_USAGE;
+    }
+    const char *device = argv[1];
     const char *action = argc > 2 ? argv[2] : "com.apple.coredevice.action.createservicesocket";
     const char *feature = argc > 3 ? argv[3] : "com.apple.coredevice.feature.remote.universalhidservice";
     uint64_t connection_mode = argc > 4 ? strtoull(argv[4], NULL, 0) : 0;
