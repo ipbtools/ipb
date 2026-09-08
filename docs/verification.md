@@ -341,3 +341,13 @@ Host Mac (macOS 26.5.1, Xcode 27 b6), iPhone 13 Pro (iOS 27.0) attached, SIP dis
 - Launched DeviceHub with `DYLD_INSERT_LIBRARIES` (verified in process env via `ps eww`). dyld loaded 1242 libraries but never our dylib; no AMFI/sandbox denial surfaced. Same dylib loads into a fresh unsigned arm64e binary (`DYLD_PRINT_LIBRARIES` shows it).
 - DeviceHub CodeDirectory `flags=0x2000 (library-validation)`; `nvram boot-args` empty. Conclusion: library validation blocks the insert; SIP-off does not relax it. Needs `amfi_get_out_of_my_way=1` + reboot, or Apple-team signing.
 - Non-injection fallback identified: ScreenCaptureKit capture of DeviceHub's mirror window.
+
+## 2026-09-08 (cont.) — injection works after AMFI boot-arg; frames are window-composited
+
+Same host, iPhone 13 Pro (iOS 27.0), after `sudo nvram boot-args="amfi_get_out_of_my_way=1"` + reboot.
+
+- Injection now succeeds: `DYLD_INSERT_LIBRARIES` dylib loads into DeviceHub (`vmmap` shows it mapped, constructor runs, swizzle installs). Confirms library validation was the only wall; the AMFI boot-arg removes it.
+- `devices://device?id=<UUID>&action=select` DOES drive device selection: window title changed to "iPhone 13 Pro – iOS 27.0". Headless device selection confirmed.
+- Frame source: NOT at `-[CALayer setContents:]`. The mirror layers (`DeviceKit.ChromeRenderLayer` 243x477 = bezel; a plain `CALayer` 259x582 = screen area; `SwiftUI.ImageLayer`) set contents once, and `isIOSurface=0 isMetal=0` — the decoded video is composited by the window server, not exposed at the layer's `contents`. `AVSampleBufferDisplayLayer.enqueueSampleBuffer:` never fires either.
+- In-process window capture via `CGWindowListCreateImage` (dlsym; removed from macOS 26 SDK) returns "no own window" — sandbox/TCC filters the window list for the sandboxed app. Dead end from inside.
+- Remaining frame paths: (A) hook the Swift `CoreDeviceMediaStreamSupport` decoded-frame callback `VideoStreamEvent.receivedLastDecodedFrame(Data)` / `requestLastDecodedFrame` (clean pre-composite frame + metadata; fragile Swift-ABI interpose, Experiments-only); (B) ScreenCaptureKit capture of DeviceHub's window from a separate helper (robust, needs neither injection nor the AMFI reboot, but captures chrome and loses per-frame metadata).
