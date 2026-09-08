@@ -462,3 +462,28 @@ So the device's screen is negotiated, streamed over RTP to a socket we own, and 
 **Remaining gap: extracting the decoded CVPixelBuffer.** The decoded frames go from the AppleAVD hardware decoder straight into AVConference's `VCImageQueue` (a FigImageQueue destined for a CALayer/CAContext), bypassing every ObjC seam tried. Hooks installed but never fired: `-[VCVideoStreamReceiver showDecodedFrame:atTime:]`, `decodeFrame:showFrame:`, `-[VCVideoStream onVideoFrame:frameTime:attribute:]`, `sendLastRemoteVideoFrame:`. Confirmed dead end: `-[AVCVideoStream requestLastDecodedFrame]` logs `only supported in the daemon` in RunInProcess mode (matches the earlier disassembly).
 
 Next candidates for the frame tap: attach our own CALayer via `VCImageQueue configureCALayerWithRect:name:` / the `vcMediaStreamVideoBufferDescription` config key so frames land somewhere we can read; or intercept the decoder output (AppleAVD / VideoToolbox decompression callback) rather than an ObjC seam.
+
+## 2026-09-08 — GOAL REACHED: standalone JPEG frames of the iPhone screen, no DeviceHub
+
+Host Mac (macOS 26.5.1, Xcode 27 b6), iPhone 13 Pro iOS 27.0, tunnel `fdXX:XXXX:XXXX::1`/`::2` on `utun10`.
+`Experiments/videostream/receiver.m`, ad-hoc signed with `Experiments/videostream/receiver.entitlements`, run `OOP=1 STAGE2=1`.
+
+```
+shouldRunInProcess=0
+configure -> 1 err=nil
+DELEGATE stream:didStart:1 error:nil
+*** DELEGATE didGetLastDecodedFrame: class=__NSCFData
+*** wrote raw frame /tmp/ipbframe_raw000.bin (315890 bytes)
+... x3, distinct md5s, EXIF datetime 3 s apart
+file: JPEG image data, JFIF 1.01, baseline, 1184x2576, components 3
+```
+
+The frames are **ready-to-use baseline JPEGs of the device screen at native resolution**, visually verified (iOS Settings > General, status-bar clock matching the EXIF timestamp). Pulled on demand via `-[AVCVideoStream requestLastDecodedFrame]` -> delegate `stream:didGetLastDecodedFrame:`.
+
+**The two modes, and why the product uses out-of-process:**
+- `avcMediaStreamOptionRunInProcess = YES`: RTP + HEVC decode run in our process (verified earlier: ~828 kbps, 297 frames, AppleAVD HEVC). But the decoded buffers go straight into `VCImageQueue`'s CoreAnimation slot (`createSlotAndConnectCAQueue`, `layerHost=0`, `streamOutput=nil`), and `requestLastDecodedFrame` refuses with `only supported in the daemon`. Installing our own `VCStreamOutput` after init does not divert frames because the CA slot is wired inside `init`. No ObjC seam carries the pixels (`showDecodedFrame:atTime:`, `decodeFrame:showFrame:`, `onVideoFrame:frameTime:attribute:`, `sendLastRemoteVideoFrame:`, `VCStreamOutput didReceiveSampleBuffer:` all hooked, none fire).
+- `RunInProcess = NO` (out-of-process, decode in the always-running system daemon `avconferenced`): `requestLastDecodedFrame` works and delivers JPEG `NSData` to our delegate. **This is the working path.**
+
+**Entitlement is a hard gate, and this is the honest distribution caveat.** Without it the daemon cancels the XPC connection and the delegate only sees `streamDidServerDie:`. Signing the helper ad-hoc with `com.apple.videoconference.allow-conferencing` makes it work *on this machine*, which has SIP disabled AND `amfi_get_out_of_my_way=1`. On a stock Mac, AMFI will not honour an ad-hoc binary claiming that Apple-private entitlement, so this path as-is is not distributable to normal users. That constraint is unresolved and must be stated in any release.
+
+Still open: frame rate/latency of the pull path is unmeasured (3 pulls, ~3 s apart in this run, driven by our own timer, not a measured ceiling).

@@ -15,6 +15,18 @@
 #include <net/if.h>
 #include <string.h>
 #include <dlfcn.h>
+@interface VCImageQueue : NSObject
+- (BOOL)isLayerHostMode;
+- (id)streamOutput;
+- (void)setStreamOutput:(id)o;
+- (long long)streamToken;
+@end
+@interface VCStreamOutput : NSObject
+- (instancetype)initWithStreamToken:(long long)t clientProcessID:(int)pid delegate:(id)d delegateQueue:(dispatch_queue_t)q;
+@end
+@interface SinkTap : NSObject
+@end
+
 #define LOG(...) do{ fprintf(stderr, __VA_ARGS__); fprintf(stderr,"\n"); }while(0)
 #define DIE(...) do{ LOG("FATAL: " __VA_ARGS__); return 2; }while(0)
 
@@ -76,7 +88,44 @@ static void nOnVF(id self,SEL c,id f,double t,id a){ static int n=0; if(n++<3) f
     if(oOnVF)((void(*)(id,SEL,id,double,id))oOnVF)(self,c,f,t,a); }
 static void nSendLast(id self,SEL c,id x){ fprintf(stderr,"HOOK sendLastRemoteVideoFrame: arg=%s\n", x?object_getClassName(x):"nil"); if(oSendLast)((void(*)(id,SEL,id))oSendLast)(self,c,x); }
 static void hookOne(const char*cls,const char*sel,IMP n,IMP*o){ Class C=objc_getClass(cls); if(!C){fprintf(stderr,"no %s\n",cls);return;} Method m=class_getInstanceMethod(C,sel_registerName(sel)); if(!m){fprintf(stderr,"%s: no %s\n",cls,sel);return;} *o=method_getImplementation(m); method_setImplementation(m,n); fprintf(stderr,"hooked -[%s %s]\n",cls,sel); }
+static IMP oSampBuf;
+static void nSampBuf(id self,SEL c,CMSampleBufferRef sb){
+    static int n=0;
+    if(sb){ CVImageBufferRef px=CMSampleBufferGetImageBuffer(sb);
+        if(n++<3) fprintf(stderr,"HOOK didReceiveSampleBuffer: sb=%p imageBuffer=%p\n",sb,px);
+        if(px) saveFrame(px); }
+    if(oSampBuf)((void(*)(id,SEL,CMSampleBufferRef))oSampBuf)(self,c,sb);
+}
+static id gIQ;
+static IMP oIQinit,oIQslot,oIQlayer,oIQso,oIQvd,oIQfig,oIQstart,oIQdef;
+static id nIQinit(id self,SEL c,unsigned fr,BOOL pr,id cfg){ id r=((id(*)(id,SEL,unsigned,BOOL,id))oIQinit)(self,c,fr,pr,cfg); gIQ=r; fprintf(stderr,"IQ init(rate=%u prot=%d) -> %p\n",fr,pr,(__bridge void*)r); return r; }
+static void nIQslot(id self,SEL c){ fprintf(stderr,"IQ createSlotAndConnectCAQueue (layerHost=%d)\n",(int)[(VCImageQueue*)self isLayerHostMode]); if(oIQslot)((void(*)(id,SEL))oIQslot)(self,c); }
+static void nIQlayer(id self,SEL c,CGRect r,id n){ fprintf(stderr,"IQ configureCALayerWithRect name=%s\n", n?[[n description] UTF8String]:"nil"); if(oIQlayer)((void(*)(id,SEL,CGRect,id))oIQlayer)(self,c,r,n); }
+static void nIQso(id self,SEL c,id o){ fprintf(stderr,"IQ setStreamOutput: %s\n", o?object_getClassName(o):"nil"); if(oIQso)((void(*)(id,SEL,id))oIQso)(self,c,o); }
+static void nIQvd(id self,SEL c,id o){ fprintf(stderr,"IQ setVideoDestination: %s\n", o?object_getClassName(o):"nil"); if(oIQvd)((void(*)(id,SEL,id))oIQvd)(self,c,o); }
+static void nIQfig(id self,SEL c,id t,id d){ fprintf(stderr,"IQ setUpImageQueueForFigVideoTarget\n"); if(oIQfig)((void(*)(id,SEL,id,id))oIQfig)(self,c,t,d); }
+static void nIQdef(id self,SEL c,id d){ fprintf(stderr,"IQ setupDefaultImageQueueForFigVideoTarget\n"); if(oIQdef)((void(*)(id,SEL,id))oIQdef)(self,c,d); }
+static void nIQstart(id self,SEL c){
+    VCImageQueue *iq=(VCImageQueue*)self;
+    fprintf(stderr,"IQ start (layerHost=%d streamOutput=%s)\n",(int)[iq isLayerHostMode], [iq streamOutput]?object_getClassName([iq streamOutput]):"nil");
+    if(getenv("SINK") && ![iq streamOutput]){
+        Class SO=objc_getClass("VCStreamOutput");
+        if(SO){ static SinkTap *sink; if(!sink) sink=[SinkTap new];
+            id so=[[SO alloc] initWithStreamToken:[iq streamToken] clientProcessID:getpid() delegate:sink delegateQueue:dispatch_get_global_queue(0,0)];
+            fprintf(stderr,"created VCStreamOutput=%s token=%lld\n", so?object_getClassName(so):"nil", [iq streamToken]);
+            if(so){ [iq setStreamOutput:so]; fprintf(stderr,"installed streamOutput -> now %s\n", [iq streamOutput]?object_getClassName([iq streamOutput]):"nil"); } }
+    }
+    if(oIQstart)((void(*)(id,SEL))oIQstart)(self,c); }
 static void hookRecv(void){
+    hookOne("VCImageQueue","initWithFrameRate:imageQueueProtected:vcImageQueueConfig:",(IMP)nIQinit,&oIQinit);
+    hookOne("VCImageQueue","createSlotAndConnectCAQueue",(IMP)nIQslot,&oIQslot);
+    hookOne("VCImageQueue","configureCALayerWithRect:name:",(IMP)nIQlayer,&oIQlayer);
+    hookOne("VCImageQueue","setStreamOutput:",(IMP)nIQso,&oIQso);
+    hookOne("VCImageQueue","setVideoDestination:",(IMP)nIQvd,&oIQvd);
+    hookOne("VCImageQueue","setUpImageQueueForFigVideoTargetWithTagCollection:withDataChannelConfig:",(IMP)nIQfig,&oIQfig);
+    hookOne("VCImageQueue","setupDefaultImageQueueForFigVideoTargetWithDataChannelConfig:",(IMP)nIQdef,&oIQdef);
+    hookOne("VCImageQueue","start",(IMP)nIQstart,&oIQstart);
+    hookOne("VCStreamOutput","didReceiveSampleBuffer:",(IMP)nSampBuf,&oSampBuf);
     hookOne("VCVideoStream","onVideoFrame:frameTime:attribute:",(IMP)nOnVF,&oOnVF);
     hookOne("VCVideoStream","sendLastRemoteVideoFrame:",(IMP)nSendLast,&oSendLast);
     Class C=objc_getClass("VCVideoStreamReceiver");
@@ -89,12 +138,28 @@ static void hookRecv(void){
 
 @interface StreamTap : NSObject
 @end
+@implementation SinkTap
+- (void)streamOutput:(id)o didReceiveSampleBuffer:(CMSampleBufferRef)sb {
+    fprintf(stderr,"SINK streamOutput:didReceiveSampleBuffer: %p\n", sb);
+}
+- (BOOL)respondsToSelector:(SEL)sel { BOOL r=[super respondsToSelector:sel]; fprintf(stderr,"SINK probe %s -> %d\n",sel_getName(sel),r); return r; }
+@end
+
 @implementation StreamTap
 - (void)stream:(id)s didStart:(BOOL)ok error:(NSError*)e {
     fprintf(stderr,"DELEGATE stream:didStart:%d error:%s\n", ok, e?e.description.UTF8String:"nil");
 }
 - (void)stream:(id)s didGetLastDecodedFrame:(id)f {
-    fprintf(stderr,"DELEGATE didGetLastDecodedFrame: class=%s\n", f?object_getClassName(f):"nil");
+    fprintf(stderr,"*** DELEGATE didGetLastDecodedFrame: class=%s\n", f?object_getClassName(f):"nil");
+    if(!f) return;
+    CFTypeID t=CFGetTypeID((__bridge CFTypeRef)f);
+    if(t==CVPixelBufferGetTypeID()){ saveFrame((CVImageBufferRef)(__bridge void*)f); return; }
+    if(t==CMSampleBufferGetTypeID()){ CVImageBufferRef px=CMSampleBufferGetImageBuffer((CMSampleBufferRef)(__bridge void*)f); if(px) saveFrame(px); return; }
+    if([f isKindOfClass:[NSData class]]){
+        NSString*p=[NSString stringWithFormat:@"/tmp/ipbframe_raw%03d.bin",gFrames++];
+        [(NSData*)f writeToFile:p atomically:YES];
+        fprintf(stderr,"*** wrote raw frame %s (%lu bytes)\n",p.UTF8String,(unsigned long)[(NSData*)f length]); return; }
+    fprintf(stderr,"    frame CFTypeID=%lu desc=%s\n",(unsigned long)t,[[(__bridge NSString*)CFCopyTypeIDDescription(t) description] UTF8String]);
 }
 - (void)vcMediaStreamDidStop:(id)s { fprintf(stderr,"DELEGATE vcMediaStreamDidStop\n"); }
 // catch-all so we see any other delegate selector the stream sends
@@ -292,7 +357,7 @@ skip_probe:
         if(opt2 && [opt2 isKindOfClass:[NSDictionary class]]) LOG("initOptions keys: %s", [[(NSDictionary*)opt2 allKeys] description].UTF8String);
         NSMutableDictionary*o2=[NSMutableDictionary dictionary];
         if([opt2 isKindOfClass:[NSDictionary class]]) [o2 addEntriesFromDictionary:opt2];
-        o2[@"avcMediaStreamOptionRunInProcess"]=@(YES);
+        o2[@"avcMediaStreamOptionRunInProcess"]=@(getenv("OOP")?NO:YES);
         o2[@"avcMediaStreamOptionClientName"]=@"CoreDeviceScreenSharing";
         o2[@"avcMediaStreamOptionClientSessionID"]=[[NSUUID alloc] initWithUUIDString:sessID];
         xpc_object_t socks=xpc_dictionary_create_empty();
