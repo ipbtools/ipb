@@ -88,8 +88,11 @@ ipb stream --stdout            # repeated [uint32 BE length][jpeg bytes] on stdo
 ```
 
 Frames are native-resolution baseline JPEG. Only distinct frames are written (a static screen yields
-~1/s, a changing screen ~40/s). Exit codes: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down,
-5 negotiation rejected, 6 stream did not start, 7 no frames.
+~1/s, a changing screen ~40-57/s). Exit codes: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down,
+5 negotiation rejected, 6 stream did not start or the media server died, 7 no frames within the
+watchdog window, 8 output failed / consumer did not drain stdout / `--count` not reached,
+9 a watchdog expired (the stage is printed first). See "Design (as shipped)" below for the
+ingress/writer split that makes a slow consumer drop frames instead of accumulating latency.
 
 **Default is in-process and needs no entitlement.** `ipb stream` decodes RTP + HEVC in its own
 process (RunInProcess=YES) and captures each decoded frame by installing a `VCStreamOutput` on the
@@ -140,37 +143,104 @@ Driving Apple's own media client from our process was pursued because the RTP tr
 
 **Update (2026-09-07, later): `DeviceKitContext.current` is not usable standalone.** A first minimal probe returned without faulting, but a second, fuller build SIGBUSes inside `current.getter` itself, in BOTH init orders (before and after `_coredevice_xpc_init_services`). The one non-faulting return was almost certainly a garbage read that happened not to be dereferenced. So the context is established by DeviceHub's own launch (its BuiltIn*Providers / plugin host), and a bare process cannot fabricate it by calling the getter. Consequence: track A (standalone client) cannot be reached by blind reconstruction; its only reliable route is to observe DeviceHub's actual bootstrap/init order (via track C injection/trace) and replay exactly that. A depends on C.
 
-**Net:** a self-owned, smooth real-time mirror has no path that is both stable and shippable. Reconstructing Apple's private Swift client stack by hand is research-grade and breaks on every Xcode beta (rule 2); injecting into Device Hub ties the product to Xcode.app plus a code-injection step and an unproven headless mirror start. The frame source that ships without the private stack is a screenshot feed, which is not a 15 fps mirror. Which trade-off to accept is a product decision recorded for the user, not one to keep patching toward.
+**Net (2026-09-07):** a self-owned, smooth real-time mirror has no path that is both stable and shippable. Reconstructing Apple's private Swift client stack by hand is research-grade and breaks on every Xcode beta (rule 2); injecting into Device Hub ties the product to Xcode.app plus a code-injection step and an unproven headless mirror start. The frame source that ships without the private stack is a screenshot feed, which is not a 15 fps mirror. Which trade-off to accept is a product decision recorded for the user, not one to keep patching toward.
 
-## Design
+> **SUPERSEDED (2026-09-08).** This conclusion was overturned the next day. The premise — that a
+> self-owned mirror requires Apple's private *Swift* client stack — turned out to be false: the
+> negotiation can be driven from ObjC (`AVCMediaStreamNegotiator` mode 5) over raw XPC, and frames
+> can be captured in-process by installing a `VCStreamOutput` on the live `VCImageQueue`. The
+> shipped `ipb stream` does exactly that at ~46-57 fps with **no DeviceHub, no injection, no Swift
+> ABI shims, and no entitlement**. See "Shipped: `ipb stream`" above and the 2026-09-08 records in
+> `docs/verification.md`. The screenshot-feed fallback below is likewise moot; it is kept only as a
+> record of what was believed at the time.
 
-## Design
+## Design (as shipped, 2026-09-08)
 
-## Design
+Frames cross three stages, and **each boundary is bounded**. The design constraint that produced
+this shape: Apple's in-process delivery path has no backpressure of its own —
+`VCStreamOutput_EnqueueSampleBuffer` does `CFRetain(sb)` then `dispatch_async(delegateQueue, block)`
+with no capacity limit, no keep-latest, and no PTS comparison (AVConference 2205.3.1 disassembly).
+Whatever the delegate does slowly, Apple queues behind it without limit.
 
-Two deliverables, in order.
+```
+device HEVC/RTP -> our UDP socket -> AVCVideoStream (RunInProcess) -> AppleAVD decode
+  -> VCImageQueue -> our VCStreamOutput
+     [1] ingress: SERIAL queue. Reads PTS, retains, swaps into a one-deep "latest" slot,
+         wakes the writer, returns. Never encodes, never does I/O. p95 0.14 ms.
+  -> [2] writer: one SERIAL worker. Takes the latest frame, applies the fps cap BEFORE
+         encoding, JPEG-encodes, writes. At most one frame in flight + one pending.
+  -> [3] sink: --dir files or --stdout [uint32 BE length][jpeg].
+```
 
-**A. Spike (evidence, throwaway):** a separate Swift/ObjC experiment under `Experiments/videostream/` that loads `CoreDeviceMediaStreamSupport` and drives `MediaStreamSession` for the primary display into an offscreen `CALayer`, logs every `VideoStreamEvent`, and measures time-to-first-frame and steady frame interval. It answers: does the client work outside Device Hub; what `receivedLastDecodedFrame` carries (encoding, size); how to read pixels (layer render vs. decoded-frame data); what stops the stream. ABI shims are allowed here because it is an oracle, not the product (AGENTS.md rule 2).
+**Frames are dropped, not queued.** When the consumer is slower than the device, the latest slot is
+overwritten and the discarded frame is counted (`dropped ... due to backpressure` on exit). This is
+the whole point: an unbounded queue turns a slow consumer into seconds of latency and, on a
+concurrent queue, into out-of-order delivery. Frames rejected for a non-numeric or non-increasing
+PTS are counted separately (`invalidPTS`, `nonIncreasingPTS`), so no drop is invisible.
 
-**B. Product command `ipb stream`:** a long-lived helper process (`ipb-video`) that keeps one session open and serves frames on demand: `ipb stream --frames DIR --fps N` writes JPEG/PNG frames; `ipb stream --mjpeg PORT` serves an MJPEG stream for agents and browsers; `ipb stream --file out.mp4` (VideoToolbox re-encode) comes last. Frame contract: every frame carries a monotonic index, capture timestamp, size, and orientation, so an agent can bind an action to the frame it looked at. The command exits non-zero when the device stops the stream (sensor activity, lock, disconnect) and never restarts silently.
+Ordering is preserved by the serial ingress plus a strictly-increasing PTS watermark. There is
+deliberately **no PTS-reset recovery**: resetting the watermark on any regression would re-admit
+genuinely late frames, which is the bug this design exists to prevent.
 
-Host requirement stays macOS with the CoreDevice package; stage 4 (no Xcode, non-Mac hosts) cannot reuse AVConference, so its "video" is a screenshot loop over `dtscreencaptured` until something better appears.
+Three watchdog stages, each armed independently so a later stage cannot be squeezed by an earlier
+one: setup/start/warmup, collection (`--seconds` + margin), and shutdown (writer drain + framework
+stop + margin). Each prints which stage expired before exiting 9. The budgets are policy values, not
+measurements — the source comments say so.
+
+`--seconds` is the total collection budget and bounds `--count` as well, so no argument combination
+can wait without bound (AGENTS.md rule 2).
+
+Host requirement stays macOS with the CoreDevice package, plus a **GUI login session** (in-process
+decode creates a `CVDisplayLink`). Stage 4 (no Xcode, non-Mac hosts) cannot reuse AVConference.
+
+**Not built:** `--mjpeg PORT`, `--file out.mp4`, and per-frame metadata (monotonic index, capture
+timestamp, size, orientation) in the output stream. The last one matters most — without timestamps
+on the wire a consumer cannot pace playback correctly, which is why a live view needs an explicit
+`-framerate 60` hint. A window renderer would skip JPEG entirely and feed `AVSampleBufferDisplayLayer`.
 
 ## Acceptance
 
-- First frame within 3 s of `ipb stream` on the verified matrix; steady state at least 15 fps at the device's native size on the 13 Pro and 12 mini.
-- A frame captured after `ipb tap` shows the tap's effect within two frames.
-- Locking the phone or opening the camera ends the stream with a distinct exit code and message.
-- The smoke gate gains a `stream` step that checks first-frame latency and frame count over 5 s.
+Measured on this Mac (macOS 26.5.1, CoreDevice 642.15) with an iPhone 13 Pro (iOS 27.0), and on
+macOS 27.0 + SIP on with an iPhone 12 mini.
+
+- Native-resolution frames at ~46-57 fps on a moving screen (1184x2576 on the 13 Pro), ~1/s static.
+- Under a stalled consumer: peak concurrent callbacks 1, ingress p95 0.14 ms, **0 PTS regressions**
+  in emit order, drops reported rather than queued.
+- Every failure is a distinct exit code; no argument combination waits without bound.
+- `scripts/smoke_matrix.sh` passes.
+
+Still open as acceptance criteria: a `stream` step in the smoke gate, and binding a frame to the
+action that caused it (needs the per-frame metadata above).
 
 ## Open items
 
-- Confirm the control exchange from a real Device Hub session (host `log stream` capture on <macos27-host>; CoreDevice logging profile if fields are redacted).
-- ~~Why `ActionDeclaration.forward(to:)` crashes for our `RemoteDevice` objects~~ ANSWERED: missing full-client bootstrap; `DeviceManager.shared` lacks the coordinator whose `OSAllocatedUnfairLock` `forward(to:)` reads. See "Standalone Apple-client blocker" above.
-- Which address the device rejects with POSIX 49 (check `dtremotedisplayd` in the device syslog while sending a start request).
-- Building a real `negotiatorOffer` with `AVCMediaStreamNegotiator` from ObjC and the answer/`streamConfig` handling that follows.
-- Format of `receivedLastDecodedFrame(Data)` / `stream:didGetLastDecodedFrame:`.
+Answered by the shipped implementation (kept for history):
+
+- ~~Why `ActionDeclaration.forward(to:)` crashes for our `RemoteDevice` objects~~ ANSWERED: missing full-client bootstrap; `DeviceManager.shared` lacks the coordinator whose `OSAllocatedUnfairLock` `forward(to:)` reads. See "Standalone Apple-client blocker" above. Moot for the product: the shipped path never uses the Swift client.
+- ~~Which address the device rejects with POSIX 49~~ ANSWERED: the offer must carry the host's actually-bound RTP socket address on the tunnel.
+- ~~Building a real `negotiatorOffer` with `AVCMediaStreamNegotiator` from ObjC~~ ANSWERED: mode 5 (`CoreDeviceScreenSharing`), with `avcMediaStreamOptionClientSessionID` passed as a native XPC UUID.
+- ~~Format of `stream:didGetLastDecodedFrame:`~~ ANSWERED: baseline JPEG `NSData` on the `--daemon` path; the shipped in-process path receives `CMSampleBuffer`s instead.
+
+Still open:
+
+- **No per-frame metadata on the wire** (monotonic index, capture PTS, size, orientation). Without
+  it a consumer cannot pace playback, and an agent cannot bind an action to the frame it looked at.
+  This is the highest-value remaining item.
+- **A window renderer** (`AVSampleBufferDisplayLayer`, honouring PTS natively, skipping the JPEG
+  round-trip) — the missing half of a scrcpy-equivalent. The other half is a persistent input
+  session; a fresh helper invocation currently costs ~0.5 s, which is far too slow for dragging.
+- **Slight frame loss remains**, comparable to what DeviceHub itself shows on the same device
+  (user-observed, 2026-09-08). Believed to be link-level rather than client-side; not measured.
+- **Two 15 s captures stopped at t+5.81 s and still exited 0.** Not reproduced across five later
+  runs (20 s, 30 s, with a rotation), all of which ran full duration. Cause unknown. Related: the
+  12 s hard-stall guard ends a run and still returns 0 when frames stop mid-capture — whether a
+  stall should be a failure is an open contract decision.
+- **Watchdog budgets are unvalidated** (45 s setup, 5 s margins). No cold-start data.
+- **Exit 9 has no natural reproduction.** Reachable by inspection at three arming sites; triggering
+  it needs fault injection that blocks one call while leaving the watchdog queue live.
+- Headless Macs (no display at all) still cannot run the in-process path; would need a virtual display.
 - Whether `receiveVirtualExternal` (a second virtual display) is useful for agents that must not disturb the phone's own screen.
+- Confirm the control exchange from a real Device Hub session (host `log stream` capture; CoreDevice logging profile if fields are redacted).
 
 ## Rejected alternatives
 

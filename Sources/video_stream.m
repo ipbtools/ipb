@@ -14,7 +14,9 @@
 // entitlement com.apple.videoconference.allow-conferencing (see docs; distribution caveat).
 //
 // Exit codes: 0 ok; 2 usage/setup; 3 socket/service refused; 4 tunnel down; 5 negotiation rejected;
-//             6 stream did not start; 7 no frames within the watchdog window.
+//             6 stream did not start/server died; 7 no frames within the watchdog window;
+//             8 output failed/incomplete (including undrained consumer or unmet count);
+//             9 process watchdog expired (setup, framework call, or shutdown stalled).
 
 #import <Foundation/Foundation.h>
 #import <CoreMedia/CoreMedia.h>
@@ -32,6 +34,10 @@
 #include <string.h>
 #include <errno.h>
 #include <dlfcn.h>
+#include <pthread.h>
+#include <signal.h>
+#include <math.h>
+#include <unistd.h>
 
 #define LOGE(...) do{ fprintf(stderr, "ipb-video: " __VA_ARGS__); fprintf(stderr,"\n"); }while(0)
 #define DIE(code, ...) do{ LOGE(__VA_ARGS__); return (code); }while(0)
@@ -75,9 +81,27 @@ static double gMinInterval = 0;    // seconds between saved frames (fps limiter)
 static BOOL gStdout = NO;          // stream frames to stdout as [4-byte BE length][jpeg]...
 static int gSaved = 0, gPulls = 0;
 static unsigned long gPrevHash = 0;
-static double gLastSaveT = 0, gDeadlineExtend = 0;
+static double gLastSaveT = 0;       // writer-owned
+static double gLastOutputT = 0, gLastRequestT = 0; // protected by gFrameLock
 static AVCVideoStream *gStream = nil;
-static double gStopAt = 0;
+static pthread_mutex_t gFrameLock = PTHREAD_MUTEX_INITIALIZER;
+static dispatch_queue_t gDelegateQueue, gWriterQueue;
+static dispatch_group_t gWriterGroup;
+static CMSampleBufferRef gLatest = NULL; // one owned CF reference, protected by gFrameLock
+static NSData *gLatestJPEG;             // daemon's alternative pending frame (ARC-owned)
+static CMTime gNewestPTS;               // protected by gFrameLock
+static BOOL gBusy = NO, gStopping = NO;
+static unsigned long gBackpressureDrops = 0;
+static unsigned long gInvalidPTS = 0, gNonIncreasingPTS = 0;
+static int gFailure = 0;               // protected by gFrameLock
+static int gReportedSaved = 0;          // locked snapshot; gSaved belongs to the writer
+
+// Caller holds gFrameLock. Never call AVConference or wait for the writer under this lock.
+static void stopFramesLocked(void){
+    gStopping=YES;
+    if(gLatest){ CFRelease(gLatest); gLatest=NULL; }
+    gLatestJPEG=nil;
+}
 static BOOL gDaemon = NO;   // --daemon: decode in avconferenced (needs entitlement); default is in-process
 
 static double nowSec(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); return ts.tv_sec+ts.tv_nsec/1e9; }
@@ -90,7 +114,6 @@ static void emitJPEG(NSData *jpeg);   // fwd
 static void emitPixelBuffer(CVImageBufferRef px){
     if(!px) return;
     @autoreleasepool{
-        if(!gCI) gCI=[CIContext contextWithOptions:nil];
         CIImage *ci=[CIImage imageWithCVImageBuffer:px];
         CGColorSpaceRef cs=CGColorSpaceCreateDeviceRGB();
         NSData *jpeg=[gCI JPEGRepresentationOfImage:ci colorSpace:cs options:@{}];
@@ -99,11 +122,66 @@ static void emitPixelBuffer(CVImageBufferRef px){
     }
 }
 
+// Exactly one worker drains the latest slot. Taking a frame and clearing busy on an
+// empty slot use the same lock as submission, so a submit cannot lose its wakeup.
+static void wakeWriterLocked(void){
+    if(gBusy || gStopping) return;
+    gBusy=YES;
+    dispatch_group_async(gWriterGroup,gWriterQueue,^{
+        for(;;){
+            @autoreleasepool{
+                pthread_mutex_lock(&gFrameLock);
+                CMSampleBufferRef sb=gLatest;
+                NSData *jpeg=gLatestJPEG;
+                gLatest=NULL; gLatestJPEG=nil;
+                if(!sb && !jpeg){
+                    gBusy=NO;
+                    pthread_mutex_unlock(&gFrameLock);
+                    return;
+                }
+                pthread_mutex_unlock(&gFrameLock);
+                // Apply the fps cap before the expensive pixel-buffer JPEG encoding.
+                if(gMinInterval<=0 || nowSec()-gLastSaveT>=gMinInterval){
+                    if(sb) emitPixelBuffer(CMSampleBufferGetImageBuffer(sb));
+                    else emitJPEG(jpeg);
+                }
+                if(sb) CFRelease(sb); // ownership transferred out of the pending slot
+                if(gDaemon) dispatch_async(dispatch_get_main_queue(),^{
+                    pthread_mutex_lock(&gFrameLock);
+                    BOOL active=!gStopping;
+                    if(active) gLastRequestT=nowSec();
+                    pthread_mutex_unlock(&gFrameLock);
+                    if(active) [gStream requestLastDecodedFrame];
+                });
+            }
+        }
+    });
+}
+
 // In-process sink: VCImageQueue forwards every decoded frame to our VCStreamOutput delegate.
 static id gImageQueue = nil;   // captured live VCImageQueue
 @interface InProcSink : NSObject @end
 @implementation InProcSink
-- (void)didReceiveSampleBuffer:(CMSampleBufferRef)sb { if(sb) emitPixelBuffer(CMSampleBufferGetImageBuffer(sb)); }
+- (void)didReceiveSampleBuffer:(CMSampleBufferRef)sb {
+    if(!sb) return;
+    CMTime pts=CMSampleBufferGetPresentationTimeStamp(sb);
+    pthread_mutex_lock(&gFrameLock);
+    // Reject invalid/late timestamps before they can replace a newer pending frame.
+    if(gStopping){
+        // Shutdown callbacks do not count as timestamp drops.
+    }else if(!CMTIME_IS_NUMERIC(pts)){
+        gInvalidPTS++;
+    }else if(CMTIME_IS_NUMERIC(gNewestPTS) && CMTimeCompare(pts,gNewestPTS)<=0){
+        gNonIncreasingPTS++;
+    }else{
+        gNewestPTS=pts;
+        CFRetain(sb);
+        if(gLatest){ CFRelease(gLatest); gBackpressureDrops++; }
+        gLatest=sb;
+        wakeWriterLocked();
+    }
+    pthread_mutex_unlock(&gFrameLock);
+}
 - (void)streamOutput:(id)o didReceiveSampleBuffer:(CMSampleBufferRef)sb { [self didReceiveSampleBuffer:sb]; }
 @end
 static IMP gOrigIQStart;
@@ -113,7 +191,7 @@ static void swz_iq_start(id self, SEL _cmd){
         Class SO=objc_getClass("VCStreamOutput");
         if(SO){ static InProcSink *sink; if(!sink) sink=[InProcSink new];
             id so=[[SO alloc] initWithStreamToken:[(VCImageQueue*)self streamToken] clientProcessID:getpid()
-                                          delegate:sink delegateQueue:dispatch_get_global_queue(0,0)];
+                                          delegate:sink delegateQueue:gDelegateQueue];
             if(so) [(VCImageQueue*)self setStreamOutput:so]; }
     }
     ((void(*)(id,SEL))gOrigIQStart)(self,_cmd);
@@ -124,34 +202,72 @@ static void installInProcessSink(void){
     if(m){ gOrigIQStart=method_getImplementation(m); method_setImplementation(m,(IMP)swz_iq_start); }
 }
 
-// Emit one JPEG frame (dedup by content, honour --fps / --count / output sink). Thread-safe enough
-// for a single delivery queue; both the in-process sink and the daemon pull funnel through here.
+// Only the writer calls this function, for both in-process and daemon frames.
 static void emitJPEG(NSData *jpeg){
     if(!jpeg.length) return;
     unsigned long h=fnv(jpeg.bytes,jpeg.length);
     double t=nowSec();
     if(h==gPrevHash) return;                                   // identical frame; skip
-    if(gMinInterval>0 && (t-gLastSaveT)<gMinInterval) return;  // fps cap
+    BOOL ok=YES;
+    if(gStdout){
+        uint32_t n=htonl((uint32_t)jpeg.length);
+        ok=jpeg.length<=UINT32_MAX && fwrite(&n,1,4,stdout)==4 &&
+           fwrite(jpeg.bytes,1,jpeg.length,stdout)==jpeg.length && fflush(stdout)==0;
+        if(!ok) LOGE("stdout write/flush failed: %s",strerror(errno));
+    }
+    if(ok && gOutDir){
+        NSString*p=[gOutDir stringByAppendingPathComponent:[NSString stringWithFormat:@"frame%06d.jpg",gSaved]];
+        NSError *error=nil;
+        ok=[jpeg writeToFile:p options:0 error:&error];
+        if(!ok) LOGE("write %s failed: %s",p.UTF8String,error.description.UTF8String);
+    }
+    if(!ok){
+        pthread_mutex_lock(&gFrameLock);
+        gFailure=8;
+        stopFramesLocked();
+        pthread_mutex_unlock(&gFrameLock);
+        return;
+    }
     gPrevHash=h; gLastSaveT=t;
-    if(gStdout){ uint32_t n=htonl((uint32_t)jpeg.length); fwrite(&n,4,1,stdout); fwrite(jpeg.bytes,1,jpeg.length,stdout); fflush(stdout); }
-    if(gOutDir){ NSString*p=[gOutDir stringByAppendingPathComponent:[NSString stringWithFormat:@"frame%06d.jpg",gSaved]]; [jpeg writeToFile:p atomically:NO]; }
-    gSaved++; gDeadlineExtend=t;
-    if(gMaxFrames>0 && gSaved>=gMaxFrames){ if(gStream) [gStream stop]; gStopAt=t; }
+    gSaved++;
+    pthread_mutex_lock(&gFrameLock);
+    gReportedSaved=gSaved; gLastOutputT=nowSec(); // only completed output renews the stall guard
+    if(gMaxFrames>0 && gSaved>=gMaxFrames) stopFramesLocked();
+    pthread_mutex_unlock(&gFrameLock);
 }
 
 @interface FrameSink : NSObject @end
 @implementation FrameSink
 - (void)stream:(id)s didStart:(BOOL)ok error:(NSError*)e {
-    if(!ok) LOGE("stream did not start: %s", e?e.description.UTF8String:"(nil)");
+    if(!ok){
+        pthread_mutex_lock(&gFrameLock);
+        if(!gFailure) gFailure=6;
+        stopFramesLocked();
+        pthread_mutex_unlock(&gFrameLock);
+        LOGE("stream did not start: %s", e?e.description.UTF8String:"(nil)");
+    }
 }
 - (void)stream:(id)s didGetLastDecodedFrame:(id)f {
-    gPulls++;
-    if([f isKindOfClass:[NSData class]]) emitJPEG((NSData*)f);
-    if(gStream && (gStopAt==0)) [gStream requestLastDecodedFrame];   // pipeline next pull
+    pthread_mutex_lock(&gFrameLock);
+    if(!gStopping){
+        gPulls++;
+        if([f isKindOfClass:[NSData class]]){
+            if(gLatestJPEG) gBackpressureDrops++;
+            gLatestJPEG=(NSData*)f;
+            wakeWriterLocked();
+        }
+    }
+    pthread_mutex_unlock(&gFrameLock);
 }
 - (void)streamDidStop:(id)s {}
 - (void)vcMediaStreamDidStop:(id)s {}
-- (void)streamDidServerDie:(id)s { LOGE("media server (avconferenced) closed the stream"); }
+- (void)streamDidServerDie:(id)s {
+    pthread_mutex_lock(&gFrameLock);
+    BOOL active=!gStopping;
+    if(active){ if(!gFailure) gFailure=6; stopFramesLocked(); }
+    pthread_mutex_unlock(&gFrameLock);
+    if(active) LOGE("media server (avconferenced) closed the stream");
+}
 @end
 
 static xpc_object_t action_env(const char*action,const char*dev,xpc_object_t input){
@@ -177,12 +293,41 @@ static void usage(void){
       "  --stdout        stream frames to stdout: repeated [uint32 BE length][jpeg bytes]\n"
       "  --count N       stop after N distinct frames (default: run until --seconds)\n"
       "  --fps F         cap saved frames to at most F per second\n"
-      "  --seconds S     run for S seconds (default 10; ignored once --count is met)\n"
+      "  --seconds S     maximum collection time, including --count (default 10)\n"
       "  --daemon        decode in avconferenced instead of in-process (needs entitlement)\n");
+}
+
+// Serialize stage changes with expiry, so an old timer event cannot use a new stage label.
+static void armWatchdog(dispatch_source_t timer, dispatch_queue_t queue, double seconds,
+                        const char *message, size_t length){
+    dispatch_sync(queue,^{
+        dispatch_source_set_event_handler(timer,^{
+            write(STDERR_FILENO,message,length);
+            _Exit(9);
+        });
+        dispatch_source_set_timer(timer,dispatch_time(DISPATCH_TIME_NOW,(int64_t)(seconds*NSEC_PER_SEC)),DISPATCH_TIME_FOREVER,0);
+    });
 }
 
 int main(int argc,char**argv){
     setbuf(stderr,NULL);
+    signal(SIGPIPE,SIG_IGN); // report broken stdout as output failure (8)
+    // Independent of the main run loop and writer: also bounds synchronous private API calls.
+    // Keep the watchdog armed from initialization through start/warmup/first pull.
+    // The existing 45s engineering budget covers negotiation (request timeout=30s),
+    // RTP wait (8s), warmup (50 * 0.05s ~= 2.5s), leaving nominally 4.5s for setup,
+    // start, first pull and scheduling. No cold-start measurements establish its adequacy.
+    const double setupBudget=45;
+    const double writerGrace=5;   // existing bounded-output acceptance contract
+    const double stopGrace=5;     // shutdown policy allowance, not a measured private-API limit
+    const double watchdogMargin=5; // scheduling/transition policy; not backed by cold-start measurements
+    static const char setupTimeout[]="ipb-video: watchdog timeout: setup/start/warmup\n";
+    static const char collectionTimeout[]="ipb-video: watchdog timeout: collection\n";
+    static const char shutdownTimeout[]="ipb-video: watchdog timeout: shutdown/writer-drain/stop\n";
+    dispatch_queue_t watchdogQueue=dispatch_queue_create("ipb.video.watchdog",DISPATCH_QUEUE_SERIAL);
+    dispatch_source_t watchdog=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,watchdogQueue);
+    armWatchdog(watchdog,watchdogQueue,setupBudget,setupTimeout,sizeof setupTimeout-1);
+    dispatch_resume(watchdog);
     if(argc<5){ usage(); return 2; }
     const char*dev=argv[1]; const char*utun=argv[2]; const char*rxip=argv[3]; const char*txip=argv[4];
     double runSeconds = 10.0;
@@ -196,7 +341,13 @@ int main(int argc,char**argv){
         else { usage(); return 2; }
     }
     if(!gOutDir && !gStdout){ LOGE("nothing to do: pass --dir or --stdout"); return 2; }
-    if(gOutDir) [[NSFileManager defaultManager] createDirectoryAtPath:gOutDir withIntermediateDirectories:YES attributes:nil error:nil];
+    if(!isfinite(runSeconds) || runSeconds<=0 || runSeconds>(double)INT64_MAX/NSEC_PER_SEC-60 || gMaxFrames<0)
+        DIE(2,"--seconds must be finite and positive; --count must be nonnegative");
+    if(gOutDir){
+        NSError *error=nil;
+        if(![[NSFileManager defaultManager] createDirectoryAtPath:gOutDir withIntermediateDirectories:YES attributes:nil error:&error])
+            DIE(8,"create output directory: %s",error.description.UTF8String);
+    }
 
     if(!dlopen("/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice",RTLD_NOW)) DIE(2,"CoreDevice dlopen: %s",dlerror());
     if(!dlopen("/System/Library/PrivateFrameworks/AVConference.framework/Versions/A/AVConference",RTLD_NOW)) DIE(2,"AVConference dlopen: %s",dlerror());
@@ -279,6 +430,13 @@ int main(int argc,char**argv){
 
     xpc_object_t socks=xpc_dictionary_create_empty();
     xpc_dictionary_set_fd(socks,"avcKeySharedSocket",rtp);
+    gCI=[CIContext contextWithOptions:nil]; // eager, single-threaded, before any stream callback
+    gDelegateQueue=dispatch_queue_create("ipb.video.delegate",DISPATCH_QUEUE_SERIAL);
+    gWriterQueue=dispatch_queue_create("ipb.video.writer",DISPATCH_QUEUE_SERIAL);
+    gWriterGroup=dispatch_group_create();
+    gNewestPTS=kCMTimeInvalid;
+    dispatch_sync(gWriterQueue,^{ gLastSaveT=nowSec(); });
+    gLastOutputT=gLastRequestT=nowSec();
     if(!gDaemon) installInProcessSink();  // in-process capture (needs a GUI display session)
     Class VS=objc_getClass("AVCVideoStream"); if(!VS) DIE(6,"no AVCVideoStream class");
     NSError *se=nil;
@@ -287,23 +445,60 @@ int main(int argc,char**argv){
     FrameSink *sink=[FrameSink new];
     [vs setDelegate:sink];
     NSError *ce=nil; if(![vs configure:cfg error:&ce]) DIE(6,"configure: %s",ce?ce.description.UTF8String:"?");
-    [vs start];
     gStream=vs;
+    [vs start];
 
     // warm up, then collect frames; in-process frames arrive by push, daemon frames by pull.
-    double t0=nowSec(); gLastSaveT=t0; gDeadlineExtend=t0;
     for(int w=0; w<50; w++) [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];  // ~2.5s
-    if(gDaemon) [vs requestLastDecodedFrame];
+    pthread_mutex_lock(&gFrameLock);
+    BOOL active=!gStopping;
+    if(gDaemon && active) gLastRequestT=nowSec();
+    pthread_mutex_unlock(&gFrameLock);
+    if(gDaemon && active) [vs requestLastDecodedFrame];
+    // Reset the already-armed timer: requested collection time + 5s scheduling headroom.
+    // Shutdown receives a separate full budget when collection ends.
+    armWatchdog(watchdog,watchdogQueue,runSeconds+watchdogMargin,
+                collectionTimeout,sizeof collectionTimeout-1);
     double start=nowSec();
     while(1){
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
         double t=nowSec();
-        if(gStopAt) break;
-        if(gMaxFrames==0 && (t-start) >= runSeconds) break;
-        if(gDaemon && gStream && (t-gDeadlineExtend) > 2.0){ gDeadlineExtend=t; [vs requestLastDecodedFrame]; }  // daemon: re-arm on stall
-        if((t-gDeadlineExtend) > 12.0) break;  // hard stall guard (no frames at all)
+        pthread_mutex_lock(&gFrameLock);
+        BOOL stopped=gStopping;
+        double lastSave=gLastOutputT;
+        BOOL rearm=gDaemon && !stopped && !gBusy && (t-gLastRequestT)>2.0;
+        if(rearm) gLastRequestT=t;
+        pthread_mutex_unlock(&gFrameLock);
+        if(stopped) break;
+        if((t-start) >= runSeconds) break;
+        if(rearm) [vs requestLastDecodedFrame];  // daemon: re-arm on stall
+        if((t-lastSave) > 12.0) break;  // hard stall guard (no frames at all)
     }
+    // Fresh complete shutdown budget, independent of time left in collection:
+    // existing 5s writer grace + 5s framework stop policy + 5s scheduling headroom.
+    armWatchdog(watchdog,watchdogQueue,writerGrace+stopGrace+watchdogMargin,
+                shutdownTimeout,sizeof shutdownTimeout-1);
+    pthread_mutex_lock(&gFrameLock);
+    stopFramesLocked(); // reject callbacks and release pending before stopping AVConference
+    pthread_mutex_unlock(&gFrameLock);
+    // A consumer that never reads stdout must not make shutdown wait forever.
+    long writerBlocked=dispatch_group_wait(gWriterGroup,dispatch_time(DISPATCH_TIME_NOW,(int64_t)(writerGrace*NSEC_PER_SEC)));
+    if(writerBlocked)
+        LOGE("writer still blocked after 5s shutdown grace period");
+    pthread_mutex_lock(&gFrameLock);
+    int saved=gReportedSaved, pulls=gPulls;
+    int failure=gFailure;
+    unsigned long dropped=gBackpressureDrops;
+    unsigned long invalidPTS=gInvalidPTS, nonIncreasingPTS=gNonIncreasingPTS;
+    pthread_mutex_unlock(&gFrameLock);
+    LOGE("saved %d distinct frame(s) from %d pull(s); dropped %lu frame(s) due to backpressure; invalidPTS %lu; nonIncreasingPTS %lu", saved, pulls, dropped, invalidPTS, nonIncreasingPTS);
+    // exit() would flush stdout and could wait on the blocked writer's stdio lock.
+    if(writerBlocked || failure==8) _Exit(8);
+    // Preserve the private API's main-thread call site. The watchdog queue never waits
+    // for the main thread or writer; the full shutdown deadline remains armed during stop.
     [vs stop];
-    LOGE("saved %d distinct frame(s) from %d pull(s)", gSaved, gPulls);
-    return gSaved>0 ? 0 : 7;
+    if(failure) _Exit(failure);
+    if(!saved) _Exit(7);
+    if(gMaxFrames>0 && saved<gMaxFrames) _Exit(8);
+    _Exit(0); // all output was flushed by the writer; do not wait for framework teardown
 }

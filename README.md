@@ -69,6 +69,7 @@ bin/ipb swipe 0.5 0.75 0.5 0.35
 bin/ipb home
 bin/ipb recents
 bin/ipb screenshot build/current.png
+bin/ipb stream --dir frames --count 20        # live screen frames (JPEG), no DeviceHub
 bin/ipb service-ids
 bin/ipb services
 bin/ipb service-id touchscreen
@@ -104,6 +105,39 @@ HIDCTL_TIMEOUT_S=30                  # watchdog for a single helper run
 `UHID_SERVICE_ID` defaults to `auto`: the wrapper calls `connectedServiceDescriptors()` and selects the descriptor whose product is `CoreDevice touchscreen(nil)`. If discovery fails the command exits 3 unless `UHID_SERVICE_FALLBACK` is set.
 
 Exit codes from the helper: 0 ok, 1 a dispatched operation or the remote connection reported failure, 2 usage or local error, 3 CoreDeviceService refused the service socket (the CoreDevice error is printed), 4 the device tunnel is not connected, 5 watchdog timeout. On 4 the wrapper warms the tunnel once with `devicectl device info details` and retries; nothing has been sent to the device at that point.
+
+### Live screen stream: `ipb stream`
+
+Streams the device screen without DeviceHub, without injecting any Apple process, and without any
+Apple-private entitlement. Frames are native-resolution baseline JPEG; only frames whose content
+actually changed are emitted, so a static screen yields ~1/s and a moving one ~40-57/s.
+
+```sh
+bin/ipb stream --dir DIR [--count N] [--fps F] [--seconds S]
+bin/ipb stream --stdout        # repeated [uint32 BE length][jpeg bytes]
+
+# live view (see the note on --framerate below)
+bin/ipb stream --stdout --seconds 60 \
+  | ffplay -fflags nobuffer -flags low_delay -f mjpeg -framerate 60 -i -
+```
+
+**Requires a GUI login session** (`CGGetActiveDisplayList` > 0), because in-process decoding creates
+a `CVDisplayLink`. It works with SIP enabled; it does *not* work over plain ssh — from ssh, run it in
+the console session with `open -a Terminal <script>`.
+
+**The output carries no timestamps.** Frame rate varies with screen activity, so a consumer that
+assumes a fixed rate will drift; ffmpeg's MJPEG demuxer defaults to 25 fps, which is below the
+producer's peak, so always pass `-framerate 60` (at or above the peak) to keep the viewer from
+falling behind.
+
+`--seconds` is the total collection budget and bounds `--count` as well: if `--count N` is not
+reached within it, the command exits 8 rather than reporting success with fewer frames.
+
+Exit codes for `ipb stream`: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down, 5 negotiation
+rejected, 6 stream did not start or the media server died, 7 no frames within the watchdog window,
+8 output failed / the consumer did not drain stdout / `--count` not reached, 9 a watchdog expired
+(the stage — setup, collection, or shutdown — is printed before exit). When the consumer is slower
+than the device, frames are **dropped, not queued**; the count is reported on exit.
 
 Supported `service-id` roles:
 

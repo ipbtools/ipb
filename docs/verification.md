@@ -547,3 +547,108 @@ frames: 10        1136x2464      (12 mini native resolution)
 **The one real requirement is a GUI display session** (`CGGetActiveDisplayList` > 0), because `VCVideoReceiverDefault` creates a `CVDisplayLink`. Every normal user Mac satisfies this. Headless/ssh contexts do not; from ssh, run it in the console session via `open -a Terminal <script>` (verified working here). A truly headless Mac (no display at all) would still need a virtual display — open item, not a blocker for ordinary use.
 
 Matrix so far for the in-process path: macOS 26.5.1 + SIP off + iPhone 13 Pro (iOS 27) -> ~46 fps; macOS 27.0 + **SIP on** + iPhone 12 mini (iOS 27) -> frames captured, plain signature.
+
+## 2026-09-08 — `ipb stream`: backpressure root-caused, five bounded-wait/exit-code defects fixed
+
+This Mac (macOS 26.5.1, CoreDevice 642.15), iPhone 13 Pro (iOS 27.0 24A5430a, wired).
+Reported symptom: the live view shook violently while scrolling and frames from seconds
+earlier were spliced back in. `scripts/smoke_matrix.sh` PASSED after the change.
+
+### Root cause (measured, not inferred)
+
+The frame callback did its JPEG encode **and a synchronous `fwrite` to stdout** on
+`dispatch_get_global_queue(0,0)` — a *concurrent* queue. Disassembly of AVConference
+2205.3.1 (`0C061D6D-207C-3C8B-8637-40F6EC880FE1`) shows `VCStreamOutput_EnqueueSampleBuffer`
+does `CFRetain(sb)` then `dispatch_async(delegateQueue, block)` with **no capacity bound, no
+keep-latest, and no PTS comparison** on the in-process branch. Setting `_streamOutput` on
+`VCImageQueue` also *bypasses* the Fig display queue, so `setLowLatencyEnabled:` does not
+apply to this path.
+
+So any consumer slower than the producer blocked every delivery thread inside `fwrite`,
+Apple kept queueing retained frames behind them, and the backlog released concurrently and
+out of order. Instrumented run, consumer stalled 6 s, 353 frames:
+
+| metric | before | after |
+| --- | --- | --- |
+| peak concurrent callbacks | **75** | 1 |
+| callback ms p50/p95/max | 46.4 / **3989.7** / 4318.2 | 0.070 / 0.140 / 3.250 |
+| PTS regressions in emit order | **80 / 353 (23%)** | **0 / 387** |
+| worst backwards jump | **2.017 s** | 0 |
+| behaviour when consumer is slow | queues 75 frames | drops frames, reports the count |
+
+Upstream ordering was never the problem: **0** PTS regressions in arrival order over 774 frames.
+
+An unsynchronised `if(!gCI) gCI=[CIContext contextWithOptions:nil]` in that concurrent path
+aborted the process (`libc++abi: Pure virtual function called!`, producer exit **134** via
+`pipestatus`). Controlled test — eager single-threaded init, identical trace pressure —
+took the crash rate from 100% to **0/3**. Removing the crash exposed the backlog it had been masking.
+
+### Defects fixed
+
+1. Consumer reads ≥1 frame then stops forever → writer timeout → `_Exit(0)`: **failure reported
+   as success**. Now exit 8.
+2. Invalid / non-increasing PTS frames were silently discarded and uncounted. Now reported as
+   `invalidPTS` / `nonIncreasingPTS`, separate from backpressure drops.
+3. `fwrite`/`fflush`/`writeToFile:` results were ignored and `gSaved` incremented regardless.
+   Measured: `--dir <read-only> --count 5` returned **rc=0 claiming "saved 5"** with **0 files
+   written** (three variants: read-only dir, uncreatable dir, read-only root volume). Now exit 8,
+   and `saved` only counts frames that actually reached the sink.
+4. `--daemon --count N` **hung without bound**: `streamDidServerDie:` only logged, `--count`
+   disabled the seconds exit, and the 2 s daemon re-arm refreshed the same variable the 12 s
+   stall guard reads. Measured **100 s with no exit** (49 `closed the stream` callbacks) before an
+   external kill. Now request time and successful-output time are separate; exits rc=6 in ~4 s.
+5. `--count <large N>` **never exited** (found while checking the scope of fix 4): measured
+   1570 files and no exit until an external kill. `--seconds` now bounds `--count` too.
+
+Fixes 4 and 5 were violations of AGENTS.md rule 2 ("No unbounded waits").
+
+### Contract changes
+
+- **`--seconds` now bounds `--count`.** `--count N` not reached within the budget returns **8**
+  instead of 0. Agents relying on "wait as long as needed for N frames" must pass a larger
+  `--seconds`. Usage text updated.
+- New exit codes: **8** output failed / consumer did not drain / count not reached;
+  **9** watchdog expired. 9 has three arming stages (setup·start·warmup 45 s;
+  collection `seconds+5`; shutdown `writerGrace 5 + stopGrace 5 + margin 5`), each printing a
+  distinct stage line via `write(2)` before `_Exit`.
+- Non-finite / non-positive `--seconds` is rejected with 2. `SIGPIPE` is ignored so a broken
+  stdout is reported as output failure rather than a signal death.
+
+### Known, not fixed
+
+- **No PTS-reset recovery.** `gNewestPTS` only advances. A same-epoch reset would reject frames
+  until PTS passes the old watermark (an epoch increase is *not* rejected). Reachability within
+  one run is unproven, and "reset on any regression" would re-admit genuinely late frames.
+- **Hard stall returns 0 without `--count`.** If frames stop for 12 s mid-run, the guard breaks
+  the loop and `saved>0` still exits 0. Pre-existing; whether a stall is a failure is a contract
+  decision. Related open observation: two consecutive 15 s captures stopped at t+5.81 s (352
+  frames, identical both times) and still returned rc=0; five later runs (20 s, 30 s, and with a
+  rotation) ran full duration at ~41 fps. **Not reproduced, cause unknown.**
+- **Watchdog budgets are policy values, not measurements.** 45 s setup and the 5 s margins have no
+  cold-start data behind them; the comments say so. The watchdog covers `ipb-video` only — the
+  tunnel warm-up and resolution in `bin/ipb` are outside it.
+- **Exit 9 has no natural repro.** Reachable by inspection (three arming sites) but never observed;
+  triggering it needs fault injection that blocks one call while leaving the watchdog queue live.
+- `--daemon` cannot work in the shipped build (ad-hoc signature, no
+  `com.apple.videoconference.allow-conferencing`); it fails fast with rc=6.
+
+### Method note
+
+Implementation was delegated to Codex across three rounds; review was intended to be independent
+but the review request routed back to the implementer's own thread, which disclosed the conflict
+and spun up a separate reviewer to compensate. Round 3 reverted an unrequested change that moved
+the private `[vs stop]` call onto a global queue (unverified thread contract, and a normal stop
+exceeding a 1 s window would have turned successful output into rc=9).
+
+### 2026-09-08 — user acceptance of the fixed stream
+
+The user ran the fixed build against their own device and reported the live view working well; the
+scroll jitter and the seconds-old frames that started this investigation are gone. Remaining
+observation: **slight frame loss, comparable to what Apple's own DeviceHub shows on the same
+device.** Their read — that this is link-level rather than client-side — is consistent with our
+measurements (ingress p95 0.14 ms, zero PTS regressions in emit order, drops only under deliberate
+consumer stalls) but has not been measured directly; a link-level loss study is not done.
+
+Test procedure used: `./bin/ipb` from the repo, not the Homebrew `ipb` on PATH, since the fix is not
+released. The new build is identifiable by its exit line, which the old one lacks:
+`saved N ...; dropped M frame(s) due to backpressure; invalidPTS X; nonIncreasingPTS Y`.
