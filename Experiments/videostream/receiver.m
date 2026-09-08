@@ -50,7 +50,7 @@ int main(int argc,char**argv){
     setbuf(stdout,NULL); setbuf(stderr,NULL);
     if(argc<5){ LOG("usage: receiver <coredevice-uuid> <utun> <hostIP> <deviceIP>"); return 2; }
     const char*dev=argv[1]; const char*utun=argv[2]; const char*rxip=argv[3]; const char*txip=argv[4];
-    long mode = getenv("MODE")? atol(getenv("MODE")) : 2;
+    long mode = getenv("MODE")? atol(getenv("MODE")) : 5;
 
     if(!dlopen("/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice",RTLD_NOW)) DIE("CoreDevice dlopen: %s",dlerror());
     if(!dlopen("/System/Library/PrivateFrameworks/AVConference.framework/Versions/A/AVConference",RTLD_NOW)) DIE("AVConference dlopen: %s",dlerror());
@@ -65,11 +65,11 @@ int main(int argc,char**argv){
     const char*cn0 = getenv("CLIENTNAME") ?: "CoreDeviceScreenSharing";
     long tpt = getenv("TPT")? atol(getenv("TPT")) : 1;
     long ant = getenv("ANT")? atol(getenv("ANT")) : 1;
-    NSDictionary*negOpts = @{ @"avcMediaStreamOptionClientName": [NSString stringWithUTF8String:cn0],
-                              @"avcMediaStreamOptionClientSessionID": sessID,
-                              @"avcMediaStreamOptionClientPID": @(getpid()),
-                              @"AVCMediaStreamNegotiatorTransportProtocolType": @(tpt),
-                              @"AVCMediaStreamNegotiatorAccessNetworkType": @(ant) };
+    NSMutableDictionary*negOpts=[NSMutableDictionary dictionary];
+    if(getenv("NEG_TRANSPORT")){
+      negOpts[@"AVCMediaStreamNegotiatorTransportProtocolType"]=@(getenv("TPT")?atol(getenv("TPT")):1);
+      negOpts[@"AVCMediaStreamNegotiatorAccessNetworkType"]=@(getenv("ANT")?atol(getenv("ANT")):1);
+    }
     LOG("negotiator options: %s", negOpts.description.UTF8String);
     id neg=[[N alloc] initWithMode:mode options:negOpts error:&e];
     if(!neg) DIE("negotiator init: %s",e.description.UTF8String);
@@ -118,30 +118,19 @@ int main(int argc,char**argv){
     xpc_dictionary_set_string(in,"type","video"); xpc_dictionary_set_string(in,"direction","output");
     xpc_dictionary_set_data(in,"negotiatorOffer",offer.bytes,offer.length);
     xpc_dictionary_set_uint64(in,"clientSupportedFeatures",972);
-    const char*cvk=getenv("CVKEY")?:"string";
-    #define CV_STR(s) ({ xpc_object_t _d=xpc_dictionary_create_empty(); xpc_dictionary_set_string(_d,cvk,(s)); _d; })
+    // MSS primary-screen receive path puts ONLY ClientSessionID, as CodableValue.uuid
     xpc_object_t opts=xpc_dictionary_create_empty();
-    const char*kName=getenv("K_NAME")?:"ClientName"; const char*kCall=getenv("K_CALL")?:"CallID"; const char*kSess=getenv("K_SESS")?:"ClientSessionID";
-    xpc_dictionary_set_value(opts,kName,CV_STR(clientName));
-    xpc_dictionary_set_value(opts,kCall,CV_STR(callID.UTF8String));
-    xpc_dictionary_set_value(opts,kSess,CV_STR(callID.UTF8String));
-    if(getenv("FULLOPTS")){
-      const char*ik=getenv("IKEY")?:"int"; const char*bk=getenv("BKEY")?:"bool";
-      xpc_object_t p=xpc_dictionary_create_empty(); xpc_dictionary_set_int64(p,ik,(int64_t)getpid());
-      xpc_dictionary_set_value(opts,"avcMediaStreamOptionClientPID",p);
-      xpc_object_t o=xpc_dictionary_create_empty(); xpc_dictionary_set_bool(o,bk,true);
-      xpc_dictionary_set_value(opts,"avcMediaStreamOptionIsOriginator",o);
-      xpc_object_t r=xpc_dictionary_create_empty(); xpc_dictionary_set_bool(r,bk,true);
-      xpc_dictionary_set_value(opts,"avcMediaStreamOptionRunInProcess",r);
+    uuid_t sessUU; uuid_parse(sessID.UTF8String, sessUU);
+    xpc_object_t cvUUID=xpc_dictionary_create_empty();
+    xpc_dictionary_set_uuid(cvUUID,"uuid",sessUU);
+    xpc_dictionary_set_value(opts,"avcMediaStreamOptionClientSessionID",cvUUID);
+    if(getenv("WITH_TRANSPORT")){
+      xpc_object_t t=xpc_dictionary_create_empty(); xpc_dictionary_set_int64(t,"int",getenv("TPT")?atol(getenv("TPT")):1);
+      xpc_dictionary_set_value(opts,"AVCMediaStreamNegotiatorTransportProtocolType",t);
+      xpc_object_t a=xpc_dictionary_create_empty(); xpc_dictionary_set_int64(a,"int",getenv("ANT")?atol(getenv("ANT")):1);
+      xpc_dictionary_set_value(opts,"AVCMediaStreamNegotiatorAccessNetworkType",a);
     }
-    if(getenv("SHOTGUN")){
-      const char*names[]={"ClientName","clientName","avcMediaStreamOptionClientName","vcMediaStreamClientName"};
-      const char*calls[]={"CallID","callID","avcMediaStreamOptionCallID","vcMediaStreamCallID"};
-      const char*sess[] ={"ClientSessionID","clientSessionID","avcMediaStreamOptionClientSessionID","vcMediaStreamClientSessionID","SessionID","sessionID"};
-      for(int i=0;i<4;i++) xpc_dictionary_set_value(opts,names[i],CV_STR(clientName));
-      for(int i=0;i<4;i++) xpc_dictionary_set_value(opts,calls[i],CV_STR(callID.UTF8String));
-      for(int i=0;i<6;i++) xpc_dictionary_set_value(opts,sess[i],CV_STR(callID.UTF8String));
-    }
+    LOG("options: ClientSessionID=.uuid(%s)%s", sessID.UTF8String, getenv("WITH_TRANSPORT")?" +transport ints":"");
     xpc_dictionary_set_value(in,"options",opts);
     xpc_object_t srep=xpc_remote_connection_send_message_with_reply_sync(rc,action_env("com.apple.coredevice.action.mediastreamstart",dev,in));
     if(!srep){ LOG("mediastreamstart: null reply"); return 2; }

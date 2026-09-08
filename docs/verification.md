@@ -408,3 +408,25 @@ Inference (NOT yet proven): the device rebuilds its AVC options from the negotia
 - Reconfirmed the 4864-vs-9005 boundary: plain-string option values give 4864 with coding path exactly `[options, CallID]`; `{"string":...}` values give 9005. So `options` IS decoded as `[String: CodableValue]` and our keys are seen, yet the semantic layer still reports all three missing — pointing away from key naming and toward the device rebuilding its AVC options from somewhere else (likely the offer).
 
 Stopped brute-forcing per rule 3; dispatched a gpt-6-astra disassembly review of how MSS constructs `StartRequest.options` (brief: scratchpad/astra_9005_brief.md).
+
+## 2026-09-08 — BREAKTHROUGH: standalone RTP stream negotiated with no DeviceHub
+
+Host Mac (macOS 26.5.1, Xcode 27 b6), iPhone 13 Pro iOS 27.0, tunnel `fdXX:XXXX:XXXX::1`/`::2` on `utun10`. Reproduced 3/3 consecutive runs with `Experiments/videostream/receiver.m` (pure C/ObjC, no Swift shims, no DeviceHub, no injection).
+
+```
+offer: 480-481 bytes
+RTP socket bound OK: [fdXX:XXXX:XXXX::2%utun10]:<ephemeral>
+options: ClientSessionID=.uuid(<UUID>)
+*** RTP RECEIVED: 123 bytes from [fdXX:XXXX:XXXX::1]:<port>  hdr: 90 64 6d 6e
+answer: YES (430-432 bytes)
+setAnswer=1 err=nil ; config=<ptr> err=nil ; initOptions=<ptr> err=nil
+```
+
+The two errors that had blocked this for the whole session, both found by gpt-6-astra disassembly (`docs/research/standalone-9005-astra-2026-09-08.md`):
+
+1. **Negotiator mode was wrong.** AVC settings are selected by `(mode-1)` into a class table (AVConference `0x1E727C030`): mode 2 = `AirplayMirroring`, **mode 5 = `CoreDeviceScreenSharing`**, mode 6 = `CoreDeviceSystemAudio`. MSS's negotiator factory (MSS `0x13984`) does `mov w8,#5 ; cinc` — video -> 5, non-video -> 6. Mode is NOT a send/receive direction. Using mode 2 produced the AVConference 32033 / 9005 dead ends.
+2. **`ClientSessionID` must be `CodableValue.uuid(Foundation.UUID)`, a native XPC UUID** (`xpc_dictionary_set_uuid(cv,"uuid",bytes)`), not a string. The earlier CodableValue key sweep never tested this because the test helper always called `xpc_dictionary_set_string`, so `{"string":...}`/`{"int":...}`/`{"bool":...}` were the only shapes probed.
+
+Also corrected: the primary-screen receive path's `StartRequest.options` carries **only** `avcMediaStreamOptionClientSessionID`; `ClientName` (fixed value `CoreDeviceScreenSharing`) and `CallID` are produced later by the negotiator/MSS on the AVC-init side, not sent in the start request. And `senderIP`/`senderPort` DO exist in the real wire model (`CoreDeviceUtilities.MediaStreamStartParameters`), despite being absent from the `StartRequest` Swift signature.
+
+**Status: the device now streams RTP to a socket we own, in our own process, with the full negotiation (offer -> start -> answer -> setAnswer -> configuration -> init options) completing cleanly.** Next: hand the bound socket to `AVCVideoStream` via `xpc_dictionary_set_fd(...,"avcKeySharedSocket",fd)` with `initWithNetworkSockets:options:error:` (RunInProcess) + `configure:` + `setDelegate:` + `start`, and catch decoded frames in-process.
