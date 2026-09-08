@@ -923,3 +923,48 @@ operator can do that); if that clears it, add a `mediastreamstop` recovery path 
 unwedge itself rather than requiring a cable pull. Note `docs/video-stream.md` already records
 that the daemon stops streams itself on sensor activity
 (`stopAllStreamsDueToSensorActivity`), so a stop action exists on the device side.
+
+### 2026-09-09 — the media wedge, narrowed: cumulative, host-side, not ours
+
+Continued from the 2026-09-08 entry. The Mac was rebooted, which cleared the wedge
+(`ipb stream` rc=0, `ipb mirror` 413 frames at p50 16.7 ms / p95 20.2 ms), so the state was
+re-created deliberately.
+
+**It is cumulative, not triggered by any single action.** 16 consecutive `ipb stream` cycles all
+passed; then 14 consecutive `ipb mirror` cycles all passed; the very next stream start failed.
+So the threshold on this host is roughly **30 sessions**, and neither loop alone reaches it.
+This also retires the earlier suspicion that a `kill -9`/`SIGINT` teardown was to blame: the wedge
+had already returned *before* the signal test ran, so that test proved nothing about signals.
+
+**It is host-side, and not specific to one device.** With the 13 Pro wedged, streaming the
+**iPhone 12 mini** — a different device entirely — fails with the *identical*
+`GKVoiceChatServiceErrorDomain 32017 / VideoReceiver startVideo failed / DetailedError 1302`,
+and it gets past tunnel setup to the video start. This is the decisive test the previous entry
+lacked.
+
+**Correction to the previous entry.** It reasoned that a reboot fixing the problem pointed at the
+host. That inference was unsound on its own: rebooting the Mac also drops and re-establishes the
+device link, so it could equally have cleared device-side state. The second-device result above is
+what actually establishes host-side.
+
+**Ruled out as the cause:**
+
+| checked | result |
+| --- | --- |
+| our own leaked RTP sockets | zero UDP bindings on the tunnel prefix, 6 udp6 entries total, no orphan holders |
+| leftover processes of ours | none |
+| `avconferenced` state | restarting it does not clear the wedge; it holds only 18 fds |
+| signals / unclean teardown | wedge predated the signal test |
+| device-side session | a second device fails identically |
+| self-recovery | still wedged after 60 s and after many minutes |
+
+**Still unknown:** which host resource is exhausted. The shape — a fixed count of sessions,
+survives a user daemon restart, cleared only by reboot — fits a kernel or driver level decode
+session leak, but that is a hypothesis, not a finding. `VTDecoderXPCService` and `remoted` are both
+root-owned, so testing them by restart needs privileges this session does not take on its own.
+Log predicates for AppleAVD / VTDecompression produced nothing.
+
+**User impact:** anyone who runs about thirty `ipb stream` or `ipb mirror` sessions without
+rebooting is blocked, with an opaque AVConference error and no in-tool recovery. Whether unplugging
+and re-attaching the device clears it is untested — only the operator can do that, and it is the
+cheapest candidate workaround to check next.
