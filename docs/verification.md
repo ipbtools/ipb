@@ -400,3 +400,11 @@ Same host/device/tunnel. All findings below are reproducible with `Experiments/v
 Inference (NOT yet proven): the device rebuilds its AVC options from the negotiator OFFER rather than from our `options` dict, so the offer must carry ClientName/ClientSessionID — and the way to put them there is not `initWithMode:options:`. Candidates to investigate: `initNegotiatorLocalConfiguration:options:`, `processOffererInitOptions:errorReason:` on the negotiator.
 
 **Deterministic next step:** read the device syslog while sending the start; `validateAVCStreamOptions` logs the missing option names verbatim. `devicectl` has no console subcommand; use pymobiledevice3 `syslog live` (not currently installed; the previous venv was wiped by the reboot). Stop brute-forcing key names until that log is read.
+
+### 2026-09-08 (cont.) — 9005 exhaustion round: additional negative results
+
+- `AVCMediaStreamNegotiator initWithMode:2 options:{...}` demonstrably IGNORES the AVC options: adding `avcMediaStreamOptionClientName/ClientSessionID/ClientPID` and `AVCMediaStreamNegotiatorTransportProtocolType/AccessNetworkType` (swept values 0/1/2 x 0/1) leaves the offer at 542-544 bytes (jitter only from UUID/media-blob variance), never a structural change. So options are not reaching the offer via that initializer.
+- Device-log routes are all closed on this seed: macOS 26's `log stream` has no `--device` flag; `devicectl diagnose` and `devicectl device sysdiagnose` both fail with `CoreDeviceCLISupport.DiagnoseError error 0` (empty/partial archive). pymobiledevice3 is not installed (venv wiped by the reboot) and on iOS 27 would need its own RSD tunnel, risking the working CoreDevice tunnel.
+- Reconfirmed the 4864-vs-9005 boundary: plain-string option values give 4864 with coding path exactly `[options, CallID]`; `{"string":...}` values give 9005. So `options` IS decoded as `[String: CodableValue]` and our keys are seen, yet the semantic layer still reports all three missing — pointing away from key naming and toward the device rebuilding its AVC options from somewhere else (likely the offer).
+
+Stopped brute-forcing per rule 3; dispatched a gpt-6-astra disassembly review of how MSS constructs `StartRequest.options` (brief: scratchpad/astra_9005_brief.md).

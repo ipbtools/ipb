@@ -63,9 +63,13 @@ int main(int argc,char**argv){
     NSError*e=nil;
     NSString*sessID=[[NSUUID UUID] UUIDString];
     const char*cn0 = getenv("CLIENTNAME") ?: "CoreDeviceScreenSharing";
+    long tpt = getenv("TPT")? atol(getenv("TPT")) : 1;
+    long ant = getenv("ANT")? atol(getenv("ANT")) : 1;
     NSDictionary*negOpts = @{ @"avcMediaStreamOptionClientName": [NSString stringWithUTF8String:cn0],
                               @"avcMediaStreamOptionClientSessionID": sessID,
-                              @"avcMediaStreamOptionClientPID": @(getpid()) };
+                              @"avcMediaStreamOptionClientPID": @(getpid()),
+                              @"AVCMediaStreamNegotiatorTransportProtocolType": @(tpt),
+                              @"AVCMediaStreamNegotiatorAccessNetworkType": @(ant) };
     LOG("negotiator options: %s", negOpts.description.UTF8String);
     id neg=[[N alloc] initWithMode:mode options:negOpts error:&e];
     if(!neg) DIE("negotiator init: %s",e.description.UTF8String);
