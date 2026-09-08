@@ -527,3 +527,23 @@ Ran the in-process `ipb stream` (plain ad-hoc signature, 0 entitlement keys) on 
 **Separated conclusion:** the in-process path needs a **display / GUI login session**, not an entitlement and not SIP-off. The two variables are cleanly separated: the SIP-enabled machine failed only on the missing display; the display-having machine (local, SIP off) works at ~46 fps. A normal user's Mac (a screen + a logged-in GUI session) should therefore run `ipb stream` regardless of SIP. Headless/ssh/CI Macs currently cannot (open item: defeat the display-link requirement, e.g. a virtual display, for headless support).
 
 Direct SIP-on + display proof is still pending: run `ipb stream` from <macos27-host>'s own GUI session (Terminal on the desktop, not ssh), or `sudo launchctl asuser $(id -u) ./build/ipb-video ...`.
+
+## 2026-09-08 — DEFINITIVE: works on a stock SIP-enabled Mac with zero entitlements
+
+<macos27-host> (`<macos27-host>`, macOS 27.0 26A5425a), iPhone 12 mini (iOS 27.0). The helper was built there and signed with a **plain ad-hoc signature (no entitlements)**.
+
+The earlier headless failure was purely the ssh session having no display. Running the same command inside <macos27-host>'s own Aqua (GUI) session — launched from ssh with `open -a Terminal /tmp/guitest.sh`, which needs no root, unlike `launchctl asuser` — gives:
+
+```
+active displays: 1
+SIP: System Integrity Protection status: enabled.
+entitlements on helper: 0 conferencing keys
+ipb-video: saved 11 distinct frame(s) from 0 pull(s)
+frames: 10        1136x2464      (12 mini native resolution)
+```
+
+**This closes the distribution question.** On a stock, SIP-enabled Mac, with a binary carrying no Apple-private entitlement, `ipb stream` captures the device screen in-process (`0 pulls` = pure push feed). The `com.apple.videoconference.allow-conferencing` gate applies only to the `--daemon` fallback, which the shipping path does not use.
+
+**The one real requirement is a GUI display session** (`CGGetActiveDisplayList` > 0), because `VCVideoReceiverDefault` creates a `CVDisplayLink`. Every normal user Mac satisfies this. Headless/ssh contexts do not; from ssh, run it in the console session via `open -a Terminal <script>` (verified working here). A truly headless Mac (no display at all) would still need a virtual display — open item, not a blocker for ordinary use.
+
+Matrix so far for the in-process path: macOS 26.5.1 + SIP off + iPhone 13 Pro (iOS 27) -> ~46 fps; macOS 27.0 + **SIP on** + iPhone 12 mini (iOS 27) -> frames captured, plain signature.
