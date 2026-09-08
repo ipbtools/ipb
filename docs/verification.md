@@ -430,3 +430,35 @@ The two errors that had blocked this for the whole session, both found by gpt-6-
 Also corrected: the primary-screen receive path's `StartRequest.options` carries **only** `avcMediaStreamOptionClientSessionID`; `ClientName` (fixed value `CoreDeviceScreenSharing`) and `CallID` are produced later by the negotiator/MSS on the AVC-init side, not sent in the start request. And `senderIP`/`senderPort` DO exist in the real wire model (`CoreDeviceUtilities.MediaStreamStartParameters`), despite being absent from the `StartRequest` Swift signature.
 
 **Status: the device now streams RTP to a socket we own, in our own process, with the full negotiation (offer -> start -> answer -> setAnswer -> configuration -> init options) completing cleanly.** Next: hand the bound socket to `AVCVideoStream` via `xpc_dictionary_set_fd(...,"avcKeySharedSocket",fd)` with `initWithNetworkSockets:options:error:` (RunInProcess) + `configure:` + `setDelegate:` + `start`, and catch decoded frames in-process.
+
+## 2026-09-08 — MILESTONE: full in-process H.265 decode of the iPhone screen, no DeviceHub
+
+Host Mac (macOS 26.5.1, Xcode 27 b6), iPhone 13 Pro iOS 27.0, tunnel `fdXX:XXXX:XXXX::1`/`::2` on `utun10`. `Experiments/videostream/receiver.m` (pure C/ObjC), run with `STAGE2=1`.
+
+The complete pipeline now runs inside our own process:
+
+1. raw XPC `createservicesocket` -> RemoteXPC to `dtremotedisplayd`
+2. `AVCMediaStreamNegotiator initWithMode:5` (CoreDeviceScreenSharing) -> `createOffer`
+3. our own AF_INET6 UDP socket bound on the host tunnel address
+4. `mediastreamstart` with `options = {avcMediaStreamOptionClientSessionID: .uuid(<UUID>)}` -> device returns a negotiator answer
+5. `setAnswer:` -> `generateMediaStreamConfigurationWithError:` -> `generateMediaStreamInitOptionsWithError:`
+6. MSG_PEEK the first RTP datagram to learn the device's RTP source, then `connect()` the socket to it
+7. `xpc_dictionary_set_fd(socks,"avcKeySharedSocket",fd)` -> `-[AVCVideoStream initWithNetworkSockets:options:error:]` with `avcMediaStreamOptionRunInProcess=YES` -> `configure:` -> `setDelegate:` -> `start`
+
+Result (AVConference ViceroyTrace logs from our own pid):
+
+```
+_VCVideoStream_DidReceiveRemoteFrame: remoteVideoAttributes:[ratio:1184.00x2576.00
+    orientation:Portrait videoSourceScreen:YES videoMirrored:NO ...]
+VCVideoStream-DidReceiveRemoteFrame ... received first remote frame frameTime=1.150000
+VTP Recv packet count:[515] byte count:[519105] interval:5.011s rate:[828.707]kbps
+VCVideoPlayer Health: numAlarmsEnqueuedForDecode=297 numAlarmsProcessedForDecode=297
+    numAlarmsProcessedForDisplay=296 numAlarmsDropped=0
+AppleAVD: AppleAVDWrapperHEVCDecoderCreateInstance ... codecType: HEVC
+```
+
+So the device's screen is negotiated, streamed over RTP to a socket we own, and **hardware-decoded (HEVC) in our process at ~30 fps with correct resolution and orientation, with zero DeviceHub involvement and no Swift ABI shims.** `shouldRunInProcess=1`, `configure -> 1`, `stream:didStart:1 error:nil`.
+
+**Remaining gap: extracting the decoded CVPixelBuffer.** The decoded frames go from the AppleAVD hardware decoder straight into AVConference's `VCImageQueue` (a FigImageQueue destined for a CALayer/CAContext), bypassing every ObjC seam tried. Hooks installed but never fired: `-[VCVideoStreamReceiver showDecodedFrame:atTime:]`, `decodeFrame:showFrame:`, `-[VCVideoStream onVideoFrame:frameTime:attribute:]`, `sendLastRemoteVideoFrame:`. Confirmed dead end: `-[AVCVideoStream requestLastDecodedFrame]` logs `only supported in the daemon` in RunInProcess mode (matches the earlier disassembly).
+
+Next candidates for the frame tap: attach our own CALayer via `VCImageQueue configureCALayerWithRect:name:` / the `vcMediaStreamVideoBufferDescription` config key so frames land somewhere we can read; or intercept the decoder output (AppleAVD / VideoToolbox decompression callback) rather than an ObjC seam.

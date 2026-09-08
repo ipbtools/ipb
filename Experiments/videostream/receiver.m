@@ -2,6 +2,11 @@
 // Follows CoreDeviceMediaStreamSupport's own chain. All ObjC/C, no Swift shims.
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
+#import <CoreMedia/CoreMedia.h>
+#import <CoreVideo/CoreVideo.h>
+#import <CoreImage/CoreImage.h>
+#import <ImageIO/ImageIO.h>
+#import <CoreGraphics/CoreGraphics.h>
 #include <xpc/xpc.h>
 #include <uuid/uuid.h>
 #include <sys/socket.h>
@@ -29,6 +34,75 @@ extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc
 - (BOOL)setAnswer:(NSData*)a withError:(NSError**)e;
 - (id)generateMediaStreamConfigurationWithError:(NSError**)e;
 - (id)generateMediaStreamInitOptionsWithError:(NSError**)e;
+@end
+
+@interface AVCVideoStream : NSObject
+- (instancetype)initWithNetworkSockets:(id)socks options:(id)opts error:(NSError**)e;
+- (BOOL)configure:(id)cfg error:(NSError**)e;
+- (void)setDelegate:(id)d;
+- (BOOL)start;
+- (void)stop;
+- (void)requestLastDecodedFrame;
+- (BOOL)shouldRunInProcessWithOptions:(id)o;
+@end
+
+static int gFrames=0;
+static void saveFrame(CVImageBufferRef px){
+    if(!px||gFrames>=8) return;
+    @autoreleasepool{
+        CIImage *ci=[CIImage imageWithCVImageBuffer:px];
+        CIContext *cc=[CIContext contextWithOptions:nil];
+        CGImageRef img=[cc createCGImage:ci fromRect:ci.extent];
+        if(img){
+            NSString*path=[NSString stringWithFormat:@"/tmp/ipbframe%03d.png",gFrames];
+            CGImageDestinationRef d=CGImageDestinationCreateWithURL((__bridge CFURLRef)[NSURL fileURLWithPath:path],(CFStringRef)@"public.png",1,NULL);
+            if(d){CGImageDestinationAddImage(d,img,NULL);CGImageDestinationFinalize(d);CFRelease(d);
+                  fprintf(stderr,"*** FRAME %d saved %s (%zux%zu)\n",gFrames,path.UTF8String,CGImageGetWidth(img),CGImageGetHeight(img));}
+            CGImageRelease(img); gFrames++;
+        }
+    }
+}
+static IMP oShow,oDec;
+static void nShow(id self,SEL c,id frame,CMTime t){
+    if(oShow)((void(*)(id,SEL,id,CMTime))oShow)(self,c,frame,t);
+    if(gFrames<8) fprintf(stderr,"HOOK showDecodedFrame: class=%s\n", frame?object_getClassName(frame):"nil");
+    if(frame){ CFTypeID tid=CFGetTypeID((__bridge CFTypeRef)frame);
+        if(tid==CVPixelBufferGetTypeID()) saveFrame((CVImageBufferRef)(__bridge void*)frame); }
+}
+static void nDec(id self,SEL c,id f,BOOL sh){ if(oDec)((void(*)(id,SEL,id,BOOL))oDec)(self,c,f,sh); static int n=0; if(n++<3) fprintf(stderr,"HOOK decodeFrame:showFrame:%d\n",sh); }
+static IMP oOnVF,oSendLast,oSetVBD;
+static void nOnVF(id self,SEL c,id f,double t,id a){ static int n=0; if(n++<3) fprintf(stderr,"HOOK onVideoFrame: class=%s t=%f\n", f?object_getClassName(f):"nil",t);
+    if(f){CFTypeID x=CFGetTypeID((__bridge CFTypeRef)f); if(x==CVPixelBufferGetTypeID()) saveFrame((CVImageBufferRef)(__bridge void*)f);} 
+    if(oOnVF)((void(*)(id,SEL,id,double,id))oOnVF)(self,c,f,t,a); }
+static void nSendLast(id self,SEL c,id x){ fprintf(stderr,"HOOK sendLastRemoteVideoFrame: arg=%s\n", x?object_getClassName(x):"nil"); if(oSendLast)((void(*)(id,SEL,id))oSendLast)(self,c,x); }
+static void hookOne(const char*cls,const char*sel,IMP n,IMP*o){ Class C=objc_getClass(cls); if(!C){fprintf(stderr,"no %s\n",cls);return;} Method m=class_getInstanceMethod(C,sel_registerName(sel)); if(!m){fprintf(stderr,"%s: no %s\n",cls,sel);return;} *o=method_getImplementation(m); method_setImplementation(m,n); fprintf(stderr,"hooked -[%s %s]\n",cls,sel); }
+static void hookRecv(void){
+    hookOne("VCVideoStream","onVideoFrame:frameTime:attribute:",(IMP)nOnVF,&oOnVF);
+    hookOne("VCVideoStream","sendLastRemoteVideoFrame:",(IMP)nSendLast,&oSendLast);
+    Class C=objc_getClass("VCVideoStreamReceiver");
+    if(!C){ fprintf(stderr,"no VCVideoStreamReceiver\n"); return; }
+    Method m=class_getInstanceMethod(C,sel_registerName("showDecodedFrame:atTime:"));
+    if(m){ oShow=method_getImplementation(m); method_setImplementation(m,(IMP)nShow); fprintf(stderr,"hooked showDecodedFrame:atTime:\n"); }
+    Method m2=class_getInstanceMethod(C,sel_registerName("decodeFrame:showFrame:"));
+    if(m2){ oDec=method_getImplementation(m2); method_setImplementation(m2,(IMP)nDec); fprintf(stderr,"hooked decodeFrame:showFrame:\n"); }
+}
+
+@interface StreamTap : NSObject
+@end
+@implementation StreamTap
+- (void)stream:(id)s didStart:(BOOL)ok error:(NSError*)e {
+    fprintf(stderr,"DELEGATE stream:didStart:%d error:%s\n", ok, e?e.description.UTF8String:"nil");
+}
+- (void)stream:(id)s didGetLastDecodedFrame:(id)f {
+    fprintf(stderr,"DELEGATE didGetLastDecodedFrame: class=%s\n", f?object_getClassName(f):"nil");
+}
+- (void)vcMediaStreamDidStop:(id)s { fprintf(stderr,"DELEGATE vcMediaStreamDidStop\n"); }
+// catch-all so we see any other delegate selector the stream sends
+- (BOOL)respondsToSelector:(SEL)sel {
+    BOOL r=[super respondsToSelector:sel];
+    fprintf(stderr,"DELEGATE probe: %s -> %d\n", sel_getName(sel), r);
+    return r;
+}
 @end
 
 static xpc_object_t action_env(const char*action,const char*dev,xpc_object_t input){
@@ -149,6 +223,7 @@ int main(int argc,char**argv){
           LOG("userInfo unarchived: %s",[o description].UTF8String); } } }
 
     // transport check: does the device send RTP to us? (verification only; AVCVideoStream handoff is stage 2)
+    if(getenv("STAGE2")) goto skip_probe;
     struct timeval tv={4,0}; setsockopt(rtp,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof tv);
     uint8_t pkt[2048]; struct sockaddr_in6 from; socklen_t fl=sizeof from;
     ssize_t n=recvfrom(rtp,pkt,sizeof pkt,0,(struct sockaddr*)&from,&fl);
@@ -156,6 +231,7 @@ int main(int argc,char**argv){
         LOG("*** RTP RECEIVED: %zd bytes from [%s]:%u  hdr: %02x %02x %02x %02x",n,fb,ntohs(from.sin6_port),pkt[0],pkt[1],pkt[2],pkt[3]); }
     else LOG("no RTP within 4s (n=%zd errno=%s)",n,strerror(errno));
 
+skip_probe:
     if(so){
         size_t alen=0; const void*ans=xpc_dictionary_get_data(so,"negotiatorAnswer",&alen);
         if(!ans) ans=xpc_dictionary_get_data(so,"answer",&alen);
@@ -166,6 +242,84 @@ int main(int argc,char**argv){
             LOG("config=%p err=%s",cfg,ae?[ae.description substringToIndex:MIN(140UL,ae.description.length)].UTF8String:"nil");
             id opt=[neg generateMediaStreamInitOptionsWithError:&ae];
             LOG("initOptions=%p err=%s",opt,ae?[ae.description substringToIndex:MIN(140UL,ae.description.length)].UTF8String:"nil");
+        }
+    }
+    // ---- stage 2: hand our socket to AVCVideoStream for in-process decode ----
+    if(so && getenv("STAGE2")){
+        // learn the device's RTP source via MSG_PEEK (do not consume), then connect() the socket
+        struct timeval ptv={6,0}; setsockopt(rtp,SOL_SOCKET,SO_RCVTIMEO,&ptv,sizeof ptv);
+        uint8_t pk[4]; struct sockaddr_in6 peer; socklen_t pl=sizeof peer;
+        ssize_t pn=recvfrom(rtp,pk,sizeof pk,MSG_PEEK,(struct sockaddr*)&peer,&pl);
+        if(pn<=0){ LOG("stage2: no RTP to peek (n=%zd %s) - cannot connect socket",pn,strerror(errno)); }
+        else{
+            char pb[64]; inet_ntop(AF_INET6,&peer.sin6_addr,pb,sizeof pb);
+            LOG("stage2: peer RTP [%s]:%u (peeked %zd bytes, hdr %02x %02x)",pb,ntohs(peer.sin6_port),pn,pk[0],pk[1]);
+            if(connect(rtp,(struct sockaddr*)&peer,sizeof peer)!=0) LOG("stage2: connect failed: %s",strerror(errno));
+            else LOG("stage2: socket connected to peer");
+        }
+        struct timeval z={0,0}; setsockopt(rtp,SOL_SOCKET,SO_RCVTIMEO,&z,sizeof z);
+
+        NSError*ae2=nil;
+        id cfg2=[neg generateMediaStreamConfigurationWithError:&ae2];
+        id opt2=[neg generateMediaStreamInitOptionsWithError:&ae2];
+        LOG("stage2: cfg=%s opt=%s", cfg2?object_getClassName(cfg2):"nil", opt2?object_getClassName(opt2):"nil");
+        if(cfg2){
+            unsigned nm=0; Method*ms=class_copyMethodList([cfg2 class],&nm);
+            NSMutableArray*sels=[NSMutableArray array];
+            for(unsigned i=0;i<nm;i++){const char*sn=sel_getName(method_getName(ms[i]));
+                if(!strchr(sn,':')) [sels addObject:[NSString stringWithUTF8String:sn]];}
+            free(ms);
+            for(NSString*sn in sels){
+                const char*c=sn.UTF8String;
+                if(strcasestr(c,"port")||strcasestr(c,"ip")||strcasestr(c,"addr")||strcasestr(c,"remote")||strcasestr(c,"local")||strcasestr(c,"ssrc")||strcasestr(c,"payload")||strcasestr(c,"socket")||strcasestr(c,"connection")){
+                    @try{ id v=[cfg2 valueForKey:sn]; LOG("  cfg.%s = %s", c, [[v description] UTF8String]); }@catch(id e){}
+                }
+            }
+        }
+        if(cfg2){
+            for(NSString*k in @[@"remoteAddress",@"localAddress"]){
+                @try{ id a=[cfg2 valueForKey:k];
+                    LOG("== %s: %s", k.UTF8String, [[a description] UTF8String]);
+                    unsigned an=0; Method*am=class_copyMethodList([a class],&an);
+                    for(unsigned i=0;i<an;i++){const char*sn=sel_getName(method_getName(am[i]));
+                        if(!strchr(sn,':')&&(strcasestr(sn,"port")||strcasestr(sn,"addr")||strcasestr(sn,"string")||strcasestr(sn,"ip")||strcasestr(sn,"family"))){
+                            @try{ id v=[a valueForKey:[NSString stringWithUTF8String:sn]]; LOG("   %s.%s = %s", k.UTF8String, sn, [[v description] UTF8String]); }@catch(id e){} } }
+                    free(am);
+                }@catch(id e){}
+            }
+            @try{ LOG("cfg FULL: %s", [[cfg2 description] UTF8String]); }@catch(id e){}
+        }
+        if(opt2 && [opt2 isKindOfClass:[NSDictionary class]]) LOG("initOptions keys: %s", [[(NSDictionary*)opt2 allKeys] description].UTF8String);
+        NSMutableDictionary*o2=[NSMutableDictionary dictionary];
+        if([opt2 isKindOfClass:[NSDictionary class]]) [o2 addEntriesFromDictionary:opt2];
+        o2[@"avcMediaStreamOptionRunInProcess"]=@(YES);
+        o2[@"avcMediaStreamOptionClientName"]=@"CoreDeviceScreenSharing";
+        o2[@"avcMediaStreamOptionClientSessionID"]=[[NSUUID alloc] initWithUUIDString:sessID];
+        xpc_object_t socks=xpc_dictionary_create_empty();
+        xpc_dictionary_set_fd(socks,"avcKeySharedSocket",rtp);
+        hookRecv();
+        Class VS=objc_getClass("AVCVideoStream");
+        if(!VS){ LOG("no AVCVideoStream class"); return 3; }
+        NSError*se=nil;
+        AVCVideoStream *vs=[[VS alloc] initWithNetworkSockets:(id)socks options:o2 error:&se];
+        LOG("AVCVideoStream init -> %s err=%s", vs?"OK":"nil", se?se.description.UTF8String:"nil");
+        if(vs){
+            LOG("shouldRunInProcess=%d", [vs shouldRunInProcessWithOptions:o2]);
+            StreamTap*tap=[StreamTap new];
+            [vs setDelegate:tap];
+            NSError*ce=nil; BOOL okc=[vs configure:cfg2 error:&ce];
+            LOG("configure -> %d err=%s", okc, ce?ce.description.UTF8String:"nil");
+            [(AVCVideoStream*)vs start];
+            LOG("start called");
+            [[NSNotificationCenter defaultCenter] addObserverForName:nil object:nil queue:nil usingBlock:^(NSNotification*n){
+                const char*nn=n.name.UTF8String;
+                if(nn && (strcasestr(nn,"vcMediaStream")||strcasestr(nn,"Frame")||strcasestr(nn,"avc")))
+                    fprintf(stderr,"NOTE %s userInfo=%s\n", nn, n.userInfo?[[n.userInfo allKeys] description].UTF8String:"nil");
+            }];
+            for(int i=0;i<24;i++){ [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+                if(i%6==5){ [vs requestLastDecodedFrame]; fprintf(stderr,"pulled requestLastDecodedFrame\n"); } }
+            [vs stop];
+            LOG("stage2 stopped");
         }
     }
     LOG("stage1 done");
