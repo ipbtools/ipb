@@ -91,12 +91,20 @@ Frames are native-resolution baseline JPEG. Only distinct frames are written (a 
 ~1/s, a changing screen ~40/s). Exit codes: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down,
 5 negotiation rejected, 6 stream did not start, 7 no frames.
 
-**Distribution caveat (unresolved):** `ipb-video` must be ad-hoc signed with
-`com.apple.videoconference.allow-conferencing` (Makefile does this). `avconferenced` checks that
-entitlement on the client; it is accepted here only because this Mac has SIP disabled and
-`amfi_get_out_of_my_way=1`. On a stock Mac AMFI will reject an ad-hoc binary claiming that
-Apple-private entitlement, so `ipb stream` is not yet usable by ordinary users. See the entitlement
-investigation in `docs/research/`.
+**Default is in-process and needs no entitlement.** `ipb stream` decodes RTP + HEVC in its own
+process (RunInProcess=YES) and captures each decoded frame by installing a `VCStreamOutput` on the
+live `VCImageQueue` (its `streamOutput` is read per-frame at enqueue). `avconferenced` is not
+involved, so the `com.apple.videoconference.allow-conferencing` entitlement check never runs and the
+helper ships with a plain ad-hoc signature. Frames are ~46 fps CVPixelBuffers, JPEG-encoded on the way out.
+
+`--daemon` switches to decoding in `avconferenced` and pulling frames via `requestLastDecodedFrame`;
+that path DOES require the `allow-conferencing` entitlement (sign with `Sources/video_stream.entitlements`)
+and only works where AMFI honours it (this dev Mac: SIP off + `amfi_get_out_of_my_way=1`). It exists as a
+fallback/oracle, not the shipping path.
+
+Not yet verified on a stock, SIP-enabled Mac: dlopening the private frameworks and in-process AppleAVD
+decode should not need SIP-off, but that has not been proven on such a machine. See
+`docs/research/entitlement-astra-2026-09-08.md`.
 
 ## Standalone path found: raw XPC + plain UDP socket + ObjC AVCVideoStream (2026-09-08, gpt-6-astra source review)
 

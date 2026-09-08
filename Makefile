@@ -66,7 +66,7 @@ $(VIDEO_TARGET): $(SOURCES_DIR)/video_stream.m | $(BUILD_DIR)
 		-o $@ $< \
 		-framework Foundation -framework CoreMedia -framework CoreVideo -lobjc \
 		-Xlinker -undefined -Xlinker dynamic_lookup
-	codesign -s - -f --entitlements $(SOURCES_DIR)/video_stream.entitlements $@ >/dev/null 2>&1 || true
+	codesign -s - -f $@ >/dev/null 2>&1 || true   # in-process path needs no entitlement
 
 smoke: all
 	bin/ipb screenshot $(BUILD_DIR)/smoke.png
@@ -76,7 +76,7 @@ install: all
 	install -m 755 bin/ipb $(PREFIX)/bin/ipb
 	install -m 755 $(TARGET) $(PREFIX)/libexec/ipb-helper
 	install -m 755 $(VIDEO_TARGET) $(PREFIX)/libexec/ipb-video
-	codesign -s - -f --entitlements $(SOURCES_DIR)/video_stream.entitlements $(PREFIX)/libexec/ipb-video >/dev/null 2>&1 || true
+	codesign -s - -f $(PREFIX)/libexec/ipb-video >/dev/null 2>&1 || true
 	install -m 644 VERSION $(PREFIX)/share/ipb/VERSION
 	install -m 755 scripts/smoke_matrix.sh $(PREFIX)/share/ipb/smoke_matrix.sh
 

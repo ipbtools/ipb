@@ -20,6 +20,9 @@
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
 #import <objc/runtime.h>
+#import <CoreImage/CoreImage.h>
+#import <ImageIO/ImageIO.h>
+#import <CoreServices/CoreServices.h>
 #include <xpc/xpc.h>
 #include <uuid/uuid.h>
 #include <sys/socket.h>
@@ -56,6 +59,14 @@ extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc
 - (void)stop;
 - (void)requestLastDecodedFrame;
 @end
+@interface VCImageQueue : NSObject
+- (long long)streamToken;
+- (id)streamOutput;
+- (void)setStreamOutput:(id)o;
+@end
+@interface VCStreamOutput : NSObject
+- (instancetype)initWithStreamToken:(long long)t clientProcessID:(int)pid delegate:(id)d delegateQueue:(dispatch_queue_t)q;
+@end
 
 // ---- frame sink ----
 static NSString *gOutDir;          // write frame%06d.jpg here, or nil
@@ -67,9 +78,66 @@ static unsigned long gPrevHash = 0;
 static double gLastSaveT = 0, gDeadlineExtend = 0;
 static AVCVideoStream *gStream = nil;
 static double gStopAt = 0;
+static BOOL gDaemon = NO;   // --daemon: decode in avconferenced (needs entitlement); default is in-process
 
 static double nowSec(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); return ts.tv_sec+ts.tv_nsec/1e9; }
 static unsigned long fnv(const void*d,size_t n){ const unsigned char*p=d; unsigned long h=1469598103934665603UL; for(size_t i=0;i<n;i+=1024){h^=p[i];h*=1099511628211UL;} return h; }
+
+static CIContext *gCI = nil;
+static void emitJPEG(NSData *jpeg);   // fwd
+
+// Encode a decoded CVPixelBuffer to baseline JPEG and emit it.
+static void emitPixelBuffer(CVImageBufferRef px){
+    if(!px) return;
+    @autoreleasepool{
+        if(!gCI) gCI=[CIContext contextWithOptions:nil];
+        CIImage *ci=[CIImage imageWithCVImageBuffer:px];
+        CGColorSpaceRef cs=CGColorSpaceCreateDeviceRGB();
+        NSData *jpeg=[gCI JPEGRepresentationOfImage:ci colorSpace:cs options:@{}];
+        CGColorSpaceRelease(cs);
+        if(jpeg.length) emitJPEG(jpeg);
+    }
+}
+
+// In-process sink: VCImageQueue forwards every decoded frame to our VCStreamOutput delegate.
+static id gImageQueue = nil;   // captured live VCImageQueue
+@interface InProcSink : NSObject @end
+@implementation InProcSink
+- (void)didReceiveSampleBuffer:(CMSampleBufferRef)sb { if(sb) emitPixelBuffer(CMSampleBufferGetImageBuffer(sb)); }
+- (void)streamOutput:(id)o didReceiveSampleBuffer:(CMSampleBufferRef)sb { [self didReceiveSampleBuffer:sb]; }
+@end
+static IMP gOrigIQStart;
+static void swz_iq_start(id self, SEL _cmd){
+    gImageQueue = self;
+    if(![(VCImageQueue*)self streamOutput]){
+        Class SO=objc_getClass("VCStreamOutput");
+        if(SO){ static InProcSink *sink; if(!sink) sink=[InProcSink new];
+            id so=[[SO alloc] initWithStreamToken:[(VCImageQueue*)self streamToken] clientProcessID:getpid()
+                                          delegate:sink delegateQueue:dispatch_get_global_queue(0,0)];
+            if(so) [(VCImageQueue*)self setStreamOutput:so]; }
+    }
+    ((void(*)(id,SEL))gOrigIQStart)(self,_cmd);
+}
+static void installInProcessSink(void){
+    Class C=objc_getClass("VCImageQueue"); if(!C){ LOGE("no VCImageQueue class"); return; }
+    Method m=class_getInstanceMethod(C,sel_registerName("start"));
+    if(m){ gOrigIQStart=method_getImplementation(m); method_setImplementation(m,(IMP)swz_iq_start); }
+}
+
+// Emit one JPEG frame (dedup by content, honour --fps / --count / output sink). Thread-safe enough
+// for a single delivery queue; both the in-process sink and the daemon pull funnel through here.
+static void emitJPEG(NSData *jpeg){
+    if(!jpeg.length) return;
+    unsigned long h=fnv(jpeg.bytes,jpeg.length);
+    double t=nowSec();
+    if(h==gPrevHash) return;                                   // identical frame; skip
+    if(gMinInterval>0 && (t-gLastSaveT)<gMinInterval) return;  // fps cap
+    gPrevHash=h; gLastSaveT=t;
+    if(gStdout){ uint32_t n=htonl((uint32_t)jpeg.length); fwrite(&n,4,1,stdout); fwrite(jpeg.bytes,1,jpeg.length,stdout); fflush(stdout); }
+    if(gOutDir){ NSString*p=[gOutDir stringByAppendingPathComponent:[NSString stringWithFormat:@"frame%06d.jpg",gSaved]]; [jpeg writeToFile:p atomically:NO]; }
+    gSaved++; gDeadlineExtend=t;
+    if(gMaxFrames>0 && gSaved>=gMaxFrames){ if(gStream) [gStream stop]; gStopAt=t; }
+}
 
 @interface FrameSink : NSObject @end
 @implementation FrameSink
@@ -78,24 +146,8 @@ static unsigned long fnv(const void*d,size_t n){ const unsigned char*p=d; unsign
 }
 - (void)stream:(id)s didGetLastDecodedFrame:(id)f {
     gPulls++;
-    if([f isKindOfClass:[NSData class]]){
-        NSData *jpeg = (NSData*)f;
-        unsigned long h = fnv(jpeg.bytes, jpeg.length);
-        double t = nowSec();
-        BOOL fresh = (h != gPrevHash);
-        BOOL rateOK = (gMinInterval<=0) || (t - gLastSaveT >= gMinInterval);
-        if(fresh && rateOK){
-            gPrevHash = h; gLastSaveT = t;
-            if(gStdout){ uint32_t n=htonl((uint32_t)jpeg.length); fwrite(&n,4,1,stdout); fwrite(jpeg.bytes,1,jpeg.length,stdout); fflush(stdout); }
-            if(gOutDir){ NSString*p=[gOutDir stringByAppendingPathComponent:[NSString stringWithFormat:@"frame%06d.jpg",gSaved]];
-                         [jpeg writeToFile:p atomically:NO]; }
-            gSaved++;
-            gDeadlineExtend = t;   // frames are flowing; keep the watchdog happy
-            if(gMaxFrames>0 && gSaved>=gMaxFrames){ if(gStream) [gStream stop]; gStopAt = t; }
-        }
-    }
-    // pipeline the next pull immediately unless we are done
-    if(gStream && (gStopAt==0)) [gStream requestLastDecodedFrame];
+    if([f isKindOfClass:[NSData class]]) emitJPEG((NSData*)f);
+    if(gStream && (gStopAt==0)) [gStream requestLastDecodedFrame];   // pipeline next pull
 }
 - (void)streamDidStop:(id)s {}
 - (void)vcMediaStreamDidStop:(id)s {}
@@ -125,7 +177,8 @@ static void usage(void){
       "  --stdout        stream frames to stdout: repeated [uint32 BE length][jpeg bytes]\n"
       "  --count N       stop after N distinct frames (default: run until --seconds)\n"
       "  --fps F         cap saved frames to at most F per second\n"
-      "  --seconds S     run for S seconds (default 10; ignored once --count is met)\n");
+      "  --seconds S     run for S seconds (default 10; ignored once --count is met)\n"
+      "  --daemon        decode in avconferenced instead of in-process (needs entitlement)\n");
 }
 
 int main(int argc,char**argv){
@@ -139,6 +192,7 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--count") && i+1<argc) gMaxFrames=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--fps") && i+1<argc){ double f=atof(argv[++i]); if(f>0) gMinInterval=1.0/f; }
         else if(!strcmp(argv[i],"--seconds") && i+1<argc) runSeconds=atof(argv[++i]);
+        else if(!strcmp(argv[i],"--daemon")) gDaemon=YES;
         else { usage(); return 2; }
     }
     if(!gOutDir && !gStdout){ LOGE("nothing to do: pass --dir or --stdout"); return 2; }
@@ -219,12 +273,13 @@ int main(int argc,char**argv){
 
     NSMutableDictionary *o2=[NSMutableDictionary dictionary];
     if([initOpts isKindOfClass:[NSDictionary class]]) [o2 addEntriesFromDictionary:initOpts];
-    o2[@"avcMediaStreamOptionRunInProcess"]=@(NO);   // decode in avconferenced; requestLastDecodedFrame works here
+    o2[@"avcMediaStreamOptionRunInProcess"]=@(gDaemon ? NO : YES);   // default: decode in-process (no entitlement)
     o2[@"avcMediaStreamOptionClientName"]=@"CoreDeviceScreenSharing";
     o2[@"avcMediaStreamOptionClientSessionID"]=[[NSUUID alloc] initWithUUIDString:sessID];
 
     xpc_object_t socks=xpc_dictionary_create_empty();
     xpc_dictionary_set_fd(socks,"avcKeySharedSocket",rtp);
+    if(!gDaemon) installInProcessSink();
     Class VS=objc_getClass("AVCVideoStream"); if(!VS) DIE(6,"no AVCVideoStream class");
     NSError *se=nil;
     AVCVideoStream *vs=[[VS alloc] initWithNetworkSockets:(id)socks options:o2 error:&se];
@@ -235,18 +290,18 @@ int main(int argc,char**argv){
     [vs start];
     gStream=vs;
 
-    // warm up, then pull frames; watchdog fails if nothing arrives
+    // warm up, then collect frames; in-process frames arrive by push, daemon frames by pull.
     double t0=nowSec(); gLastSaveT=t0; gDeadlineExtend=t0;
     for(int w=0; w<50; w++) [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];  // ~2.5s
-    [vs requestLastDecodedFrame];
+    if(gDaemon) [vs requestLastDecodedFrame];
     double start=nowSec();
     while(1){
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
         double t=nowSec();
         if(gStopAt) break;
         if(gMaxFrames==0 && (t-start) >= runSeconds) break;
-        if(gStream && (t-gDeadlineExtend) > 2.0){ gDeadlineExtend=t; [vs requestLastDecodedFrame]; }  // re-arm on stall
-        if((t-gDeadlineExtend) > 12.0) break;  // hard stall guard
+        if(gDaemon && gStream && (t-gDeadlineExtend) > 2.0){ gDeadlineExtend=t; [vs requestLastDecodedFrame]; }  // daemon: re-arm on stall
+        if((t-gDeadlineExtend) > 12.0) break;  // hard stall guard (no frames at all)
     }
     [vs stop];
     LOGE("saved %d distinct frame(s) from %d pull(s)", gSaved, gPulls);
