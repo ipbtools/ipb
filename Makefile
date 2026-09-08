@@ -6,7 +6,8 @@ BUILD_DIR := build
 SOURCES_DIR := Sources
 TARGET := $(BUILD_DIR)/ipb-helper
 VIDEO_TARGET := $(BUILD_DIR)/ipb-video
-MIRROR_TARGET := $(BUILD_DIR)/ipb-mirror-probe
+MIRROR_TARGET := $(BUILD_DIR)/ipb-mirror
+MIRROR_PROBE_TARGET := $(BUILD_DIR)/ipb-mirror-probe
 MIRROR_GLUE = $(filter-out $(BUILD_DIR)/ipb-helper.o,$(OBJS))
 
 OBJS := \
@@ -21,7 +22,7 @@ PREFIX ?= /usr/local
 
 .PHONY: all clean smoke install
 
-all: $(TARGET) $(VIDEO_TARGET) $(MIRROR_TARGET) $(BUILD_DIR)/ipb-mirror
+all: $(TARGET) $(VIDEO_TARGET) $(MIRROR_TARGET) $(MIRROR_PROBE_TARGET)
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -75,7 +76,7 @@ $(BUILD_DIR)/mirror_probe.o: Experiments/mirror/mirror_probe.m | $(BUILD_DIR)
 	clang -fobjc-arc -fblocks -Wall -Wextra -Wno-unused-parameter \
 		-c $< -o $@
 
-$(MIRROR_TARGET): $(BUILD_DIR)/mirror_probe.o $(MIRROR_GLUE)
+$(MIRROR_PROBE_TARGET): $(BUILD_DIR)/mirror_probe.o $(MIRROR_GLUE)
 	swiftc $^ -o $@ \
 		-F/Library/Developer/PrivateFrameworks \
 		-F/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks \
@@ -88,12 +89,12 @@ $(MIRROR_TARGET): $(BUILD_DIR)/mirror_probe.o $(MIRROR_GLUE)
 		-Xlinker -undefined -Xlinker dynamic_lookup
 	codesign -s - -f $@
 
-# M2 GUI prototype: the same existing oracle glue, with AppKit presentation.
-$(BUILD_DIR)/mirror_app.o: Experiments/mirror/mirror_app.m | $(BUILD_DIR)
+# Interactive mirror: existing oracle glue, with AppKit presentation.
+$(BUILD_DIR)/mirror.o: $(SOURCES_DIR)/mirror.m | $(BUILD_DIR)
 	clang -fobjc-arc -fblocks -Wall -Wextra -Wno-unused-parameter \
 		-Wno-deprecated-declarations -c $< -o $@
 
-$(BUILD_DIR)/ipb-mirror: $(BUILD_DIR)/mirror_app.o $(MIRROR_GLUE)
+$(MIRROR_TARGET): $(BUILD_DIR)/mirror.o $(MIRROR_GLUE)
 	swiftc $^ -o $@ \
 		-F/Library/Developer/PrivateFrameworks \
 		-F/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks \
@@ -116,6 +117,8 @@ install: all
 	install -m 755 $(TARGET) $(PREFIX)/libexec/ipb-helper
 	install -m 755 $(VIDEO_TARGET) $(PREFIX)/libexec/ipb-video
 	codesign -s - -f $(PREFIX)/libexec/ipb-video >/dev/null 2>&1 || true
+	install -m 755 $(MIRROR_TARGET) $(PREFIX)/libexec/ipb-mirror
+	codesign -s - -f $(PREFIX)/libexec/ipb-mirror
 	install -m 644 VERSION $(PREFIX)/share/ipb/VERSION
 	install -m 755 scripts/smoke_matrix.sh $(PREFIX)/share/ipb/smoke_matrix.sh
 

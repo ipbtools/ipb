@@ -196,7 +196,18 @@ decode creates a `CVDisplayLink`). Stage 4 (no Xcode, non-Mac hosts) cannot reus
 **Not built:** `--mjpeg PORT`, `--file out.mp4`, and per-frame metadata (monotonic index, capture
 timestamp, size, orientation) in the output stream. The last one matters most — without timestamps
 on the wire a consumer cannot pace playback correctly, which is why a live view needs an explicit
-`-framerate 60` hint. A window renderer would skip JPEG entirely and feed `AVSampleBufferDisplayLayer`.
+`-framerate 60` hint.
+
+`ipb mirror [--seconds S] [--csv PATH]` now provides the window renderer in
+`Sources/mirror.m`, installed as `libexec/ipb-mirror`. It skips JPEG and feeds decoded samples
+from a single latest-frame slot to `AVSampleBufferDisplayLayer`, using immediate presentation
+on an independent sample container. Absolute touch input runs through a separate serial queue
+with persistent service connections, bounded pending events, and no automatic replay.
+Shortcuts match DeviceHub (Home, App Switcher, volume, screenshot, fit, actual size); see
+[README.md](../README.md#interactive-mirror-ipb-mirror) and the existing M1/M2/M3/M4 runtime
+records in [verification.md](verification.md). Statistics go to stderr; event CSV is produced
+only with `--csv PATH`, which overwrites the specified file. The probe remains at
+`Experiments/mirror/mirror_probe.m`. No device validation was repeated for this packaging change.
 
 ## Acceptance
 
@@ -226,9 +237,10 @@ Still open:
 - **No per-frame metadata on the wire** (monotonic index, capture PTS, size, orientation). Without
   it a consumer cannot pace playback, and an agent cannot bind an action to the frame it looked at.
   This is the highest-value remaining item.
-- **A window renderer** (`AVSampleBufferDisplayLayer`, honouring PTS natively, skipping the JPEG
-  round-trip) — the missing half of a scrcpy-equivalent. The other half is a persistent input
-  session; a fresh helper invocation currently costs ~0.5 s, which is far too slow for dragging.
+- ~~A window renderer~~ **DONE** in `ipb mirror`: `AVSampleBufferDisplayLayer`, skipping JPEG,
+  with immediate presentation (M4 removed timed presentation).
+- ~~A persistent input session~~ **DONE** in `ipb mirror`: absolute touch and shortcuts reuse
+  connections on a separate serial input queue. End-to-end input-to-display latency remains unmeasured.
 - **Slight frame loss remains**, comparable to what DeviceHub itself shows on the same device
   (user-observed, 2026-09-08). Believed to be link-level rather than client-side; not measured.
 - **Two 15 s captures stopped at t+5.81 s and still exited 0.** Not reproduced across five later

@@ -3,7 +3,7 @@
 # Build needs Xcode 27 beta selected (xcode-select or DEVELOPER_DIR); runtime needs the
 # CoreDevice package that Xcode 27 beta installs (/Library/Developer/PrivateFrameworks).
 class Ipb < Formula
-  desc "Drive a physical iPhone from a Mac like adb: tap, swipe, keys, home, screenshot, live screen stream"
+  desc "Drive a physical iPhone from a Mac like adb: tap, swipe, keys, home, screenshot, live stream, interactive mirror"
   homepage "https://github.com/ipbtools/ipb"
   head "https://github.com/ipbtools/ipb.git", branch: "main"
   license "MIT"
@@ -27,6 +27,9 @@ class Ipb < Formula
       with SIP enabled and needs no special entitlement. Over ssh it will fail with
       "VideoReceiver startVideo failed"; run it from the desktop session instead
       (from ssh: `open -a Terminal <script>`).
+
+      `ipb mirror` also requires a GUI login session: in-process decoding needs
+      CVDisplayLink. It is unavailable over plain ssh; use the desktop session.
 
       Update later with `ipb update`.
     EOS

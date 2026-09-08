@@ -841,3 +841,85 @@ for. DeviceKit.framework does contain `hardwareGestureControls.actionButton` and
 menu identifiers, but they do not appear in the menu with a 13 Pro attached — the framework uses
 `ConditionalKeyboardShortcut` to show them per device. That both confirms the 13 Pro lacks an
 Action Button and gives the route to obtain its usage code: attach a 15 Pro and observe.
+
+## 2026-09-08 — mirror promoted to an installed command (host-only verification)
+
+The former `Experiments/mirror/mirror_app.m` is now `Sources/mirror.m`, built as
+`build/ipb-mirror` and installed as `libexec/ipb-mirror`. Earlier M2/M3 records retain the
+source path used at the time. `Experiments/mirror/mirror_probe.m` and its target remain unchanged.
+`ipb mirror [--seconds S] [--csv PATH]` resolves the tunnel like `ipb stream`; `--help` bypasses
+device selection and GUI startup. Summary fields now go to stderr. Event CSV is opt-in,
+written to PATH (overwritten), and no CSV is generated without that option.
+
+Host: macOS 26.5.1 (25F80), selected SDK under `/Applications/Xcode.app`.
+No device commands or interactive/device validation were run for this packaging change.
+Existing M1/M2/M3/M4 results above remain the device evidence, not a fresh acceptance run.
+
+- `make`: exit 0; compiled `Sources/mirror.m` to `build/mirror.o`, linked and ad-hoc signed
+  `build/ipb-mirror`, with no errors.
+- `make install PREFIX=/private/tmp/ipb-mirror-install.CRYOIE`: exit 0. Layout includes
+  `bin/ipb`, `libexec/ipb-helper`, `libexec/ipb-video`, `libexec/ipb-mirror`,
+  `share/ipb/VERSION`, and `share/ipb/smoke_matrix.sh`.
+- `codesign --verify --strict --verbose=2 /private/tmp/ipb-mirror-install.CRYOIE/libexec/ipb-mirror`:
+  exit 0, `valid on disk`, `satisfies its Designated Requirement`;
+  `codesign -dv` reports `Signature=adhoc`.
+- `/private/tmp/ipb-mirror-install.CRYOIE/bin/ipb mirror --help`: exit 0, includes
+  `--csv PATH`, stderr summary contract, and GUI session requirement.
+- Local helper checks with an invalid UUID (rejected before CoreDevice service setup):
+  default and explicit CSV both exit 2, stdout is empty and summary is on stderr;
+  explicit CSV contains only its header (zero input events). A missing CSV parent directory
+  exits 8. Artifacts: `/private/tmp/ipb-mirror-install.CRYOIE/{default,csv,csv-open-error}.{stdout,stderr}`
+  and `/private/tmp/ipb-mirror-install.CRYOIE/events.csv`.
+- `zsh -n bin/ipb` and `ruby -c Formula/ipb.rb`: exit 0 (`Syntax OK` for Ruby).
+
+Packaging choices: the wrapper passes existing helper options through, and handles help before
+resolving a device. CSV parents are not created automatically. The installed mirror's codesign
+step propagates failures. No Git commands were run in this continuation; no commit was made.
+
+### 2026-09-08 — `ipb mirror` shipped as a command, and a media-path wedge found while doing it
+
+`Sources/mirror.m` (moved out of `Experiments/`), `ipb mirror` in the wrapper, `libexec/ipb-mirror`
+in `make install`, README and Formula updated. Per-event CSV became opt-in (`--csv PATH`); the
+human-readable summary goes to stderr, so a GUI command no longer dumps thousands of rows to stdout.
+
+Verified from a temporary install prefix, not just from the build tree:
+
+```
+make install PREFIX=<tmp>            -> rc=0, layout contains libexec/ipb-mirror
+<tmp>/bin/ipb mirror --seconds 14    -> window 387x872 opened, media frames=354,
+                                        interval p50 16.627 ms / p95 17.542 ms, stdout empty
+<tmp>/bin/ipb mirror --csv <path>    -> CSV written with the x,y columns
+```
+
+**Defect found immediately afterwards, not yet fixed: the media path wedges.**
+
+After roughly fifteen start/stop cycles across `ipb stream` and `ipb mirror` in quick succession,
+every subsequent stream start fails with:
+
+```
+GKVoiceChatServiceErrorDomain 32017 "VCVideoSteam start failed"
+NSLocalizedFailureReason = VideoReceiver startVideo failed, DetailedError = 1302
+```
+
+What is established:
+
+- It is **not specific to the new mirror code**: `ipb stream`, unchanged and working all session,
+  fails identically once the wedge appears.
+- **No leftover processes** of ours; the device is unlocked with a connected tunnel.
+- **Restarting the host `avconferenced` does not clear it.** The daemon was idle (0 TCP
+  connections, 0% CPU) and relaunches on demand, and the next start still failed.
+- **It does not self-recover** within at least 60 s.
+- The failing component names the *receiver*, which is our side, yet the host-side restart does not
+  help — so the device's `dtremotedisplayd` session is the remaining suspect.
+
+What is **not** established: which run wedges it, whether a normal one-session-at-a-time user ever
+reaches it, and what clears it. An attempt to query `mediastreamstatus` through
+`Experiments/probe/feature_probe.m` was abandoned: the probe's JSON envelope encodes the version
+components as int64 and the device wants UInt, and chasing the envelope was not worth the time
+against the value of the answer.
+
+Next steps for this, in order: try physically re-attaching the device and re-testing (only the
+operator can do that); if that clears it, add a `mediastreamstop` recovery path so the tool can
+unwedge itself rather than requiring a cable pull. Note `docs/video-stream.md` already records
+that the daemon stops streams itself on sensor activity
+(`stopAllStreamsDueToSensorActivity`), so a stop action exists on the device side.

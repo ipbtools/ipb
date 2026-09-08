@@ -102,7 +102,8 @@ static double gMouseX,gMouseY;
 static CGSize gVideoSize;
 static AVSampleBufferDisplayLayer *gDisplay;
 static NSWindow *gWindow;
-static int gOutputFD=-1;
+static int gOutputFD=-1; // saved stdout for descriptor discovery
+static int gCSVFD=-1;
 static dispatch_source_t gWatchdog;
 static _Atomic bool gWatchdogExpired=false;
 static xrc_t gMediaRemote;
@@ -140,6 +141,20 @@ static void percentiles(NSMutableString *s,const char *label,double *v,unsigned 
     [s appendFormat:@"%s p50=%.3f p95=%.3f p99=%.3f n=%u (ms)\n",label,
         v[(unsigned)ceil(n*.50)-1]*1000,v[(unsigned)ceil(n*.95)-1]*1000,v[(unsigned)ceil(n*.99)-1]*1000,n];
 }
+static BOOL writeOutput(int fd,NSString *text){
+    // Bound output too: a pipe whose reader stopped must not defeat the watchdog.
+    NSData *data=[text dataUsingEncoding:NSUTF8StringEncoding];
+    int flags=fcntl(fd,F_GETFL); fcntl(fd,F_SETFL,flags|O_NONBLOCK);
+    size_t offset=0; double deadline=nowSec()+3;
+    while(offset<data.length && nowSec()<deadline){
+        ssize_t wrote=write(fd,(const char*)data.bytes+offset,data.length-offset);
+        if(wrote>0) offset+=(size_t)wrote;
+        else if(errno==EAGAIN || errno==EINTR){ struct pollfd p={fd,POLLOUT,0}; poll(&p,1,50); }
+        else break;
+    }
+    fcntl(fd,F_SETFL,flags);
+    return offset==data.length;
+}
 // One top-level finalizer for normal completion, setup failures, signals and watchdog.
 // Never calls private APIs or waits for the input queue. No lock is held across a sender.
 static void finish(int code,NSString *reason) __attribute__((noreturn));
@@ -157,7 +172,7 @@ static void finish(int code,NSString *reason){
     else if(gReason) reason=gReason;
     uint64_t displayDrops=gDisplayDrops,displayed=gDisplayed,blackBars=gBlackBars;
     pthread_mutex_unlock(&gLock);
-    NSMutableString *s=[NSMutableString stringWithFormat:@"ipb-mirror: exit=%d reason=%@\n",code,reason];
+    NSMutableString *s=[NSMutableString string];
     [s appendFormat:@"enqueued=%llu display_backpressure_drops=%llu black_bar_rejections=%llu\n",
         (unsigned long long)displayed,(unsigned long long)displayDrops,(unsigned long long)blackBars];
     static double values[4][Capacity]; unsigned counts[4]={0};
@@ -188,25 +203,23 @@ static void finish(int code,NSString *reason){
         intervalN?[NSString stringWithFormat:@"%.3f",intervals[(unsigned)ceil(intervalN*.95)-1]*1000]:@"NA",
         (unsigned long long)drops,(unsigned long long)errors,intervalN,(unsigned long long)intervalCount];
     [s appendString:@"KEY_* report_return=first send return; barrier_return=button barrier or RECENTS end return (digitizer has no barrier in the existing oracle).\n"];
-    [s appendString:@"drops=local invalid/non-increasing PTS only; transport/decoder losses unknown. Times=CLOCK_MONOTONIC seconds; blank=not reached.\nseq,type,generation,gesture,result,queue_depth,x,y,t_submit,t_received,t_report_return,t_barrier_return,report_code,barrier_code\n"];
-    for(unsigned i=0;i<n;i++){
+    [s appendString:@"drops=local invalid/non-increasing PTS only; transport/decoder losses unknown. Times=CLOCK_MONOTONIC seconds; blank=not reached.\n"];
+    NSMutableString *csv=nil;
+    if(gCSVFD>=0) csv=[NSMutableString stringWithString:@"seq,type,generation,gesture,result,queue_depth,x,y,t_submit,t_received,t_report_return,t_barrier_return,report_code,barrier_code\n"];
+    for(unsigned i=0;gCSVFD>=0 && i<n;i++){
         Record r=records[i];
-        [s appendFormat:@"%llu,%s,%llu,%llu,%s,%u,%.5f,%.5f,%.9f,%@,%@,%@,%d,%d\n",(unsigned long long)r.event.seq,kinds[r.event.kind],(unsigned long long)r.event.generation,(unsigned long long)r.event.gesture,results[r.result],r.depth,r.event.x,r.event.y,r.event.submit,
+        [csv appendFormat:@"%llu,%s,%llu,%llu,%s,%u,%.5f,%.5f,%.9f,%@,%@,%@,%d,%d\n",(unsigned long long)r.event.seq,kinds[r.event.kind],(unsigned long long)r.event.generation,(unsigned long long)r.event.gesture,results[r.result],r.depth,r.event.x,r.event.y,r.event.submit,
             r.received?[NSString stringWithFormat:@"%.9f",r.received]:@"",
             r.reportReturn?[NSString stringWithFormat:@"%.9f",r.reportReturn]:@"",
             r.barrierReturn?[NSString stringWithFormat:@"%.9f",r.barrierReturn]:@"",r.reportCode,r.barrierCode];
     }
-    // Bound output too: a pipe whose reader stopped must not defeat the watchdog.
-    NSData *data=[s dataUsingEncoding:NSUTF8StringEncoding];
-    int flags=fcntl(gOutputFD,F_GETFL); fcntl(gOutputFD,F_SETFL,flags|O_NONBLOCK);
-    size_t offset=0; double deadline=nowSec()+3;
-    while(offset<data.length && nowSec()<deadline){
-        ssize_t wrote=write(gOutputFD,(const char*)data.bytes+offset,data.length-offset);
-        if(wrote>0) offset+=(size_t)wrote;
-        else if(errno==EAGAIN || errno==EINTR){ struct pollfd p={gOutputFD,POLLOUT,0}; poll(&p,1,50); }
-        else break;
+    if(gCSVFD>=0){
+        BOOL written=writeOutput(gCSVFD,csv);
+        int closed=close(gCSVFD);
+        if(!written || closed){ code=8; reason=[reason stringByAppendingString:@"; CSV output failed"]; }
     }
-    if(offset<data.length) code=8;
+    [s insertString:[NSString stringWithFormat:@"ipb-mirror: exit=%d reason=%@\n",code,reason] atIndex:0];
+    if(!writeOutput(STDERR_FILENO,s)) code=8;
     _Exit(code);
 }
 
@@ -734,13 +747,14 @@ static void presentLatest(void){
 }
 
 static void usage(void){
-    fprintf(stderr,"usage: ipb-mirror <coredevice-uuid> <utun> <hostIP> <deviceIP> [--service-id ID] [--seconds S]\n"
-        "Defaults: touchscreen descriptor discovery, 300 seconds; maximum 3600 seconds / 8192 input events. CSV on stdout.\n");
+    fprintf(stderr,"usage: ipb-mirror <coredevice-uuid> <utun> <hostIP> <deviceIP> [--service-id ID] [--seconds S] [--csv PATH]\n"
+        "Defaults: touchscreen descriptor discovery, 300 seconds; maximum 3600 seconds / 8192 input events. Summary on stderr; event CSV only with --csv PATH (overwrites PATH). Needs a GUI login session.\n");
 }
 static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     if(argc<5){ usage(); DIE(2,"missing arguments"); }
     const char *dev=argv[1],*utun=argv[2],*rxip=argv[3],*txip=argv[4];
     double runSeconds=300;
+    const char *csvPath=NULL;
     for(int i=5;i<argc;i++){
         if(i+1==argc){ usage(); DIE(2,"incomplete option"); }
         const char *option=argv[i],*value=argv[++i]; char *end=NULL; errno=0;
@@ -750,7 +764,14 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
         }else if(!strcmp(option,"--seconds")){
             runSeconds=strtod(value,&end);
             if(errno || end==value || *end || !isfinite(runSeconds) || runSeconds<=0 || runSeconds>3600) DIE(2,"seconds must be >0 and <=3600");
+        }else if(!strcmp(option,"--csv")){
+            if(!*value) DIE(2,"CSV path must not be empty");
+            csvPath=value;
         }else { usage(); DIE(2,"unknown option"); }
+    }
+    if(csvPath){
+        gCSVFD=open(csvPath,O_WRONLY|O_CREAT|O_TRUNC|O_NONBLOCK,0666);
+        if(gCSVFD<0) DIE(8,"open CSV %s: %s",csvPath,strerror(errno));
     }
     uuid_t deviceUUID; if(uuid_parse(dev,deviceUUID)) DIE(2,"invalid CoreDevice UUID");
     if(!dlopen("/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice",RTLD_NOW)) DIE(2,"CoreDevice dlopen: %s",dlerror());
@@ -935,6 +956,7 @@ static void shutdownMirror(void){
 }
 
 int main(int argc,char **argv){ @autoreleasepool {
+    if(argc==2 && (!strcmp(argv[1],"--help") || !strcmp(argv[1],"-h"))){ usage(); return 0; }
     gOutputFD=dup(STDOUT_FILENO);
     if(gOutputFD<0) return 8;
     signal(SIGPIPE,SIG_IGN);

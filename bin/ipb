@@ -45,6 +45,7 @@ usage:
   ipb recents
   ipb screenshot <path>
   ipb stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout   # live screen frames (JPEG), no DeviceHub
+  ipb mirror [--seconds S] [--csv PATH]   # live screen + mouse/keyboard control (needs a GUI session)
   ipb screenrecord <path> [seconds]          # devicectl capture screen-record
   ipb apps | ps | info | lock-state          # devicectl info apps/processes/details/lockState
   ipb install <app|ipa>  | uninstall <bundle-id>
@@ -580,7 +581,7 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-  service-ids|ids|help|-h|--help|version|--version|devices|doctor) DEVICE="" ;;
+  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror) DEVICE="" ;;
   *) DEVICE="$(resolve_device)" || exit 3 ;;
 esac
 
@@ -625,6 +626,23 @@ case "$cmd" in
     fi
     [[ -x "$VBIN" ]] || { print -u2 "ipb: video helper not built; run 'make' (expected $VBIN)"; exit 2; }
     exec "$VBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$@"
+    ;;
+  mirror)
+    MBIN="${IPB_MIRROR_HELPER:-}"
+    if [[ -z "$MBIN" ]]; then
+      if [[ -x "$ROOT/libexec/ipb-mirror" ]]; then MBIN="$ROOT/libexec/ipb-mirror"
+      else MBIN="$ROOT/build/ipb-mirror"; fi
+    fi
+    [[ -x "$MBIN" ]] || { print -u2 "ipb: mirror helper not built; run 'make' (expected $MBIN)"; exit 2; }
+    if [[ $# -eq 1 && ( "$1" == --help || "$1" == -h ) ]]; then
+      exec "$MBIN" --help
+    fi
+    (( $# % 2 == 0 )) || { usage; exit 2; }
+    DEVICE="$(resolve_device)" || exit 3
+    warm_tunnel >/dev/null 2>&1 || true
+    tun="$(resolve_tunnel)" || { print -u2 "ipb: could not resolve the device tunnel (is the device connected?)"; exit 4; }
+    hostip="${tun%% *}"; rest="${tun#* }"; utun="${rest%% *}"; devip="${rest##* }"
+    exec "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$@"
     ;;
   screenshot)
     [[ $# -eq 1 ]] || { usage; exit 2; }

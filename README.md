@@ -36,7 +36,7 @@ ipb doctor                   # layered self-check, names the next step on failur
 ipb devices                  # then: ipb screenshot before.png; ipb tap 0.15 0.12; ipb home
 ```
 
-`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`, `libexec/ipb-helper`, `share/ipb/VERSION`, `share/ipb/smoke_matrix.sh`.
+`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`, `libexec/ipb-helper`, `libexec/ipb-video`, `libexec/ipb-mirror`, `share/ipb/VERSION`, `share/ipb/smoke_matrix.sh`.
 
 ## Build
 
@@ -70,6 +70,7 @@ bin/ipb home
 bin/ipb recents
 bin/ipb screenshot build/current.png
 bin/ipb stream --dir frames --count 20        # live screen frames (JPEG), no DeviceHub
+bin/ipb mirror                               # interactive screen window (GUI session required)
 bin/ipb service-ids
 bin/ipb services
 bin/ipb service-id touchscreen
@@ -138,6 +139,55 @@ rejected, 6 stream did not start or the media server died, 7 no frames within th
 8 output failed / the consumer did not drain stdout / `--count` not reached, 9 a watchdog expired
 (the stage — setup, collection, or shutdown — is printed before exit). When the consumer is slower
 than the device, frames are **dropped, not queued**; the count is reported on exit.
+
+### Interactive mirror: `ipb mirror`
+
+One window displays the device screen and accepts mouse control, without DeviceHub, injection
+into any Apple process, or any special entitlement.
+
+```sh
+bin/ipb mirror [--seconds S] [--csv PATH]
+bin/ipb mirror --help
+```
+
+Click, hold, and drag directly on the screen. The shortcuts match DeviceHub:
+
+| Shortcut | Action |
+| --- | --- |
+| ⇧⌘H | Home |
+| ⌃⇧⌘H | App Switcher |
+| ⌘↑ / ⌘↓ | Volume up / down |
+| ⇧⌘S | Save the latest decoded frame as a PNG in `~/Pictures` |
+| ⌘0 | Zoom to fit |
+| ⌘1 | Actual size (falls back to fit if it exceeds the available screen) |
+
+**Requires a GUI login session**, just like `ipb stream`: in-process decoding needs
+`CVDisplayLink`. It works with SIP enabled and needs no entitlement; plain ssh is unsupported.
+
+The default run lasts 300 seconds; `--seconds` accepts values greater than 0 and at most 3600.
+The existing 8192-input-event cap also ends the run. Statistics retain their existing fields and
+go to **stderr**. No CSV is produced by default; `--csv PATH` writes the event header and rows to
+that file (overwriting it; its parent directory must exist). CSV open/write failures exit 8.
+`IPB_MIRROR_HELPER` overrides the helper; otherwise `libexec/ipb-mirror` is preferred over
+`build/ipb-mirror`. The source is `Sources/mirror.m`. The helper's existing `--service-id ID`
+option is also passed through for a known touchscreen ID; descriptor discovery remains the default.
+
+Known coordinate bias on the iPhone 13 Pro: decoded frames are **1184×2576**, versus the
+**1170×2532** physical screen. Encoder padding for 16-pixel alignment and a format description
+without clean aperture leave approximately **1.2% horizontal / 1.7% vertical** coordinate error.
+No compensation is applied because the padding's side is unknown. See the M2/M3 and M4 records
+in [docs/verification.md](docs/verification.md) for the existing device evidence.
+
+Not implemented: Lock (⌘L), Siri (⇧⌥⌘H), screen recording (⇧⌘R), Action Button, and Camera Control.
+Lock, Siri, and the hardware buttons lack usage-code evidence; recording lacks capture/recording
+behavior evidence. The local 13 Pro also lacks Action Button and Camera Control hardware.
+
+Exit codes: 0 success, **1 input/connection failure**, 2 usage/local setup, 3 service socket or
+descriptor discovery failure, 4 tunnel/interface/bind failure, 5 negotiation failure,
+6 media/decoder/display failure, 7 no media frames for 12 seconds, **8 local I/O failure**
+(including CSV output, descriptor capture, or screenshot shutdown drain), 9 setup/run/shutdown
+watchdog or input-drain timeout, 130 SIGINT, 143 SIGTERM. Unlike `stream`, mirror has input
+failure code 1 and no `--count` contract. Sent input is never automatically replayed.
 
 Supported `service-id` roles:
 
