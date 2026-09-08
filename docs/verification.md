@@ -502,3 +502,16 @@ So the pull is not the bottleneck: ~7-9 ms per `requestLastDecodedFrame` round t
 Frame freshness was verified independently of pixel comparison: the EXIF `DateTime` in sampled frames advances across a fast pull loop (15:03:57 -> 15:04:04), so identical bytes on a static screen mean "nothing changed", not "cached".
 
 Note for reproduction: `ipb scroll` silently did nothing until `make` was run (the reboot wiped `build/`, and the wrapper reported `ipb-helper: No such file or directory` only on stderr). `ipb home` / `ipb recents` are reliable ways to force screen change for this measurement.
+
+## 2026-09-08 — ENTITLEMENT-FREE in-process capture: 46 fps CVPixelBuffers, no daemon
+
+Same host/device. gpt-6-astra disassembly (docs/research/entitlement-astra-2026-09-08.md) overturned the assumption that the CA slot is wired at init and cannot be diverted:
+- `-[VCImageQueue setStreamOutput:]` (AVConference `0x1BD831BE8`) saves the output to `self+0x98`, and `_VCImageQueue_EnqueueFrame` (`0x1BD833A40`) reads `self+0x98` EVERY frame — if non-nil it wraps the pixel buffer as a sample buffer and forwards it. So installing a `VCStreamOutput` after init still captures frames.
+- `_VCStreamOutput_EnqueueSampleBuffer`'s in-process block (`0x1BD804AE4`) sends the ONE-arg selector `-didReceiveSampleBuffer:` straight to the delegate (not `streamOutput:didReceiveSampleBuffer:`). The earlier sink implemented the two-arg selector, which is why it never fired.
+- `-[VCStreamOutput initWithStreamToken:clientProcessID:delegate:delegateQueue:]`: when `clientProcessID == getpid()` it takes the in-process path (requires non-nil delegate + queue).
+
+Implemented in `Experiments/videostream/receiver.m` (`SINK=1`, RunInProcess=YES, binary signed PLAIN ad-hoc with **no entitlements**): swizzle `-[VCImageQueue start]` to create a `VCStreamOutput(token=[iq streamToken], pid=getpid(), delegate=sink, queue)` and `setStreamOutput:` on the live queue; the sink's `-didReceiveSampleBuffer:` receives CVPixelBuffers.
+
+Result: **`INPROC_RATE: 498 sample buffers, 45.9 fps over 10.9 s`**, CVPixelBuffers saved as 1184x2576 PNG. This is a PUSH feed (every decoded frame delivered automatically, no polling) and runs entirely in-process — RTP receive + AppleAVD HEVC decode + frame delivery all local, `avconferenced` not involved, so `AVConferenceXPCServer entitlementStatusForToken:` never runs. **No `com.apple.videoconference.allow-conferencing` needed.**
+
+This is the distributable path: it removes the one known hard blocker (the Apple-private daemon entitlement). Not yet proven on a stock SIP-enabled Mac (dlopening the private frameworks and in-process decode should not need SIP-off, but this is unverified — see Astra's验证资源 step 4). The daemon JPEG-pull path stays as a documented fallback.

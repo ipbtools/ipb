@@ -63,8 +63,18 @@ static int gPullMode=0, gPullCount=0; static double gT0=0, gLast=0; static id gV
 static double nowSec(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); return ts.tv_sec+ts.tv_nsec/1e9; }
 static unsigned long gBytes=0; static unsigned gDistinct=0; static unsigned long gPrevHash=0;
 static unsigned long fnv(const void*d,size_t n){ const unsigned char*p=d; unsigned long h=1469598103934665603UL; for(size_t i=0;i<n;i+=997){h^=p[i];h*=1099511628211UL;} return h; }
+static int gSaveIdx=0, gInpCount=0; static double gT0s=0, gLastFrameT=0; static unsigned gTotalCB=0;
 static void saveFrame(CVImageBufferRef px){
-    if(!px||gFrames>=8) return;
+    if(!px) return;
+    gTotalCB++;
+    double t; { struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); t=ts.tv_sec+ts.tv_nsec/1e9; }
+    if(gT0s==0) gT0s=t;
+    if(getenv("INPROC_RATE")){ // just count, sample-save a few
+        gInpCount++; gLastFrameT=t;
+        if(gSaveIdx<3 || gInpCount==150 || gInpCount==300){ }
+        else { return; }
+    }
+    if(gSaveIdx>=12 && !getenv("INPROC_RATE")) return;
     @autoreleasepool{
         CIImage *ci=[CIImage imageWithCVImageBuffer:px];
         CIContext *cc=[CIContext contextWithOptions:nil];
@@ -143,10 +153,13 @@ static void hookRecv(void){
 @interface StreamTap : NSObject
 @end
 @implementation SinkTap
-- (void)streamOutput:(id)o didReceiveSampleBuffer:(CMSampleBufferRef)sb {
-    fprintf(stderr,"SINK streamOutput:didReceiveSampleBuffer: %p\n", sb);
+- (void)didReceiveSampleBuffer:(CMSampleBufferRef)sb {
+    static int n=0;
+    CVImageBufferRef px = sb ? CMSampleBufferGetImageBuffer(sb) : NULL;
+    if(n++<4) fprintf(stderr,"*** SINK didReceiveSampleBuffer: sb=%p imageBuffer=%p\n",sb,px);
+    if(px) saveFrame(px);
 }
-- (BOOL)respondsToSelector:(SEL)sel { BOOL r=[super respondsToSelector:sel]; fprintf(stderr,"SINK probe %s -> %d\n",sel_getName(sel),r); return r; }
+- (void)streamOutput:(id)o didReceiveSampleBuffer:(CMSampleBufferRef)sb { [self didReceiveSampleBuffer:sb]; }
 @end
 
 @implementation StreamTap
@@ -416,6 +429,7 @@ skip_probe:
             LOG("stage2 stopped");
         }
     }
+    if(getenv("INPROC_RATE") && gT0s>0){ double el=gLastFrameT-gT0s; LOG("INPROC_RATE: %u sample buffers, %d counted, %.1f fps over %.1fs", gTotalCB, gInpCount, el>0?gInpCount/el:0.0, el); }
     LOG("stage1 done");
     return 0;
 }
