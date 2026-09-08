@@ -515,3 +515,15 @@ Implemented in `Experiments/videostream/receiver.m` (`SINK=1`, RunInProcess=YES,
 Result: **`INPROC_RATE: 498 sample buffers, 45.9 fps over 10.9 s`**, CVPixelBuffers saved as 1184x2576 PNG. This is a PUSH feed (every decoded frame delivered automatically, no polling) and runs entirely in-process — RTP receive + AppleAVD HEVC decode + frame delivery all local, `avconferenced` not involved, so `AVConferenceXPCServer entitlementStatusForToken:` never runs. **No `com.apple.videoconference.allow-conferencing` needed.**
 
 This is the distributable path: it removes the one known hard blocker (the Apple-private daemon entitlement). Not yet proven on a stock SIP-enabled Mac (dlopening the private frameworks and in-process decode should not need SIP-off, but this is unverified — see Astra's验证资源 step 4). The daemon JPEG-pull path stays as a documented fallback.
+
+## 2026-09-08 — <macos27-host> (macOS 27.0, SIP ENABLED) test: entitlement gate is gone; display link is the real requirement
+
+Ran the in-process `ipb stream` (plain ad-hoc signature, 0 entitlement keys) on <macos27-host> (`<macos27-host>`, macOS 27.0 26A5425a, **SIP enabled, no boot-args**), iPhone 12 mini (iOS 27.0), over ssh.
+
+- The control path negotiated fine and the stream reached `VCVideoStream start`. It did **not** fail on the entitlement — no `streamDidServerDie`, no `allow-conferencing` denial. **This confirms the in-process path bypasses the Apple-private entitlement gate even under full AMFI enforcement**; the entitlement was never the in-process blocker.
+- It failed at: `CVDisplayLinkCreateWithCGDisplays error -6661 due to invalid display count (0)` -> `-[VCVideoReceiverDefault initializeDisplayLink] failed` -> `startVideo failed` (`GKVoiceChatServiceError 32017`, DetailedError 1302). The ssh session is headless (no window-server / display), and `VCVideoReceiverDefault` requires a `CVDisplayLink`, which needs an active display.
+- Stubbing `-[VCVideoReceiverDefault initializeDisplayLink]` to no-op did not help (startVideo still needs a valid display link). Running in <macos27-host>'s Aqua GUI session via `launchctl asuser` requires root; sudo needs a password not available to this session, so the SIP-on + display combination was not directly exercised here.
+
+**Separated conclusion:** the in-process path needs a **display / GUI login session**, not an entitlement and not SIP-off. The two variables are cleanly separated: the SIP-enabled machine failed only on the missing display; the display-having machine (local, SIP off) works at ~46 fps. A normal user's Mac (a screen + a logged-in GUI session) should therefore run `ipb stream` regardless of SIP. Headless/ssh/CI Macs currently cannot (open item: defeat the display-link requirement, e.g. a virtual display, for headless support).
+
+Direct SIP-on + display proof is still pending: run `ipb stream` from <macos27-host>'s own GUI session (Terminal on the desktop, not ssh), or `sudo launchctl asuser $(id -u) ./build/ipb-video ...`.

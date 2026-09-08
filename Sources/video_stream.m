@@ -279,7 +279,7 @@ int main(int argc,char**argv){
 
     xpc_object_t socks=xpc_dictionary_create_empty();
     xpc_dictionary_set_fd(socks,"avcKeySharedSocket",rtp);
-    if(!gDaemon) installInProcessSink();
+    if(!gDaemon) installInProcessSink();  // in-process capture (needs a GUI display session)
     Class VS=objc_getClass("AVCVideoStream"); if(!VS) DIE(6,"no AVCVideoStream class");
     NSError *se=nil;
     AVCVideoStream *vs=[[VS alloc] initWithNetworkSockets:(id)socks options:o2 error:&se];
