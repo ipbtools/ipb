@@ -34,6 +34,7 @@ usage() {
 usage:
   ipb doctor                  # layered self-check: install, Apple stack, device, DDI, HID services
   ipb version
+  ipb update                  # update ipb in place (Homebrew install or git checkout)
   ipb devices                 # physical devices: uuid, name, os, transport, tunnel
   ipb device                  # the device the other commands would use
   ipb tap <x> <y>
@@ -640,6 +641,26 @@ case "$cmd" in
   service-id|resolve-service)
     [[ $# -eq 1 ]] || { usage; exit 2; }
     resolve_service_id "$1"
+    ;;
+  update)
+    [[ $# -eq 0 ]] || { usage; exit 2; }
+    # A Homebrew install has no .git; a source checkout does. Update whichever this is.
+    if [[ -d "$ROOT/.git" ]]; then
+      print -r -- "ipb: source checkout at $ROOT"
+      git -C "$ROOT" pull --ff-only || { print -u2 "ipb: git pull failed (local changes?); resolve and re-run"; exit 1; }
+      make -C "$ROOT" || { print -u2 "ipb: build failed"; exit 1; }
+      print -r -- "ipb: updated to $(cat "$IPB_VERSION_FILE" 2>/dev/null || print -r -- unknown)"
+    elif command -v brew >/dev/null 2>&1 && brew list --formula ipb >/dev/null 2>&1; then
+      print -r -- "ipb: Homebrew install; updating tap and formula"
+      brew update || true
+      brew upgrade --fetch-HEAD ipb || { print -u2 "ipb: brew upgrade failed"; exit 1; }
+      print -r -- "ipb: updated ($(command ipb version 2>/dev/null || true))"
+    else
+      print -u2 "ipb: not a git checkout and not a Homebrew install; update manually"
+      print -u2 "  brew:   brew update && brew upgrade --fetch-HEAD ipb"
+      print -u2 "  source: git -C <checkout> pull && make -C <checkout>"
+      exit 2
+    fi
     ;;
   devices)
     [[ $# -eq 0 ]] || { usage; exit 2; }
