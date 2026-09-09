@@ -75,6 +75,8 @@ usage:
   ipb scroll-event <x> <y> <z> [phase] [momentum] [target]
   ipb vendor-defined <usage_page> <usage> <version> [hex_payload]
   ipb pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
+  ipb scroll-gesture <x> <y> [dx] [dy] [service_id] [steps]  # full trackpad scroll
+  ipb abs-pointer <x> <y> [buttons] [service_id]             # place the cursor
   ipb scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
   ipb keyboard-report <service_id> <usage_or_name> <pressed>
   ipb uhid-report <service_id> <x> <y> <touching> [in_range]
@@ -780,6 +782,18 @@ case "$cmd" in
   pointer-report)
     [[ $# -ge 3 && $# -le 7 ]] || { usage; exit 2; }
     run_uhid cd_pointer_report "$1" "$2" "$3" "${4:-0}" "${5:-0}" "${6:-0}" "${7:-0}"
+    ;;
+  scroll-gesture)
+    # A trackpad-style scroll as Device Hub performs it: an AbsolutePointer
+    # report placing the cursor, then the phase sequence and a momentum tail.
+    # `ipb scroll-report` sends a single bare movement report, which the device
+    # accepts and ignores; see docs/protocol.md.
+    [[ $# -ge 2 && $# -le 6 ]] || { usage; exit 2; }
+    run_uhid cd_scroll_gesture "${5:-0x501}" "$1" "$2" "${3:-0}" "${4:--6}" "${6:-12}" 8
+    ;;
+  abs-pointer)
+    [[ $# -ge 2 && $# -le 4 ]] || { usage; exit 2; }
+    run_uhid cd_abs_pointer "${4:-0x501}" "$1" "$2" "${3:-0}"
     ;;
   scroll-report)
     [[ $# -ge 3 && $# -le 8 ]] || { usage; exit 2; }

@@ -125,6 +125,8 @@ extern int uhid_make_navigation_swipe_hid_report(uint32_t phase, uint32_t swipe_
 extern int uhid_make_dock_swipe_hid_report(uint32_t phase, uint32_t swipe_mask, uint32_t gesture_motion, uint32_t flavor, double progress, double x, double y, void *output) __attribute__((weak_import));
 extern int uhid_make_keyboard_hid_report(uint32_t usage, int pressed, void *output) __attribute__((weak_import));
 extern int uhid_make_pointer_hid_report(int64_t x, int64_t y, uint32_t button_mask, double accel_x, double accel_y, uint32_t flags, void *output) __attribute__((weak_import));
+extern int uhid_make_absolute_pointer_hid_report(double x, double y, uint32_t buttons, void *output) __attribute__((weak_import));
+extern int uhid_make_scroll_wire_hid_report(int32_t x, int32_t y, uint32_t flags, uint32_t momentum, double accel_x, double accel_y, void *output) __attribute__((weak_import));
 extern int uhid_make_scroll_hid_report(int64_t x, int64_t y, uint32_t phase, uint32_t momentum, uint32_t flags, double accel_x, double accel_y, void *output) __attribute__((weak_import));
 
 static void print_xpc(const char *label, xpc_object_t object) {
@@ -704,6 +706,87 @@ static void send_coredevice_pointer_report(xpc_remote_connection_t remote, uint6
     }
     if (delay_after) {
         usleep(delay_after);
+    }
+}
+
+static void send_coredevice_absolute_pointer(xpc_remote_connection_t remote, uint64_t service_id, double x, double y, uint32_t buttons, useconds_t delay_after) {
+    if (!uhid_make_absolute_pointer_hid_report || !coredevice_send_universalhid_hid_report) {
+        fprintf(stderr, "CoreDevice AbsolutePointer sender is not linked\n");
+        exit(2);
+    }
+    uint64_t report_words[2] = {0, 0};
+    int count = uhid_make_absolute_pointer_hid_report(x, y, buttons, report_words);
+    if (count != (int)sizeof(report_words)) {
+        fprintf(stderr, "Unable to build AbsolutePointer HIDReport, result=%d x=%g y=%g\n", count, x, y);
+        exit(2);
+    }
+    int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (result != 0) { g_failures++; fprintf(stderr, "AbsolutePointer send failed: result=%d\n", result); }
+    if (!g_quiet) {
+        printf("coredevice abspointer result=%d service=0x%llx x=%g y=%g buttons=0x%x\n",
+               result, (unsigned long long)service_id, x, y, buttons);
+    }
+    if (delay_after) { usleep(delay_after); }
+}
+
+static void send_coredevice_scroll_wire(xpc_remote_connection_t remote, uint64_t service_id, int32_t x, int32_t y, uint32_t flags, uint32_t momentum, double accel_x, double accel_y, useconds_t delay_after) {
+    if (!uhid_make_scroll_wire_hid_report || !coredevice_send_universalhid_hid_report) {
+        fprintf(stderr, "CoreDevice scroll sender is not linked\n");
+        exit(2);
+    }
+    uint64_t report_words[2] = {0, 0};
+    int count = uhid_make_scroll_wire_hid_report(x, y, flags, momentum, accel_x, accel_y, report_words);
+    if (count != (int)sizeof(report_words)) {
+        fprintf(stderr, "Unable to build ScrollReport, result=%d flags=0x%x momentum=0x%x\n", count, flags, momentum);
+        exit(2);
+    }
+    int result = coredevice_send_universalhid_hid_report(remote, report_words, service_id);
+    if (result != 0) { g_failures++; fprintf(stderr, "scroll send failed: result=%d\n", result); }
+    if (!g_quiet) {
+        printf("coredevice scroll result=%d service=0x%llx x=%d y=%d flags=0x%02x momentum=%u accel=(%g,%g)\n",
+               result, (unsigned long long)service_id, x, y, flags, momentum, accel_x, accel_y);
+    }
+    if (delay_after) { usleep(delay_after); }
+}
+
+// A trackpad scroll as Device Hub actually performs it. Captured 2026-09-09 and
+// recorded in docs/protocol.md: a scroll is not one report but a phase
+// sequence, and it is preceded by an AbsolutePointer report placing the cursor
+// over the content. Sending a lone movement report -- which is what `ipb`
+// did -- is accepted at every layer and ignored by the device.
+//
+// The whole sequence has to travel on one connection, which is why it lives
+// here rather than being composed from several CLI invocations.
+#define SCROLL_PHASE_MAY_BEGIN 0x80
+#define SCROLL_PHASE_BEGAN     0x01
+#define SCROLL_PHASE_CHANGED   0x02
+#define SCROLL_PHASE_ENDED     0x04
+#define SCROLL_PHASE_MOMENTUM  0x00
+
+// step_delay defaults to 20 ms, which is Device Hub's own median gap between
+// consecutive scroll reports (measured over a captured two-finger scroll:
+// n=47, min 10.3 ms, median 20.7 ms).
+static void send_coredevice_scroll_gesture(xpc_remote_connection_t remote, uint64_t service_id, double px, double py, int32_t dx, int32_t dy, int steps, int momentum_steps, useconds_t step_delay) {
+    if (steps < 1) { steps = 1; }
+
+    // Place the cursor first, and keep it there: Device Hub emits no scroll
+    // report at all unless the pointer is over the content.
+    send_coredevice_absolute_pointer(remote, service_id, px, py, 0, step_delay);
+
+    send_coredevice_scroll_wire(remote, service_id, 0, 0, SCROLL_PHASE_MAY_BEGIN, 0, 0.0, 0.0, step_delay);
+    send_coredevice_scroll_wire(remote, service_id, dx, dy, SCROLL_PHASE_BEGAN, 0, (double)dx / 40.0, (double)dy / 40.0, step_delay);
+    for (int i = 1; i < steps; i++) {
+        send_coredevice_scroll_wire(remote, service_id, dx, dy, SCROLL_PHASE_CHANGED, 0, (double)dx / 40.0, (double)dy / 40.0, step_delay);
+    }
+    send_coredevice_scroll_wire(remote, service_id, 0, 0, SCROLL_PHASE_ENDED, 0, 0.0, 0.0, step_delay);
+
+    // Inertia tail: momentum 2 opens it, 1 continues, deltas decay to zero.
+    for (int i = 0; i < momentum_steps; i++) {
+        double decay = (double)(momentum_steps - i) / (double)(momentum_steps + 1);
+        int32_t mx = (int32_t)((double)dx * decay);
+        int32_t my = (int32_t)((double)dy * decay);
+        send_coredevice_scroll_wire(remote, service_id, mx, my, SCROLL_PHASE_MOMENTUM,
+                                    i == 0 ? 2 : 1, (double)mx / 40.0, (double)my / 40.0, step_delay);
     }
 }
 
@@ -1381,6 +1464,23 @@ int main(int argc, const char *argv[]) {
                         double accel_y = argc > 11 ? strtod(argv[11], NULL) : 0.0;
                         uint32_t flags = argc > 12 ? (uint32_t)strtoul(argv[12], NULL, 0) : 0;
                         send_coredevice_pointer_report(remote, service_id, x, y, button_mask, accel_x, accel_y, flags, 120000);
+                        send_coredevice_hid_barrier(remote, 100000);
+                    } else if (strcmp(kind, "cd_scroll_gesture") == 0) {
+                        uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x501;
+                        double px = argc > 7 ? strtod(argv[7], NULL) : 0.5;
+                        double py = argc > 8 ? strtod(argv[8], NULL) : 0.5;
+                        int32_t dx = argc > 9 ? (int32_t)strtol(argv[9], NULL, 0) : 0;
+                        int32_t dy = argc > 10 ? (int32_t)strtol(argv[10], NULL, 0) : -6;
+                        int steps = argc > 11 ? (int)strtol(argv[11], NULL, 0) : 12;
+                        int momentum_steps = argc > 12 ? (int)strtol(argv[12], NULL, 0) : 8;
+                        send_coredevice_scroll_gesture(remote, service_id, px, py, dx, dy, steps, momentum_steps, 20000);
+                        send_coredevice_hid_barrier(remote, 100000);
+                    } else if (strcmp(kind, "cd_abs_pointer") == 0) {
+                        uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x501;
+                        double px = argc > 7 ? strtod(argv[7], NULL) : 0.5;
+                        double py = argc > 8 ? strtod(argv[8], NULL) : 0.5;
+                        uint32_t buttons = argc > 9 ? (uint32_t)strtoul(argv[9], NULL, 0) : 0;
+                        send_coredevice_absolute_pointer(remote, service_id, px, py, buttons, 120000);
                         send_coredevice_hid_barrier(remote, 100000);
                     } else if (strcmp(kind, "cd_scroll_report") == 0) {
                         uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x501;

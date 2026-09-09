@@ -1560,3 +1560,81 @@ inspecting the screenshot). The passcode is not bypassed.
 - The 2026-09-09 "Second capture" record's *Known, not fixed* entry beginning "**Unlock.** No
   route known" is withdrawn. Device Hub's own lock still does not traverse UniversalHID, which
   remains true and is unrelated to how `ipb` does it.
+
+## 2026-09-09 — Scroll implemented from the captured sequence: works, intermittently
+
+Host: macOS 27 beta, Xcode 27.0.0 Beta 6. Device: iPhone 12 mini, iOS 27.
+
+`ipb scroll-gesture <x> <y> [dx] [dy] [service_id] [steps]` and `ipb abs-pointer <x> <y>` send
+what Device Hub sends: an `AbsolutePointerReport` placing the cursor, then the scroll phase
+sequence (`0x80` may-begin, `0x01` began, `0x02` ×N, `0x04` ended) and a momentum tail
+(`0x00` with momentum 2 then 1, deltas decaying). The whole sequence goes over one connection,
+which is why it is one helper command rather than several CLI calls.
+
+**Status: the device now responds, but only about 3 times in 5.** This is a real change from
+never responding at all, and it is not yet a finished feature.
+
+### What was wrong, and how each was found
+
+1. **`uhidHIDReportInitData` is not a usable way to build a report here.** Assembling a `Data`
+   and passing it produced reports that built fine (`result = 16`) and then trapped inside
+   CoreDevice's send — SIGTRAP, exit 133, no message. Dumping the report words showed why: for a
+   report built from UniversalHID's own `Data` the storage pointer at `+16` dereferences to the
+   bytes, and for a Swift-native `Data` built from an array it dereferences to null. Reports are
+   now allocated with `uhidHIDReportInit` and filled with `uhidHIDReportSetBitABI`, the same way
+   every working builder in this file does it. No new ABI shim was added.
+2. **The timestamp was in the wrong unit.** `CLOCK_UPTIME_RAW` nanoseconds gave ~6.4e13 where
+   Device Hub's captured values were ~1.4e12 — a factor of ~46, which is the 24 MHz Apple Silicon
+   timebase. Device Hub stamps reports with raw `mach_absolute_time()` ticks. After the fix our
+   values (~1.54e12) match Device Hub's magnitude (~1.39e12).
+3. **The step rate was guessed.** 12 ms between reports; Device Hub's own median gap over a
+   captured two-finger scroll is 20.7 ms (n=47, min 10.3). Now 20 ms.
+
+### Byte comparison against Device Hub, same phase
+
+```
+ipb        07 02 00 00 f8  00 00 00 00  cd cc ff ff  a0 a4 e4 71 67 01 00 00
+Device Hub 07 02 00 00 fb  f4 fd ff ff  6e da ff ff  52 0c 79 06 46 01 00 00
+```
+
+Structurally identical; the remaining differences are magnitudes and a small non-zero `accelX`
+that Device Hub carries even on a vertical scroll.
+
+### Reliability, measured
+
+List positioned mid-way with known-good swipes, then alternating directions so it never pins
+against a limit. `mean_abs_diff` is over a 32×32 greyscale reduction.
+
+| dy | diff |
+| --- | --- |
+| -25 | 6.6 |
+| +25 | 0.0 |
+| -25 | 6.5 |
+| +25 | 6.1 |
+| -25 | 0.0 |
+| **0 (null control)** | **0.0** |
+
+The `dy = 0` null control reading 0.0 is what makes the non-zero rows meaningful. A swipe
+control (`ipb swipe 0.5 0.75 0.5 0.35`) on the same list reads 7.5, so the successful gestures
+move the list about as far as a real swipe does.
+
+### Method notes worth keeping
+
+- An early "control" used `ipb scroll 0.5 0.75 0 0.30`, which drags *downward* on a list already
+  at the top, so it correctly did nothing and briefly looked like the measurement was broken.
+  The screenshots were byte-identical, which is what prompted checking capture liveness at all:
+  Settings → Home reads 149.5, so capture was live and the control was simply wrong.
+- Two intermediate sweeps were void because a second phone had been plugged in and `ipb` refuses
+  to guess between connected devices (exit 3). Pin `DEVICE_ID` for any measurement run.
+
+### Known, not fixed
+
+- **Scroll fires about 3 times in 5.** Unresolved. The next step is to trace `ipb`'s own helper
+  with `Experiments/devicehub-trace` — it is our own process, so no library-validation problem
+  and no operator round is needed — and diff the emitted sequence against Device Hub's captured
+  one, rather than tuning parameters against a coarse screenshot diff.
+- **The service ID is still an assumption.** Device Hub passes the `HIDServiceID` indirectly
+  (`x2` is a pointer), and the capture never dereferenced it, so `0x501` is inherited from
+  earlier work rather than confirmed. Sweeping 0x300/0x301/0x101/0x400/0x500/0x501 produced no
+  difference, which is consistent with the service not being the blocker, but does not confirm
+  the value. The tracer should dereference `x2` on the next capture.

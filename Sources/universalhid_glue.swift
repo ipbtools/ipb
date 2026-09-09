@@ -206,6 +206,8 @@ let digitizerReportBitCount = 464
 // ScrollReport layout: remoteTimestamp occupies bits 104..<168. Leave it zero,
 // as ScrollReport.init(scrollEvent:) does; initialD8BitCount only covers 104 bits.
 let scrollReportBitCount = 168
+// AbsolutePointerReport's ID, from its reportID getter (a constant `movz`).
+let absolutePointerReportID: UInt8 = 19
 let universalHIDHandle = dlopen(universalHIDFrameworkPath, RTLD_NOW | RTLD_GLOBAL)
 
 func universalHIDSymbol(_ name: String) -> UnsafeRawPointer {
@@ -261,6 +263,119 @@ func scaledUInt16(_ value: Double) -> UInt16 {
 func putUInt16LE(_ value: UInt16, into data: inout Data, at index: Int) {
     data[index] = UInt8(value & 0xff)
     data[index + 1] = UInt8((value >> 8) & 0xff)
+}
+
+// Reports assembled directly from the wire layout captured from Device Hub.
+//
+// These do not go through ABI shims. The shims exist as the oracle for what
+// Apple's own client sends, and for these two types the capture *is* that
+// oracle: every field below was read off Device Hub's own traffic and checked
+// against it (see docs/protocol.md, "Scroll: the full sequence"). Assembling
+// the bytes here is also the only way to set remoteTimestamp, which the shim
+// path leaves unset and which Device Hub populates on every report.
+
+/// Device Hub stamps every report with `mach_absolute_time()`, in raw ticks
+/// rather than nanoseconds.
+///
+/// Worked out by arithmetic on a capture: Device Hub's values were ~1.4e12
+/// while `CLOCK_UPTIME_RAW` on the same host read ~6.4e13 ns. 1.4e12 ticks at
+/// the 24 MHz Apple Silicon timebase is 16.2 hours, and 6.4e13 ns is 17.8
+/// hours -- consistent once the ~1.5 hours between the capture and the check
+/// are accounted for. Nanoseconds would have been off by a factor of ~46.
+func reportTimestamp() -> UInt64 {
+    mach_absolute_time()
+}
+
+private func putLE<T: FixedWidthInteger>(_ value: T, _ bytes: inout [UInt8], _ offset: Int) {
+    var le = value.littleEndian
+    withUnsafeBytes(of: &le) { raw in
+        for (i, byte) in raw.enumerated() {
+            bytes[offset + i] = byte
+        }
+    }
+}
+
+/// 16.16 fixed point, clamped to the 0...1 the device expects.
+private func fixed16_16(_ value: Double) -> Int32 {
+    Int32((max(0.0, min(1.0, value)) * 65536.0).rounded())
+}
+
+/// Build a report of `bitCount` bits with `reportID`, then write `bytes` into
+/// it a bit at a time.
+///
+/// The obvious alternative -- assembling a `Data` and calling
+/// `uhidHIDReportInitData` -- does not work here. That entry point stores the
+/// `Data` value it is given, and a Swift-native `Data` built from an array has
+/// a different internal representation than the one UniversalHID hands back
+/// from its own reports: dereferencing the storage at +16 yields the bytes for
+/// the latter and null for the former, and CoreDevice's send traps on it
+/// (SIGTRAP, exit 133, after the report itself builds fine). Allocating through
+/// `uhidHIDReportInit` produces a report owned the same way as every other
+/// report this file builds.
+///
+/// Byte 0 is skipped: `uhidHIDReportInit` has already written the report ID
+/// there, which is why the keyboard builder starts its bit offsets at 8.
+private func reportFromBytes(_ bytes: [UInt8], bitCount: Int, reportID: UInt8) -> UHIDHIDReport {
+    var report = uhidHIDReportInit(bitCount, reportID)
+    withUnsafeMutablePointer(to: &report) { pointer in
+        for (index, byte) in bytes.enumerated() where index > 0 && byte != 0 {
+            for bit in 0..<8 where (byte >> bit) & 1 == 1 {
+                uhidHIDReportSetBitABI(pointer, index * 8 + bit, 1)
+            }
+        }
+    }
+    return report
+}
+
+/// AbsolutePointerReport, ID 19, 19 bytes / 152 bits.
+///
+///     13 87 35 00 00  10 57 00 00  00 00  57 d9 a5 87 45 01 00 00
+///     |  \__________/ \__________/ |  |   \____________________/
+///     |   x (16.16)    y (16.16)   |  reserved   remoteTimestamp
+///     |                            buttons
+///     report ID
+///
+/// x and y are normalised 0...1, which is the same normalisation `ipb` already
+/// uses at the CLI boundary. Confirmed across a slow left-right mouse sweep:
+/// x ranged 0.032...0.977 and y 0.168...0.900, never outside 0...1.
+func makeAbsolutePointerHIDReport(x: Double, y: Double, buttons: UInt8) -> UHIDHIDReport {
+    var bytes = [UInt8](repeating: 0, count: 19)
+    bytes[0] = absolutePointerReportID
+    putLE(fixed16_16(x), &bytes, 1)
+    putLE(fixed16_16(y), &bytes, 5)
+    bytes[9] = buttons
+    putLE(reportTimestamp(), &bytes, 11)
+    return reportFromBytes(bytes, bitCount: 152, reportID: absolutePointerReportID)
+}
+
+/// ScrollReport, ID 7, 21 bytes / 168 bits.
+///
+///     07 02 00 00 fb  f4 fd ff ff  6e da ff ff  52 0c 79 06 46 01 00 00
+///     |  |  |  |  |   \__________/ \__________/ \____________________/
+///     |  |  |  x  y    accelX       accelY       remoteTimestamp
+///     |  |  momentum
+///     |  flags (phase)
+///     report ID
+///
+/// x and y are signed byte deltas; accelX/accelY are signed 16.16.
+func makeScrollWireHIDReport(
+    x: Int8,
+    y: Int8,
+    flags: UInt8,
+    momentum: UInt8,
+    accelX: Double,
+    accelY: Double
+) -> UHIDHIDReport {
+    var bytes = [UInt8](repeating: 0, count: 21)
+    bytes[0] = uhidScrollReportID()
+    bytes[1] = flags
+    bytes[2] = momentum
+    bytes[3] = UInt8(bitPattern: x)
+    bytes[4] = UInt8(bitPattern: y)
+    putLE(Int32((accelX * 65536.0).rounded()), &bytes, 5)
+    putLE(Int32((accelY * 65536.0).rounded()), &bytes, 9)
+    putLE(reportTimestamp(), &bytes, 13)
+    return reportFromBytes(bytes, bitCount: scrollReportBitCount, reportID: bytes[0])
 }
 
 func makeNavigationSwipeReportData(
@@ -432,6 +547,54 @@ public func uhidMakeDigitizerHIDReport(
     retainedHIDReports.append(finalReport)
     if let output {
         withUnsafeBytes(of: &finalReport) { bytes in
+            output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
+        }
+    }
+    return Int32(MemoryLayout<UHIDHIDReport>.size)
+}
+
+@_cdecl("uhid_make_absolute_pointer_hid_report")
+public func uhidMakeAbsolutePointerHIDReport(
+    _ x: Double,
+    _ y: Double,
+    _ buttons: UInt32,
+    _ output: UnsafeMutableRawPointer?
+) -> Int32 {
+    var report = makeAbsolutePointerHIDReport(
+        x: x,
+        y: y,
+        buttons: UInt8(truncatingIfNeeded: buttons)
+    )
+    retainedHIDReports.append(report)
+    if let output {
+        withUnsafeBytes(of: &report) { bytes in
+            output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
+        }
+    }
+    return Int32(MemoryLayout<UHIDHIDReport>.size)
+}
+
+@_cdecl("uhid_make_scroll_wire_hid_report")
+public func uhidMakeScrollWireHIDReport(
+    _ x: Int32,
+    _ y: Int32,
+    _ flags: UInt32,
+    _ momentum: UInt32,
+    _ accelX: Double,
+    _ accelY: Double,
+    _ output: UnsafeMutableRawPointer?
+) -> Int32 {
+    var report = makeScrollWireHIDReport(
+        x: Int8(truncatingIfNeeded: x),
+        y: Int8(truncatingIfNeeded: y),
+        flags: UInt8(truncatingIfNeeded: flags),
+        momentum: UInt8(truncatingIfNeeded: momentum),
+        accelX: accelX,
+        accelY: accelY
+    )
+    retainedHIDReports.append(report)
+    if let output {
+        withUnsafeBytes(of: &report) { bytes in
             output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
         }
     }
