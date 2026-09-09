@@ -628,11 +628,7 @@ static void keyStep(unsigned index,unsigned step){
                            r.event.kind==KeyVolumeDown?0xEA:0x30;
             code=step==2?coredevice_send_hid_button_barrier(gButton):
                 coredevice_send_hid_button_custom(gButton,0x0c,usage,(uint8_t)step);
-            done=step==2;
-            // Lock is the side button and needs a real hold: measured on iPhone
-            // 12 mini / iOS 27, 0.45s does nothing and 0.50s acts. The other
-            // shortcuts are taps. See docs/protocol.md, "Lock".
-            delay=step==0?(r.event.kind==KeyLock?.7:.08):.12;
+            done=step==2; delay=step==0?.08:.12;
         }
         double returned=nowSec();
         if(step==0){ r.reportCode=code; r.reportReturn=returned; }
@@ -1036,8 +1032,14 @@ static void saveScreenshot(void){
     else if(flags==command && key.length==1 && [key characterAtIndex:0]==NSDownArrowFunctionKey) kind=KeyVolumeDown;
     // Device Hub uses Cmd-L to lock. Its own Cmd-L never reaches UniversalHID
     // (only the Command modifier does; see docs/protocol.md), so this sends the
-    // Consumer Power usage ipb established instead. Like the side button it
-    // toggles: it locks a lit screen and wakes a dark one.
+    // Consumer Power usage ipb established instead.
+    //
+    // Deliberately a short press, like every other shortcut here. On the device
+    // the side button locks on a short press and opens Siri on a long one, and
+    // a first attempt at 0.7 s opened Siri. `ipb lock` needs ~0.5 s for the same
+    // usage, which is most likely an artefact of the CLI: it exits as soon as
+    // the sequence is queued, so its effective hold is shorter than the nominal
+    // one, while the mirror holds a live connection and honours the full delay.
     else if(flags==command && [key isEqualToString:@"l"]) kind=KeyLock;
     else if(flags==shiftCommand && [key isEqualToString:@"s"]) action=Screenshot;
     else if(flags==command && [key isEqualToString:@"0"]) action=ZoomToFit;

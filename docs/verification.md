@@ -1759,3 +1759,46 @@ different binding or none. Key repeat is ignored.
 - The "Still not done" note in the mirror-scroll sign record contradicted the record below it
   (it said the mirror sends no `AbsolutePointerReport`, which the next record fixes); it now
   points at that record instead.
+
+## 2026-09-09 — Correction: the lock hold was picked without an upper bound
+
+`⌘L` in the mirror opened **Siri** instead of locking. The hold was set to 0.7 s, chosen from a
+sweep that only ever established the *lower* bound — "0.45 s does nothing, 0.50 s acts" — and
+never asked how long is too long. On the device a short side-button press locks and a long one
+opens Siri, so 0.7 s was on the wrong side of a boundary that was never measured.
+
+### Sweep with the upper bound included (CLI path)
+
+From a lit Home screen, `ipb button 0x0c 0x30 <hold>`, screenshot one second later:
+
+| Hold | Brightness | Screen |
+| --- | --- | --- |
+| 0.08 s | 94.0 | unchanged Home |
+| 0.20 s | 94.0 | unchanged Home |
+| 0.35 s | 0.0 | locked, screen off |
+| 0.50 s | 0.0 | locked, screen off |
+| 0.60 s | 14.9 | passcode entry |
+| 0.70 s | 14.9 | passcode entry |
+| 0.90 s | 14.9 | passcode entry |
+
+The 14.9 rows were inspected, not just measured: they are the passcode keypad, **not** Siri.
+
+### The two paths are not equivalent
+
+Siri could not be reproduced from the CLI at any hold, while the mirror reached it at 0.7 s. Both
+call the same `coredevice_send_hid_button_custom` with the same states, so the difference is the
+effective hold rather than the message: `ipb` exits as soon as the sequence is queued and tears
+its connection down, so its real hold is shorter than the nominal one, while the mirror holds a
+live connection for the whole session and honours the full delay. This also explains why the CLI
+needs ~0.35 s to register anything at all when a physical short press is ~0.1 s.
+
+Treat a hold value as **path-specific**. A duration calibrated through `ipb` does not transfer to
+the mirror.
+
+### Fix
+
+The mirror's `⌘L` is now a short press (0.08 s), identical to every other shortcut there, which is
+what locks a real device. The special-cased hold is gone. `ipb lock`'s 0.7 s default is unchanged
+and still verified for the CLI path, where it locks and wakes.
+
+**Mirror `⌘L` not yet re-verified after this change.**
