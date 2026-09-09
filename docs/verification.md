@@ -1288,3 +1288,85 @@ earlier Device Hub capture read arguments this way, so those register values wer
 - **Media wedge.** Cumulative over ~30 stream sessions, host-side, survives an `avconferenced`
   restart, cleared only by reboot or replug. Exact resource unidentified.
 - **`ipb uhid-swipe-report` semantics.** Unverified.
+
+## 2026-09-09 — Lock solved: Consumer 0x0c/0x30, held
+
+Host: macOS 27 beta, Xcode 27.0.0 Beta 6. Device: iPhone 12 mini, iOS 27.
+
+`ipb button 0x0c 0x30 0.60` locks the screen. Shipped as `ipb lock [hold_seconds]`, default 0.7 s.
+
+### Hold threshold
+
+Each trial: `ipb home` to wake, then the button, then a screenshot; brightness is the mean of a
+32x32 greyscale reduction.
+
+| Hold | Brightness after | Locked |
+| --- | --- | --- |
+| 0.08 s | 131.5 | no |
+| 0.15 s | 131.5 | no |
+| 0.25 s | 131.5 | no |
+| 0.40 s | 131.5 | no |
+| 0.45 s | 130.9 | no |
+| 0.50 s | 0.0 | yes |
+| 0.55 s | 0.0 | yes |
+| 0.60 s | 0.0 | yes |
+
+### Controls
+
+The device's own auto-lock is the confound, and it defeated the first attempt at this
+measurement. Measured with no button pressed at all:
+
+| Idle after wake | Brightness |
+| --- | --- |
+| 0 s | 131.6 |
+| 2 s | 87.2 |
+| 4 s | 87.3 |
+| 6 s | 87.3 |
+| 10 s | 0.0 |
+
+So a trial must finish within ~6 s of the wake. Step costs were timed: `ipb home` 1.35 s,
+`ipb screenshot` 1.75 s, `ipb button ... 0.60` 1.72 s — a minimal wake/press/screenshot path is
+4.82 s, which fits. The first attempt used a wake, a screenshot, the press, a 2 s settle and a
+second screenshot, well past 10 s, so **both arms blanked** and the comparison was meaningless.
+That failure was caught by its own control, not by inspection.
+
+Matched-elapsed A/B at 4.82 s, alternating:
+
+| Trial | Press | Brightness |
+| --- | --- | --- |
+| e1 | yes | 0.0 |
+| c1 | no | 131.5 |
+| e2 | yes | 0.0 |
+| c2 | no | 131.4 |
+
+### Locked, not merely dark
+
+Blanking the screen and then waking it produced the **lock screen** — padlock glyph, clock,
+battery text, flashlight and camera affordances — rather than the Home screen. Brightness alone
+cannot distinguish "screen off" from "locked", and cannot distinguish "locked" from "unlocked"
+either, since a lock screen is bright. The screenshot was inspected, not just measured.
+
+`ipb lock-state` is **not** a usable discriminator: `passcodeRequired: true` and
+`unlockedSinceBoot: true` read identically when locked, awake, and auto-locked. It reports whether
+a passcode is configured, not the current screen lock state.
+
+### Why this took three failed rounds
+
+Every earlier candidate (`0x66`, `0x82`, `0x32`) was sent on the Keyboard page through `ipb key`,
+i.e. the `KeyboardReport` (ID 1) path. The Consumer page was excluded by the
+`init(_report:)` breakpoint result, which was invalid — a reinterpret wrapper is not a
+construction path, so the test measured an empty set. Compounding it, a short press on the
+correct usage does nothing, so the right guess would still have read as a failure without the
+hold. The prediction that it would be Consumer `0x30` came from a peer review reasoning from
+Apple's public `IOHIDUsageTables.h` plus the already-verified Home = `0x0c/0x40`.
+
+### Known, not fixed
+
+- **Unlock.** A short `0x0c/0x30` press does not wake a locked device (0.0 before, 0.0 after), and
+  the device requires a passcode once locked. No unlock path is known.
+- **Scroll.** Still unreproduced. `boundaryScroll` is now **ruled out** as a suspect:
+  `ScrollFilter.init` (UniversalHID `0x58358`) sets its event mask to `0x20040` — scroll plus
+  pointer, with no boundaryScroll bit — so Device Hub's own scroll path never involves it. The
+  leading hypothesis is now that `0x501` is a trackpad-hinted service and iOS delivers trackpad
+  scroll to the view under the pointer, which requires an `AbsolutePointerReport` (ID 19) session
+  that Device Hub maintains continuously and `ipb` never establishes.

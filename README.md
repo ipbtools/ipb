@@ -68,6 +68,7 @@ bin/ipb scroll 0.5 0.75 0 0.30
 bin/ipb swipe 0.5 0.75 0.5 0.35
 bin/ipb home
 bin/ipb recents
+bin/ipb lock                                 # lock the screen
 bin/ipb screenshot build/current.png
 bin/ipb stream --dir frames --count 20        # live screen frames (JPEG), no DeviceHub
 bin/ipb mirror                               # interactive screen window (GUI session required)
@@ -223,6 +224,7 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Scroll | `input swipe` | `ipb scroll` (own) | no | no |
 | Key / text | `input keyevent/text` | `ipb key` (HID usages, own); Unicode via `ipb clipboard set` + paste | no | no |
 | Home / App Switcher | `keyevent HOME/APP_SWITCH` | `ipb home` / `ipb recents` (own) | no | no |
+| Lock screen | `input keyevent POWER` | `ipb lock` (own) | no | no |
 | Screenshot | `screencap` | `ipb screenshot` (devicectl) | yes | `capture screenshot` |
 | Screen recording | `screenrecord` | `ipb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
 | UI hierarchy | `uiautomator dump` | no (captions only via accessibility, no frames) | `ui describe-all` (simulator) | no |

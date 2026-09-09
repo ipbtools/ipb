@@ -42,6 +42,7 @@ usage:
   ipb swipe <x1> <y1> <x2> <y2> [seconds] [hold_seconds]
   ipb scroll <x> <y> <dx> <dy> [seconds]
   ipb home
+  ipb lock [hold_seconds]                    # lock the screen (Consumer 0x0c/0x30, held)
   ipb recents
   ipb screenshot <path>
   ipb stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout   # live screen frames (JPEG), no DeviceHub
@@ -616,6 +617,15 @@ case "$cmd" in
   home)
     [[ $# -eq 0 ]] || { usage; exit 2; }
     run_button cd_home_button
+    ;;
+  lock)
+    # Consumer page 0x0c, usage 0x30 (kHIDUsage_Csmr_Power), held. The hold is
+    # not cosmetic: measured on iPhone 12 mini / iOS 27, 0.45s does not lock and
+    # 0.50s does, so the default carries margin above that edge. A short press
+    # does nothing at all, which is why three earlier rounds of usage guessing
+    # on the Keyboard page found nothing.
+    [[ $# -le 1 ]] || { usage; exit 2; }
+    run_button cd_button_click 0x0c 0x30 "${1:-0.7}"
     ;;
   recents|app-switcher|switcher)
     [[ $# -eq 0 ]] || { usage; exit 2; }

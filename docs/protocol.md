@@ -892,3 +892,43 @@ The next tap is `UniversalHID.KeyboardFilter.updateCopyMask(oldValue:newValue:) 
 (UniversalHID `0x5b0bc`). It takes two `HIDEventMask` values — an `OptionSet` over `UInt`, so plain
 integers in `x0`/`x1` — and returns the built reports directly, which makes it the shortest path
 from a key transition to wire bytes. See `docs/devicehub-tracing.md`.
+
+## Lock (source: runtime capture + on-device A/B)
+
+**`ipb lock` sends Consumer page `0x0c`, usage `0x30` (`kHIDUsage_Csmr_Power`), held.**
+
+The hold is the whole trick. Measured on iPhone 12 mini / iOS 27:
+
+| Hold | Result |
+| --- | --- |
+| 0.08 s | no effect |
+| 0.15 s | no effect |
+| 0.25 s | no effect |
+| 0.40 s | no effect |
+| 0.45 s | no effect (brightness 130.9) |
+| 0.50 s | **locks** (brightness 0.0) |
+| 0.60 s | **locks** (brightness 0.0) |
+
+`ipb lock` defaults to 0.7 s for margin above the 0.45/0.50 edge.
+
+Evidence that this is a real lock and not the device's own auto-lock:
+
+- Matched-elapsed A/B, two pairs, every step timed to keep the trial inside the
+  device's auto-lock window: experiment 0.0 brightness, control 131.5. The earlier failed
+  attempt at this used a window longer than the device's auto-lock (which dims at ~2 s and
+  blanks between 6 s and 10 s), so both arms blanked and the result was meaningless.
+- Waking the device afterwards shows the **lock screen** — padlock, clock, flashlight and
+  camera affordances — not the Home screen, so the device is locked rather than merely dark.
+
+Why three earlier rounds missed it: every candidate tried (`0x66`, `0x82`, `0x32`) was sent on
+the Keyboard page via `ipb key`, i.e. the `KeyboardReport` (ID 1) path. The Consumer page was
+never tested, because the "ConsumerReport is not hit" result that ruled it out came from
+breakpoints on `init(_report:)` — a reinterpret wrapper rather than a construction path, so that
+test measured an empty set. A short press on the correct usage also does nothing, so even a
+correct guess would have looked like a failure without the hold.
+
+Consistent with the rest of the device's Consumer mapping already verified here: Home is
+`0x0c/0x40` (`kHIDUsage_Csmr_Menu`) and volume is `0x0c/0xE9`/`0xEA`.
+
+**Unlock is not solved.** A short `0x0c/0x30` press does not wake a locked device
+(0.0 brightness before and after), and the device requires a passcode once locked.
