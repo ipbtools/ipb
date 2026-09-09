@@ -1,0 +1,19 @@
+# Does Device Hub's on-screen power button behave like the Cmd-L shortcut?
+#
+# Cmd-L was already captured (2026-09-09): it puts Command down and Command up
+# on the wire and nothing else -- AppKit eats the "L" and no lock command
+# reaches UniversalHID. The GUI button may well take a different route. If it
+# emits Consumer 0x0c/0x30 that matches what `ipb lock` already does; if it
+# emits nothing, Device Hub locks entirely off this path.
+#
+# The wake windows are the first real chance at unlock, which is still open.
+
+!Unlock the phone, bring Device Hub to the front, then take your hands off the trackpad
+6	Do nothing at all (baseline)
+10	Click the POWER button in the Device Hub window once, to lock the phone
+10	Click the POWER button in the Device Hub window again, to wake the phone
+!Unlock the phone with the passcode, get Device Hub back in front, hands off
+8	Press Command-L to lock
+10	Use whatever Device Hub shortcut wakes/unlocks the phone (if there is one)
+!Unlock the phone again if it is still locked, Device Hub in front, hands off
+6	Do nothing at all (baseline)
