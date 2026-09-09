@@ -209,6 +209,46 @@ records in [verification.md](verification.md). Statistics go to stderr; event CS
 only with `--csv PATH`, which overwrites the specified file. The probe remains at
 `Experiments/mirror/mirror_probe.m`. No device validation was repeated for this packaging change.
 
+### The decoded frame is not the screen: encoder padding
+
+**The frame is larger than the display and the extra area is black padding.** On the 13 Pro the
+frame is 1184x2576 while the screen is 1170x2532: 14 black columns on the right and 44 black rows at
+the bottom, with content flush to the top-left. Measured per-pixel across twelve frames of differing
+content, with zero variance. Drawing the frame as-is puts a black edge in the window, and
+normalising touch coordinates over it costs 1.2% in x and 1.7% in y.
+
+The size cannot be derived and must not be taken from the frame:
+
+- width is 16-aligned (1170 -> 1184) but **height is not** (2532 would align to 2544, the frame is 2576);
+- `devicectl` reports no screen dimensions;
+- the format description carries **no clean aperture** (`presentation` equals `raw`);
+- detecting the black region from frame content works until the screen is genuinely black, which is
+  exactly when a mirror is most likely to be started.
+
+So the size is resolved from Apple's own data, in this order, with every candidate range-checked
+against the current frame (positive, integral, not larger than the frame, padding within 64 px per
+axis) before it is accepted:
+
+| order | source | what it is |
+| --- | --- | --- |
+| 1 | `builtin-table` | 44 productType entries (iPhone 6s .. 17 Pro Max / Air / 17e) compiled into `Sources/mirror.m` |
+| 2 | `xcode-lookup` | at runtime: `device_traits.db` maps productType to a product description, then that description's CoreSimulator profile gives `capabilities/displays[0]` |
+| 3 | `detected` | union of the non-black extent over the first frames, with a sanity floor |
+| 4 | `full-frame` | give up and use the whole frame |
+
+`bin/ipb` passes `hardwareProperties.productType` from the devicectl JSON it already fetches, so the
+helper never shells out. The chosen source is printed at startup, e.g.
+`content: frame=1184x2576 rect=(0,0 1170x2532) source=builtin-table productType=iPhone14,2`.
+
+Both tables come from Xcode, so a device newer than the built-in table still resolves correctly as
+long as the host's Xcode knows it. **`DeviceTraits.ArtworkDeviceSubtype` is not a pixel height** —
+it reads 2532 for the 13 Pro but 2388 or 569 for older models; only the simulator profile is
+trustworthy. Landscape is handled by transposing the candidate before the range check.
+
+The content rect drives all three consumers: the display layer is scaled and offset so the content
+fills the view and the padding is clipped, touch coordinates normalise over the content, and
+`Cmd-Shift-S` saves the cropped image (1170x2532, edge pixels are image data, not padding).
+
 ## Acceptance
 
 Measured on this Mac (macOS 26.5.1, CoreDevice 642.15) with an iPhone 13 Pro (iOS 27.0), and on

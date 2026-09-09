@@ -4,7 +4,7 @@ Guidance for any AI agent (Claude, Codex, others) working in this repository. Re
 
 ## What this project is
 
-ipb (iOS Physical-device Bridge; GitHub home `ipbtools/ipb`, Homebrew tap `ipbtools/homebrew-ipb`) drives a physical iPhone from a Mac the way `adb` drives an Android phone: tap, swipe, long press, keys, Home, App Switcher, screenshot. It does this **without XCTest and without any third-party server on the phone**, by speaking to the HID daemon (`dtuhidd`) that Apple ships inside the Xcode 27 developer disk image, over the same CoreDevice / RemoteXPC path Xcode 27's Device Hub uses. The long-term goal is an adb-class tool for the agent era; see the roadmap below.
+ipb (iOS Physical-device Bridge; GitHub home `ipbtools/ipb`, Homebrew tap `ipbtools/homebrew-ipb`) drives a physical iPhone from a Mac the way `adb` drives an Android phone: tap, swipe, long press, keys, Home, App Switcher, screenshot, a live screen stream, and an interactive mirror window. It does this **without XCTest and without any third-party server on the phone**, by speaking to the HID daemon (`dtuhidd`) that Apple ships inside the Xcode 27 developer disk image, over the same CoreDevice / RemoteXPC path Xcode 27's Device Hub uses. The long-term goal is an adb-class tool for the agent era; see the roadmap below.
 
 **Current release scope (v1, "simple validation build"): macOS 27 + Xcode 27 beta host, iOS 27 or iOS 26.6+ device.** Nothing else is a supported target. Do not add compatibility shims for other combinations without a matrix entry in `docs/verification.md` proving they work.
 
@@ -16,13 +16,14 @@ ipb (iOS Physical-device Bridge; GitHub home `ipbtools/ipb`, Homebrew tap `ipbto
 | `docs/protocol.md` | Protocol map: transport, features, Swift symbol evidence, service IDs, **captured wire format** (the `Wire Format` section is the authoritative reference for message shapes) | Any new message, field, feature, or evidence |
 | `docs/verification.md` | Dated, host+device-specific verification records and the compatibility matrix; what was proven, how, with what artefacts | Every verification run; never edit older records, append |
 | `docs/video-stream.md` | Live video/audio stream plan: captured control-channel protocol, AVConference client facts, staged design | When the stream work advances |
+| `Sources/mirror.m`, `Experiments/mirror/mirror_probe.m` | `ipb mirror`: the window, absolute-touch input on its own serial queue, DeviceHub-aligned shortcuts, and the screen-size resolution chain. The probe is the M1 evidence tool that measured media/HID coexistence and per-event cost | When the mirror changes |
 | `Experiments/` | Throwaway evidence tools (probe, interposer, symbolicator, AVConference dumper, video spike); Swift ABI shims allowed here only | As probes are added |
 | `docs/standalone-distribution.md` | Plan for shipping without Xcode.app (host options A/B/C, recommendation, open items, rejected alternatives) | When the distribution plan changes |
 | `docs/research/adb-capability-boundary.md` | What adb offers and what an iOS equivalent must provide | Reference; rarely |
 | `docs/research/agent-frameworks.md` | Arbigent, Maestro, Appium MCP, mobile-mcp, agent-device, research agents, benchmarks; what primitives agents consume | Reference; refresh when the landscape moves |
 | `docs/research/ios-peer-tools.md` | idb, pymobiledevice3, go-ios, libimobiledevice, WDA, devicectl, Device Hub, device clouds | Reference |
 | `docs/research/direction-brief-2026-09-07.md`, `direction-review-astra-2026-09-07.md` | Evidence brief and the independent (Codex gpt-6-astra) direction review with a four-week plan | Superseded by newer reviews; keep for history |
-| `Formula/ipb.rb`, `VERSION`, `make install` | Homebrew tap formula, product version, and the install layout (`bin/ipb`, `libexec/ipb-helper`, `share/ipb/`) | Any release |
+| `Formula/ipb.rb`, `VERSION`, `make install` | Homebrew tap formula, product version, and the install layout (`bin/ipb`, `libexec/ipb-helper`, `libexec/ipb-video`, `libexec/ipb-mirror`, `share/ipb/`) | Any release |
 | `scripts/smoke_matrix.sh` | The acceptance gate: exits non-zero on any failed step or unexpected output; interactive mode captures screenshots | Whenever a command's contract changes |
 
 Plan documents for feature-level work go in `docs/` next to the ones above, named after the feature; small fixes are recorded in `docs/verification.md`, not in new files. Overwrite plans in place; history lives in git.
@@ -64,7 +65,8 @@ A change is done when `scripts/smoke_matrix.sh` passes on the supported matrix a
 
 - Device identity is the CoreDevice UUID from `devicectl list devices --json-output`; the 642.x table view prints UDIDs, which the service rejects.
 - A fresh or idle device has `tunnelState = disconnected`; HID sockets fail with CoreDeviceError 4000 until any `devicectl device ...` call warms the tunnel. The wrapper does this once on exit code 4.
-- `bin/ipb` (zsh) is the CLI; `build/ipb-helper` (ObjC + Swift glue + arm64 shims) is the helper; both are invoked by `scripts/smoke_matrix.sh`.
+- `bin/ipb` (zsh) is the CLI; `build/ipb-helper` (ObjC + Swift glue + arm64 shims) is the helper; both are invoked by `scripts/smoke_matrix.sh`. `build/ipb-video` serves `ipb stream` and `build/ipb-mirror` serves `ipb mirror`; both need a GUI login session because in-process decoding creates a `CVDisplayLink`, and neither needs an entitlement.
+- The mirror's screen size does **not** come from the decoded frame, which carries encoder padding. It resolves productType (passed in by the wrapper from devicectl) against a built-in table, then a runtime Xcode lookup, then content detection, then the full frame, range-checking every candidate against the current frame. See `docs/video-stream.md` and the 2026-09-09 record in `docs/verification.md`.
 - The macOS 27 test host is <macos27-host> (see the machine-level memory notes); it sleeps after one idle minute, run `caffeinate` for long sessions.
 
 ## Roadmap

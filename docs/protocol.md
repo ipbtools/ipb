@@ -643,6 +643,29 @@ Generic CLI:
 bin/ipb button 0x0c 0x40
 ```
 
+Verified volume keys (2026-09-09, iPhone 13 Pro / iOS 27.0, evidence: sent standalone through
+`bin/ipb button`, then `bin/ipb screenshot` showed the system volume HUD on the device):
+
+| Key | usagePage | usageCode | Evidence |
+| --- | --- | --- | --- |
+| Home | `0x0c` | `0x40` | earlier capture, above |
+| Volume up | `0x0c` | `0xE9` | **screenshot: volume HUD visible** |
+| Volume down | `0x0c` | `0xEA` | standard paired Consumer usage; send returns 0, but the HUD is
+  visually identical to volume up so this was **not** distinguished on its own |
+
+These are HID Consumer-page usages sent through the **button feature**
+(`com.apple.coredevice.feature.remote.hid.button`), which is a different service socket from the
+UniversalHID touchscreen. Note that none of the device's five HID descriptors advertises the
+Consumer page (`0x0c`) in `DeviceUsagePairs` — the button feature accepts these usages regardless,
+so the descriptor list is not the authority on what the button path will take.
+
+Not established: usage codes for Lock/side button, Siri, Action Button and Camera Control. Apple's
+DeviceHub does expose all of them (`DeviceKit.framework` carries
+`com.apple.devicekit.menu.controls.hardwareGestureControls.{actionButton,sideButton,lock,siri}`),
+but the last two do not appear in its menu with a 13 Pro attached, because that framework gates them
+per device with `ConditionalKeyboardShortcut`. Attaching a device that has the button is the route to
+observing their codes.
+
 ## HID Digitizer
 
 `CoreDevice.HIDDigitizer` exposes:
