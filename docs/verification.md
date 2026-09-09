@@ -1200,3 +1200,91 @@ Still open, in order of suspicion:
 
 The decisive next step is to capture DeviceHub's actual scroll report bytes during a real trackpad
 scroll and diff them against ours, rather than continue eliminating hypotheses one at a time.
+
+## 2026-09-09 — Device Hub tracing harness, and two retractions
+
+Host: macOS 27 beta, Xcode 27.0.0 Beta 6, SIP disabled, `amfi_get_out_of_my_way` **not** set.
+Frameworks: CoreDevice, UniversalHID 90.1, DeviceKit 255.2.3.
+
+### Why this exists
+
+Eight capture rounds against Device Hub, each a hand-written `.lldb` file of blind `continue`
+commands in `/tmp`, produced two usable byte dumps. They also wedged Device Hub badly enough to
+need a manual restart, and each round cost the operator a scripted sequence on the phone. Seven
+distinct defects recurred across those rounds because nothing was kept between them. The harness in
+`Experiments/devicehub-trace/` and the method in `docs/devicehub-tracing.md` replace that.
+
+### Measurements (throwaway target, so no operator round was spent)
+
+Target: a C program calling `hid_send` 2000 times with a fake report object.
+
+| Configuration | Elapsed | Rate | Per hit |
+| --- | --- | --- | --- |
+| No debugger | 2.50 s | — | — |
+| Breakpoint, no-op callback | 9.46 s | 211.4/s | 4.73 ms |
+| Breakpoint, 4 registers read | 9.43 s | 212.1/s | 4.72 ms |
+| Breakpoint, 4 registers + 2 `ReadMemory` | 9.50 s | 210.6/s | 4.75 ms |
+
+The per-hit cost is entirely the stop/resume round-trip; payload capture is free. This inverts the
+earlier practice of recording only registers "to keep it cheap", which discarded the report bytes
+that were the point of the capture while saving nothing. It also explains the freeze: a tap on a
+path Device Hub drives continuously consumes the whole ~210 hits/s budget.
+
+**`--skip-prologue false` is mandatory.** `breakpoint set -n` bound at `+32` on the test function,
+past `str x8,[sp,#0x8]` and `mov x8,x0`. Argument registers read at that point are clobbered. Every
+earlier Device Hub capture read arguments this way, so those register values were not trustworthy.
+
+### Mechanisms validated before touching Device Hub
+
+- Python breakpoint callback returning `False` auto-continues: 2000/2000 hits recorded, full report
+  bytes decoded via the `+16` pointer / `+24` length layout, target never stopped.
+- One-shot breakpoint planted at `LR` from inside the entry callback captures returns: 50 entries
+  and 50 returns from a function returning a struct indirectly.
+- Hit-rate governor: shed its tap at 183.9 hits/s after 184 hits and logged the shed. Freezing
+  Device Hub is now structurally impossible rather than a matter of care.
+- Bounded run and clean detach against a live process (`dhrun`): attached, traced 4 s with payload,
+  detached, and the target kept running. lldb's synchronous `continue` never returns when callbacks
+  auto-continue, which is why an earlier script parked forever.
+- Full harness end-to-end against a fake target: 189 records correctly bucketed into action windows
+  by the marker stream, decoded to a per-action report table, target survived.
+
+### New protocol facts (disassembly, UniversalHID 90.1)
+
+- Complete 42-entry `HIDEventType` table decoded from constant getters; it matches IOKit's public
+  `IOHIDEventType` enum. Recorded in `docs/protocol.md`.
+- `symbolicHotKey` (0x18) and `power` (0x19) are event types with **no report struct**, so lock
+  cannot travel as a dedicated power report.
+- `boundaryScroll` (0x1c) is distinct from `scroll` (0x6).
+- `initialReportBitCount` decoded for all 16 report types with one. `AbsolutePointerReport` at
+  152 bits / 19 bytes independently confirms the `HIDReport` heap layout against the runtime
+  `HIDReport.init(bitCount:id:)` capture (`x0=0x98`, `x1=0x13`).
+- `UniversalHID.KeyboardFilter.updateCopyMask(oldValue: HIDEventMask, newValue: HIDEventMask) ->
+  [HIDReport]` at `0x5b0bc`; `HIDEventMask` is an `OptionSet` over `UInt`, so both arguments are
+  plain integers in `x0`/`x1`.
+
+### Retractions
+
+1. **"Device Hub's Lock shortcut does not hit `init(_report:)` on any of the five keyboard-family
+   report types."** Invalid. `init(_report:)` is a reinterpret wrapper, not a construction path, so
+   those five breakpoints measured an empty set regardless of what Device Hub sent. Withdrawn from
+   `docs/protocol.md`.
+2. **"Keyboard usage `0x66` locks the screen."** Wrong, concluded twice. The first rested on a
+   single 39 KB black screenshot; the second checked only that the screen was black afterwards, not
+   that it was bright beforehand. The A/B control (experiment 9,940,630 bytes bright vs control
+   9,935,071 bytes bright) shows `0x66` does not lock; the black screenshots were the device's own
+   fast auto-lock. Usages `0x82` and `0x32` were tested the same way and also do not lock.
+3. **"The 104 -> 168 bit `ScrollReport` change fixed a truncation."** `ScrollReport`'s
+   `initialReportBitCount` is 104, and the fields we write fit inside it. The change is harmless but
+   was not a fix, and scroll remains broken. The truncation was real only for `DigitizerReport`
+   (320 -> 464), where the contact-0 swipe bits at 424/429/434 were being silently dropped.
+
+### Known, not fixed
+
+- **Lock / unlock.** Reproduction still open; `updateCopyMask` is the next tap.
+- **Scroll.** Reports accepted at every layer, device does not scroll. Open leads: the flags-byte
+  phase packing (bits 0-3 and bit 7), whether `boundaryScroll` rather than `scroll` is what Device
+  Hub emits, whether service `0x501` is the right target, and whether an `AbsolutePointerReport`
+  (ID 19, which Device Hub sends continuously and `ipb` never sends) must establish a cursor first.
+- **Media wedge.** Cumulative over ~30 stream sessions, host-side, survives an `avconferenced`
+  restart, cleared only by reboot or replug. Exact resource unidentified.
+- **`ipb uhid-swipe-report` semantics.** Unverified.

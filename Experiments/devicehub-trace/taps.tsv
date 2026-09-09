@@ -1,0 +1,30 @@
+# Tap manifest for dhtrace. One tap per line, tab-separated:
+#   label <TAB> module <TAB> mangled symbol <TAB> json spec
+#
+# spec keys:
+#   report_arg      register holding a HIDReport reference at function entry
+#   returns         "report_array" | "report" | "indirect" — plants a one-shot
+#                   breakpoint at LR to capture the result
+#   args_are_words  registers to record as plain integers (OptionSet rawValues)
+#
+# Breakpoints bind with --skip-prologue false. This is mandatory: the default
+# binds past the prologue (measured +32 on a test function, after
+# `str x8,[sp,#8]; mov x8,x0`), by which point the argument registers have been
+# clobbered. Earlier captures in this repo read arguments at that point and the
+# values were not trustworthy.
+
+# --- the transport boundary: every report that reaches the device ----------
+# This is the universal tap. It is also the one that sees the AbsolutePointer
+# flood, so it relies on the governor to shed itself if Device Hub gets busy.
+send	CoreDevice	$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HIDReportV_s6UInt64VtAA0aB5ErrorVYKFTj	{"report_arg":"x0"}
+send_id	CoreDevice	$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HIDReportV_AA0D2IDVtAA0aB5ErrorVYKFTj	{"report_arg":"x0"}
+
+# --- lock / unlock: the keyboard filter and the function that builds reports -
+# updateCopyMask takes two HIDEventMask values. HIDEventMask is an OptionSet
+# over UInt, so both arrive as plain integers, and it returns [HIDReport]
+# directly — this is where a key transition becomes wire bytes.
+kbd_copymask	UniversalHID	$s12UniversalHID14KeyboardFilterC14updateCopyMask8oldValue03newI0SayAA9HIDReportVGAA08HIDEventG0V_AKtF	{"args_are_words":["x0","x1"],"returns":"report_array"}
+kbd_filter	UniversalHID	$s12UniversalHID14KeyboardFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"indirect"}
+
+# --- scroll ----------------------------------------------------------------
+scroll_filter	UniversalHID	$s12UniversalHID12ScrollFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"indirect"}

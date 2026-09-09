@@ -740,3 +740,155 @@ strings /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Cor
   | rg 'com\.apple\.coredevice\.(feature|action|hid)|UniversalHIDService|ConnectedServices|mainTouchscreen' \
   | sort -u
 ```
+
+## UniversalHID report IDs
+
+Decoded statically from `static UniversalHID.<T>Report.reportID.getter` in
+`/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID`
+(UniversalHID 90.1) — each getter is a single `movz w0, #imm`, read directly from the Mach-O.
+
+| ID | Report | ID | Report |
+| ---: | --- | ---: | --- |
+| 2 | `ConsumerReport` | 13 | `NavigationSwipeReport` |
+| 3 | `AppleVendorKeyboardReport` | 14 | `ZoomToggleReport` |
+| 4 | `AppleVendorTopCaseReport` | 15 | `ScaleReport` |
+| 5 | `PointerReport` | 16 | `RotationReport` |
+| 6 | `ButtonReport` | 17 | `TranslationReport` |
+| 7 | `ScrollReport` | 18 | `GameControllerReport` |
+| 9 | `DigitizerReport` | 19 | `AbsolutePointerReport` |
+| 11 | `DockSwipeReport` | 20 | `GenericGestureReport` |
+| 12 | `FluidTouchGestureReport` | 21 | `TouchSensitiveButtonReport` |
+
+`ipb` currently builds only ID 7 (scroll), ID 9 (digitizer) and ID 5 (pointer).
+
+### Captured: DeviceHub sends AbsolutePointerReport continuously
+
+Captured live with lldb on Xcode 27 beta 6's DeviceHub, breakpoint on
+`CoreDevice.UniversalHIDService.send(report:to:)`, following the report object's pointer at +16
+(the object header is isa / refcount / bytes pointer / length, with length 19 here). Three
+consecutive sends while the operator was using the window:
+
+```
+13 d1 8b 00 00 22 03 01 00 00 00 60 87 c2 d6 13 01 ...
+13 46 8b 00 00 6d 02 01 00 00 00 bd 35 11 d8 13 01 ...
+13 4a 85 00 00 f6 fc 00 00 00 00 7c 1d 12 d8 13 01 ...
+```
+
+Byte 0 is the report ID, `0x13` = 19 = **`AbsolutePointerReport`**. Bytes 1-2 and 5-7 vary per send
+and look like coordinates; bytes 11-15 increase monotonically and look like a timestamp.
+
+Call site (matching the path traced by disassembly):
+
+```
+CoreDevice  UniversalHIDService.send(report:to:)
+DeviceKit   sub_435b04 + 100
+libswift_Concurrency   (async task)
+```
+
+**This is a report type `ipb` never sends.** It suggests DeviceHub keeps an absolute cursor position
+on the device, which may be a precondition for scroll reports to have any effect — our scroll
+reports are accepted and ignored, and we never establish a pointer position. **Hypothesis, not
+established:** testing it needs `AbsolutePointerReport` construction plus a same-connection
+sequence, since a per-process CLI test cannot carry pointer state between invocations.
+
+There is no lock/unlock action among CoreDevice's 61 `com.apple.coredevice.action.*` identifiers
+(only the read-only `lockstate`), so Lock is delivered as a HID report. How, exactly, is still
+unknown; see "Lock: what is ruled out" below.
+
+**Retracted.** An earlier record here reported that DeviceHub's Lock shortcut does not hit
+`init(_report:)` on any of the five keyboard-family report types. That test was invalid:
+`init(_report:)` is a reinterpret wrapper, not a construction path, so breakpoints on it measure an
+empty set regardless of what DeviceHub sends. Only three event-based constructors exist in
+UniversalHID. The negative proved nothing and is withdrawn.
+
+
+
+## HIDEventType (source: disassembly, UniversalHID 90.1)
+
+Each `HIDEventType` static member's getter is a single `mov w0, #imm; ret`, decoded statically.
+All 42 values match IOKit's public `IOHIDEventType` enum, so this is Apple's standard event
+vocabulary rather than a UniversalHID-private one.
+
+| Value | Name | Value | Name | Value | Name |
+| --- | --- | --- | --- | --- | --- |
+| 0x00 | null | 0x0f | temperature | 0x1e | unicode |
+| 0x01 | vendorDefined | 0x10 | navigationSwipe | 0x1f | atmosphericPressure |
+| 0x02 | button | 0x11 | pointer | 0x20 | force |
+| 0x03 | keyboard | 0x12 | progress | 0x21 | motionActivity |
+| 0x04 | translation | 0x13 | multiAxisPointer | 0x22 | motionGesture |
+| 0x05 | rotation | 0x14 | gyro | 0x23 | gameController |
+| 0x06 | scroll | 0x15 | compass | 0x24 | humidity |
+| 0x07 | scale | 0x16 | zoomToggle | 0x25 | collection |
+| 0x08 | zoom | 0x17 | dockSwipe | 0x26 | brightness |
+| 0x09 | velocity | 0x18 | **symbolicHotKey** | 0x27 | genericGesture |
+| 0x0a | orientation | 0x19 | **power** | 0x29 | forceStage |
+| 0x0b | digitizer | 0x1a | led | 0x2a | touchSensitiveButton |
+| 0x0c | ambientLightSensor | 0x1b | fluidTouchGesture | | |
+| 0x0d | accelerometer | 0x1c | **boundaryScroll** | | |
+| 0x0e | proximity | 0x1d | biometric | | |
+
+Three of these matter for open questions and are highlighted above:
+
+- `symbolicHotKey` (0x18) and `power` (0x19) exist as event types but **have no corresponding
+  report struct**. UniversalHID ships exactly 20 report structs and neither appears among them, so
+  a lock cannot be sent as a dedicated power report; it has to travel inside one of the
+  keyboard-family reports.
+- `boundaryScroll` (0x1c) is a *distinct* event type from `scroll` (0x6). Our `ScrollReport` is
+  accepted and ignored; whether DeviceHub emits scroll, boundaryScroll, or both during a trackpad
+  scroll is unresolved.
+
+## Report sizes (source: disassembly, UniversalHID 90.1)
+
+`static <T>.initialReportBitCount` is likewise a constant getter. This is the size a report starts
+at; setting fields in a higher bit range grows it, which is why `DigitizerReport` starts at 320 bits
+but needs 464 once contact-0 swipe bits (424/429/434) are written.
+
+| Report | ID | Initial bits | Bytes |
+| --- | --- | --- | --- |
+| ButtonReport | 6 | 16 | 2 |
+| ZoomToggleReport | 14 | 16 | 2 |
+| AppleVendorKeyboardReport | 3 | 24 | 3 |
+| RotationReport | 16 | 32 | 4 |
+| ScaleReport | 15 | 32 | 4 |
+| AppleVendorTopCaseReport | 4 | 40 | 5 |
+| GenericGestureReport | 20 | 48 | 6 |
+| TranslationReport | 17 | 48 | 6 |
+| ConsumerReport | 2 | 72 | 9 |
+| ScrollReport | 7 | 104 | 13 |
+| PointerReport | 5 | 136 | 17 |
+| AbsolutePointerReport | 19 | 152 | 19 |
+| KeyboardReport | 1 | 248 | 31 |
+| GameControllerReport | 18 | 304 | 38 |
+| DigitizerReport | 9 | 320 | 40 |
+| TouchSensitiveButtonReport | 21 | 440 | 55 |
+
+`AbsolutePointerReport` at 152 bits / 19 bytes independently confirms the `HIDReport` heap layout:
+the `HIDReport.init(bitCount:id:)` call captured at runtime had `x0 = 0x98` (152) and `x1 = 0x13`
+(19 — which is also the AbsolutePointer report ID), and produced a 19-byte buffer at `+16` with its
+length at `+24`.
+
+Note that `ScrollReport`'s initial size is 104 bits, matching what `ipb` originally hardcoded. The
+104 -> 168 change made earlier was therefore not a truncation fix for scroll — the fields we write
+all fit inside 104 bits. It remains correct for `DigitizerReport` (320 -> 464), which is where the
+truncation was real.
+
+## Lock: what is ruled out (source: runtime capture + disassembly)
+
+Established:
+
+- Cmd-L in DeviceHub reaches `UniversalHID.KeyboardFilter.filterEvent(_:)` via
+  `UniversalHIDKit.EventObserver.processEvent(_:)` and a `Sequence.reduce(into:_:)` filter chain
+  (25 breakpoint hits with the full stack).
+- It does **not** reach `CoreDevice.HIDButton.sendCustomButton`, `CoreDevice.HIDKeyboard.send`, or
+  `CoreDevice.HIDVendorDefined.send` (0 hits across the same capture).
+- Only all-zero `KeyboardReport` (ID 1) **release** reports were captured (`01 00 00 ... 00`). The
+  press report carrying the key was never captured.
+- Keyboard usages `0x66`, `0x82` and `0x32` were each sent to the device and none lock the screen.
+  This was A/B controlled against a no-action run (experiment 9,940,630 bytes bright vs control
+  9,935,071 bytes bright) after two earlier conclusions that `0x66` locks were both traced to the
+  device's own fast auto-lock rather than to the report.
+
+The next tap is `UniversalHID.KeyboardFilter.updateCopyMask(oldValue:newValue:) -> [HIDReport]`
+(UniversalHID `0x5b0bc`). It takes two `HIDEventMask` values — an `OptionSet` over `UInt`, so plain
+integers in `x0`/`x1` — and returns the built reports directly, which makes it the shortest path
+from a key transition to wire bytes. See `docs/devicehub-tracing.md`.
