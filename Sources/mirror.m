@@ -1034,12 +1034,16 @@ static void saveScreenshot(void){
     // (only the Command modifier does; see docs/protocol.md), so this sends the
     // Consumer Power usage ipb established instead.
     //
-    // Deliberately a short press, like every other shortcut here. On the device
-    // the side button locks on a short press and opens Siri on a long one, and
-    // a first attempt at 0.7 s opened Siri. `ipb lock` needs ~0.5 s for the same
-    // usage, which is most likely an artefact of the CLI: it exits as soon as
-    // the sequence is queued, so its effective hold is shorter than the nominal
-    // one, while the mirror holds a live connection and honours the full delay.
+    // Deliberately a short press, like every other shortcut here: on the device
+    // the side button locks on a short press and opens Siri on a long one, and a
+    // first attempt at 0.7 s opened Siri.
+    //
+    // Why the same nominal hold behaves differently through `ipb lock` (0.7 s,
+    // which never reached Siri in a CLI sweep) is NOT established. An earlier
+    // guess here blamed the CLI tearing its connection down early; that is wrong
+    // -- HIDCTL_WAIT_MS keeps it alive 700 ms after the sequence (bin/ipb:30,
+    // read at action_sender.m:1675). Treat hold values as path-specific and
+    // measured, not as transferable between the two.
     else if(flags==command && [key isEqualToString:@"l"]) kind=KeyLock;
     else if(flags==shiftCommand && [key isEqualToString:@"s"]) action=Screenshot;
     else if(flags==command && [key isEqualToString:@"0"]) action=ZoomToFit;
@@ -1372,7 +1376,7 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     // hardwareGestureControls.actionButton / .sideButton use ConditionalKeyboardShortcut;
     // neither menu item appears with the 13 Pro. Revisit on corresponding hardware.
     LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⌘L=Lock/Wake, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size (key repeat ignored).");
-    LOGE("Lock (⌘L) / Siri (⇧⌥⌘H): not implemented; usage-code evidence missing. Recording (⇧⌘R): not implemented; capture/recording behavior evidence missing. Action Button / Camera Control: usage-code evidence and corresponding local hardware missing.");
+    LOGE("Siri (⇧⌥⌘H): not implemented; usage-code evidence missing. Recording (⇧⌘R): not implemented; capture/recording behavior evidence missing. Action Button / Camera Control: usage-code evidence and corresponding local hardware missing.");
     armWatchdog(watchdog,runSeconds+10);
     double deadline=nowSec()+runSeconds;
     NSTimer *timer=[NSTimer timerWithTimeInterval:1.0/120 repeats:YES block:^(NSTimer *t){

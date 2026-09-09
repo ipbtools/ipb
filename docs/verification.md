@@ -1783,17 +1783,34 @@ From a lit Home screen, `ipb button 0x0c 0x30 <hold>`, screenshot one second lat
 
 The 14.9 rows were inspected, not just measured: they are the passcode keypad, **not** Siri.
 
-### The two paths are not equivalent
+### The two paths are not equivalent, and the reason is NOT established
 
 Siri could not be reproduced from the CLI at any hold, while the mirror reached it at 0.7 s. Both
-call the same `coredevice_send_hid_button_custom` with the same states, so the difference is the
-effective hold rather than the message: `ipb` exits as soon as the sequence is queued and tears
-its connection down, so its real hold is shorter than the nominal one, while the mirror holds a
-live connection for the whole session and honours the full delay. This also explains why the CLI
-needs ~0.35 s to register anything at all when a physical short press is ~0.1 s.
+call the same `coredevice_send_hid_button_custom` with the same states.
 
-Treat a hold value as **path-specific**. A duration calibrated through `ipb` does not transfer to
-the mirror.
+**Retracted:** an earlier version of this record explained the difference as the CLI tearing its
+connection down early, making its effective hold shorter than nominal. That is wrong.
+`HIDCTL_WAIT_MS` defaults to 700 ms (`bin/ipb:30`) and is read before disconnect
+(`action_sender.m:1675`), so `ipb` keeps the connection alive well past the sequence. The actual
+sequence is: DOWN returns, wait `hold`, UP returns, wait 120 ms, barrier returns, wait 100 ms,
+keep-alive, cancel. Nor does the barrier prove the device executed the release — the button
+barrier ABI returns zero unconditionally (`Sources/mercury_abi.S:225`).
+
+No root cause has been selected. The controlled experiment is to hold the duration fixed and vary
+only the disconnect time, restoring the same starting state before each run:
+
+```sh
+DEVICE_ID=<uuid> HIDCTL_WAIT_MS=0    ./bin/ipb button 0x0c 0x30 0.08
+DEVICE_ID=<uuid> HIDCTL_WAIT_MS=700  ./bin/ipb button 0x0c 0x30 0.08
+DEVICE_ID=<uuid> HIDCTL_WAIT_MS=3000 ./bin/ipb button 0x0c 0x30 0.08
+```
+
+then repeat for 0.7 s, aligning DOWN/UP/cancel against host time with an external recording rather
+than screenshotting "one second after the command returns" — that observation point moves with the
+keep-alive.
+
+What does hold regardless: a hold value is **path-specific and measured**, not transferable between
+`ipb` and the mirror.
 
 ### Fix
 
