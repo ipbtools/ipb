@@ -968,3 +968,72 @@ Log predicates for AppleAVD / VTDecompression produced nothing.
 rebooting is blocked, with an opaque AVConference error and no in-tool recovery. Whether unplugging
 and re-attaching the device clears it is untested — only the operator can do that, and it is the
 cheapest candidate workaround to check next.
+
+### 2026-09-09 — the black edge and the coordinate offset were the same bug: encoder padding
+
+The user reported a remaining black edge in the mirror and coordinates still slightly off. Both
+came from one cause: **the decoded frame carries encoder padding, and we were normalising over the
+padded frame.**
+
+Measured per-pixel across 12 frames of differing content (including mid-swipe) on the 13 Pro:
+
+```
+frame        1184 x 2576
+content      x in [0,1170)  y in [0,2532)     identical in all 12 frames, zero variance
+padding      right 14 columns + bottom 44 rows, pure black (mean ~0.2, max <8; content ~190)
+left / top   content, no padding
+```
+
+1170x2532 is the 13 Pro's real screen resolution, so the padded region was being both drawn (the
+black edge) and counted in the normalisation (1.2% x, 1.7% y of error).
+
+**The size cannot be computed and must not be detected from content alone.** Width is 16-aligned
+(1170 -> 1184) but height is not (2532 would align to 2544, yet the frame is 2576). `devicectl`
+reports no screen dimensions and the format description carries no clean aperture. Detecting the
+black region from frames works but breaks on a genuinely black screen — which the implementer
+independently flagged as its most likely failure.
+
+**Authoritative source found, local to Xcode:**
+
+1. `.../Platforms/iPhoneOS.platform/usr/standalone/device_traits.db` (SQLite), `Devices` table:
+   `ProductType` -> `ProductDescription` (`iPhone14,2` -> `iPhone 13 Pro`)
+2. `/Library/Developer/CoreSimulator/Profiles/DeviceTypes/<ProductDescription>.simdevicetype/
+   Contents/Resources/capabilities.plist` -> `capabilities/displays[0]` `width`/`height`
+
+For the 13 Pro this yields exactly 1170x2532, matching the pixel measurement.
+**`DeviceTraits.ArtworkDeviceSubtype` looks like a pixel height and is not** — it reads 2532 for the
+13 Pro but 2388 or 569 for older models, so only the simulator profile is trustworthy.
+
+A 44-entry table (iPhone 6s through 17 Pro Max / Air / 17e) generated from that join is built into
+`Sources/mirror.m`; `bin/ipb` passes `hardwareProperties.productType` from the devicectl JSON it
+already fetches. Resolution order is built-in table -> runtime Xcode lookup -> content detection ->
+full frame, and every source is range-checked against the current frame (content positive, not
+larger than the frame, within 64 px per axis) before being accepted, falling through with a logged
+reason otherwise.
+
+**Verified on device:**
+
+```
+ipb-mirror: content: frame=1184x2576 rect=(0,0 1170x2532) source=builtin-table productType=iPhone14,2
+black_bar_rejections=0
+```
+
+Coordinate accuracy, from synthesised clicks at five window fractions, solving the title-bar offset
+from the two extremes and back-substituting the rest:
+
+| window fraction | predicted | measured | delta |
+| --- | --- | --- | --- |
+| 0.10 | 0.06548 | 0.06548 | +0.00000 |
+| 0.25 | 0.22106 | 0.22143 | +0.00037 |
+| 0.50 | 0.48036 | 0.48095 | +0.00059 |
+| 0.75 | 0.73966 | 0.74048 | +0.00082 |
+| 0.90 | 0.89524 | 0.89524 | +0.00000 |
+
+Max deviation 0.08%, within the synthetic-click and title-bar-estimate noise. Derived content
+aspect 0.46270 against the target 0.46209 — 0.13%, which is integer rounding of a 389 px window.
+
+The `Cmd-Shift-S` screenshot now saves **1170x2532** instead of 1184x2576, and its rightmost columns
+and bottom rows contain image data (mean 195-215) rather than padding, confirming a crop rather
+than a rescale.
+
+This closes the "known and uncompensated ~1.2%/1.7% offset" recorded in the M2/M3 entry above.

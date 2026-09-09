@@ -14,6 +14,7 @@
 #include <string.h>
 #include <errno.h>
 #include <dlfcn.h>
+#include <sqlite3.h>
 #include <pthread.h>
 #include <signal.h>
 #include <math.h>
@@ -99,7 +100,18 @@ static uint64_t gDisplayDrops,gDisplayed,gBlackBars;
 static BOOL gReady,gClosing,gMousePressed;
 static uint64_t gServiceID,gGesture,gMouseGeneration;
 static double gMouseX,gMouseY;
-static CGSize gVideoSize;
+// Detector and accepted frames are protected by gLock. Display geometry is main-thread-only.
+static struct {
+    CGSize size;
+    CGRect seen, rect; // pixel coordinates, top-left origin
+    unsigned frames;
+    double started;
+    BOOL frozen;
+} gCrop;
+static CGSize gVideoSize; // content size used by every UI geometry consumer
+static CGSize gFrameSize;
+static CGRect gContentRect;
+static CALayer *gContentClip;
 static AVSampleBufferDisplayLayer *gDisplay;
 static NSWindow *gWindow;
 static int gOutputFD=-1; // saved stdout for descriptor discovery
@@ -223,6 +235,228 @@ static void finish(int code,NSString *reason){
     _Exit(code);
 }
 
+// Generated 2026-09-09 from these Apple-shipped sources:
+// /Applications/Xcode-*.app/Contents/Developer/Platforms/iPhoneOS.platform/usr/standalone/device_traits.db
+//   Devices.ProductType -> Devices.ProductDescription
+// /Library/Developer/CoreSimulator/Profiles/DeviceTypes/<ProductDescription>.simdevicetype/Contents/Resources/capabilities.plist
+//   capabilities/displays[0]/width and height (NOT DeviceTraits.ArtworkDeviceSubtype).
+static const struct { const char *productType; unsigned width,height; } gScreenTable[]={
+    {"iPhone8,1", 750, 1334},   // iPhone 6s
+    {"iPhone8,2", 1242, 2208},   // iPhone 6s Plus
+    {"iPhone8,4", 640, 1136},   // iPhone SE (1st generation)
+    {"iPhone9,1", 750, 1334},   // iPhone 7
+    {"iPhone9,2", 1242, 2208},   // iPhone 7 Plus
+    {"iPhone9,3", 750, 1334},   // iPhone 7
+    {"iPhone9,4", 1242, 2208},   // iPhone 7 Plus
+    {"iPhone10,1", 750, 1334},   // iPhone 8
+    {"iPhone10,2", 1242, 2208},   // iPhone 8 Plus
+    {"iPhone10,3", 1125, 2436},   // iPhone X
+    {"iPhone10,4", 750, 1334},   // iPhone 8
+    {"iPhone10,5", 1242, 2208},   // iPhone 8 Plus
+    {"iPhone10,6", 1125, 2436},   // iPhone X
+    {"iPhone12,1", 828, 1792},   // iPhone 11
+    {"iPhone12,3", 1125, 2436},   // iPhone 11 Pro
+    {"iPhone12,5", 1242, 2688},   // iPhone 11 Pro Max
+    {"iPhone12,8", 750, 1334},   // iPhone SE (2nd generation)
+    {"iPhone13,1", 1080, 2340},   // iPhone 12 mini
+    {"iPhone13,2", 1170, 2532},   // iPhone 12
+    {"iPhone13,3", 1170, 2532},   // iPhone 12 Pro
+    {"iPhone13,4", 1284, 2778},   // iPhone 12 Pro Max
+    {"iPhone14,2", 1170, 2532},   // iPhone 13 Pro
+    {"iPhone14,3", 1284, 2778},   // iPhone 13 Pro Max
+    {"iPhone14,4", 1080, 2340},   // iPhone 13 mini
+    {"iPhone14,5", 1170, 2532},   // iPhone 13
+    {"iPhone14,6", 750, 1334},   // iPhone SE (3rd generation)
+    {"iPhone14,7", 1170, 2532},   // iPhone 14
+    {"iPhone14,8", 1284, 2778},   // iPhone 14 Plus
+    {"iPhone15,2", 1179, 2556},   // iPhone 14 Pro
+    {"iPhone15,3", 1290, 2796},   // iPhone 14 Pro Max
+    {"iPhone15,4", 1179, 2556},   // iPhone 15
+    {"iPhone15,5", 1290, 2796},   // iPhone 15 Plus
+    {"iPhone16,1", 1179, 2556},   // iPhone 15 Pro
+    {"iPhone16,2", 1290, 2796},   // iPhone 15 Pro Max
+    {"iPhone17,1", 1206, 2622},   // iPhone 16 Pro
+    {"iPhone17,2", 1320, 2868},   // iPhone 16 Pro Max
+    {"iPhone17,3", 1179, 2556},   // iPhone 16
+    {"iPhone17,4", 1290, 2796},   // iPhone 16 Plus
+    {"iPhone17,5", 1170, 2532},   // iPhone 16e
+    {"iPhone18,1", 1206, 2622},   // iPhone 17 Pro
+    {"iPhone18,2", 1320, 2868},   // iPhone 17 Pro Max
+    {"iPhone18,3", 1206, 2622},   // iPhone 17
+    {"iPhone18,4", 1260, 2736},   // iPhone Air
+    {"iPhone18,5", 1170, 2532},   // iPhone 17e
+};
+static const char *gProductType="";
+
+// Optional native SQLite lookup; dynamic loading keeps this confined to mirror.m
+// without a new link dependency or a devicectl/subprocess path in the helper.
+// Cache candidates once per process; orientation/frame validation stays per size.
+static NSArray<NSValue*> *xcodeScreenSizes(void){
+    static NSArray<NSValue*> *sizes;
+    if(sizes) return sizes;
+    NSMutableArray<NSValue*> *found=[NSMutableArray array];
+    sizes=found;
+    if(!*gProductType){ LOGE("xcode-lookup unavailable: empty productType; trying detection"); return sizes; }
+    void *library=dlopen("/usr/lib/libsqlite3.dylib",RTLD_NOW|RTLD_LOCAL);
+    if(!library){ LOGE("xcode-lookup unavailable: SQLite load failed: %s; trying detection",dlerror()); return sizes; }
+#define SQL_FUNCTION(name) __typeof__(&sqlite3_##name) sql_##name=dlsym(library,"sqlite3_" #name)
+    SQL_FUNCTION(open_v2); SQL_FUNCTION(prepare_v2); SQL_FUNCTION(bind_text);
+    SQL_FUNCTION(step); SQL_FUNCTION(column_text); SQL_FUNCTION(finalize); SQL_FUNCTION(close);
+#undef SQL_FUNCTION
+    if(!sql_open_v2 || !sql_prepare_v2 || !sql_bind_text || !sql_step || !sql_column_text || !sql_finalize || !sql_close){
+        LOGE("xcode-lookup unavailable: SQLite symbols missing; trying detection");
+        dlclose(library); return sizes;
+    }
+    NSFileManager *fm=NSFileManager.defaultManager;
+    NSArray<NSString*> *apps=[[fm contentsOfDirectoryAtPath:@"/Applications" error:nil] sortedArrayUsingSelector:@selector(compare:)];
+    for(NSString *app in apps){
+        if(![app hasPrefix:@"Xcode"] || ![app hasSuffix:@".app"]) continue;
+        NSString *path=[[@"/Applications" stringByAppendingPathComponent:app] stringByAppendingPathComponent:
+            @"Contents/Developer/Platforms/iPhoneOS.platform/usr/standalone/device_traits.db"];
+        if(![fm isReadableFileAtPath:path]) continue;
+        sqlite3 *db=NULL; sqlite3_stmt *query=NULL;
+        int result=sql_open_v2(path.fileSystemRepresentation,&db,SQLITE_OPEN_READONLY,NULL);
+        if(result==SQLITE_OK) result=sql_prepare_v2(db,
+            "SELECT DISTINCT ProductDescription FROM Devices WHERE ProductType = ? LIMIT 16",-1,&query,NULL);
+        if(result==SQLITE_OK) result=sql_bind_text(query,1,gProductType,-1,SQLITE_TRANSIENT);
+        if(result==SQLITE_OK){
+            while((result=sql_step(query))==SQLITE_ROW){
+                const unsigned char *text=sql_column_text(query,0);
+                NSString *description=text?[NSString stringWithUTF8String:(const char*)text]:nil;
+                if(!description.length || [description containsString:@"/"] || [description isEqualToString:@".."] ) continue;
+                NSString *profile=[NSString stringWithFormat:
+                    @"/Library/Developer/CoreSimulator/Profiles/DeviceTypes/%@.simdevicetype/Contents/Resources/capabilities.plist",description];
+                NSData *data=[NSData dataWithContentsOfFile:profile];
+                id plist=data?[NSPropertyListSerialization propertyListWithData:data options:NSPropertyListImmutable format:NULL error:nil]:nil;
+                id capabilities=[plist isKindOfClass:NSDictionary.class]?plist[@"capabilities"]:nil;
+                id displays=[capabilities isKindOfClass:NSDictionary.class]?capabilities[@"displays"]:nil;
+                id display=[displays isKindOfClass:NSArray.class] && [displays count]?[displays firstObject]:nil;
+                id width=[display isKindOfClass:NSDictionary.class]?display[@"width"]:nil;
+                id height=[display isKindOfClass:NSDictionary.class]?display[@"height"]:nil;
+                if(![width isKindOfClass:NSNumber.class] || ![height isKindOfClass:NSNumber.class]){
+                    LOGE("xcode-lookup: missing/invalid displays[0] in %s",profile.fileSystemRepresentation); continue;
+                }
+                NSValue *value=[NSValue valueWithSize:NSMakeSize([width doubleValue],[height doubleValue])];
+                if(![found containsObject:value]) [found addObject:value];
+            }
+        }
+        if(result!=SQLITE_DONE) LOGE("xcode-lookup: SQLite error %d reading %s",result,path.fileSystemRepresentation);
+        if(query) sql_finalize(query);
+        if(db) sql_close(db);
+    }
+    dlclose(library);
+    if(!found.count) LOGE("xcode-lookup: no readable display dimensions for productType=%s; trying detection",gProductType);
+    return sizes;
+}
+// Caller holds gLock. All four sources publish through this one geometry path.
+static void selectContentRect(CGRect rect,const char *source){
+    gCrop.rect=rect; gCrop.frozen=YES;
+    LOGE("content: frame=%.0fx%.0f rect=(%.0f,%.0f %.0fx%.0f) source=%s productType=%s",
+        gCrop.size.width,gCrop.size.height,rect.origin.x,rect.origin.y,rect.size.width,rect.size.height,
+        source,*gProductType?gProductType:"(unknown)");
+}
+static BOOL acceptScreenSize(CGSize size,const char *source){
+    // Profiles describe the native orientation; transpose dimensions on rotation.
+    // This does not change input coordinates or the flipped-view Y mapping.
+    if((size.width>size.height)!=(gCrop.size.width>gCrop.size.height))
+        size=CGSizeMake(size.height,size.width);
+    if(!isfinite(size.width) || !isfinite(size.height) || size.width<=0 || size.height<=0 ||
+       floor(size.width)!=size.width || floor(size.height)!=size.height ||
+       size.width>gCrop.size.width || size.height>gCrop.size.height ||
+       gCrop.size.width-size.width>64 || gCrop.size.height-size.height>64){
+        LOGE("%s rejected: productType=%s candidate=%.0fx%.0f frame=%.0fx%.0f; requires positive integral dimensions and padding in [0,64] per axis; trying next source",
+            source,gProductType,size.width,size.height,gCrop.size.width,gCrop.size.height);
+        return NO;
+    }
+    selectContentRect((CGRect){CGPointZero,size},source); return YES;
+}
+static BOOL selectTableContentRect(void){
+    BOOL matched=NO;
+    for(size_t i=0;i<sizeof gScreenTable/sizeof gScreenTable[0];i++){
+        if(strcmp(gProductType,gScreenTable[i].productType)) continue;
+        matched=YES;
+        if(acceptScreenSize(CGSizeMake(gScreenTable[i].width,gScreenTable[i].height),"builtin-table")) return YES;
+        break;
+    }
+    if(!matched) LOGE("builtin-table: no entry for productType=%s; trying xcode-lookup",*gProductType?gProductType:"(unknown)");
+    for(NSValue *value in xcodeScreenSizes()) if(acceptScreenSize(value.sizeValue,"xcode-lookup")) return YES;
+    return NO;
+}
+
+// Brief crop-brief.md: padding is <8; content is luminance >10. Scan every
+// row and column, sampling the other axis every 8 pixels (including its last
+// pixel). Unlike a 2D stride grid, this preserves single-pixel edge positions.
+static BOOL nonBlack(const uint8_t *base,size_t stride,size_t x,size_t y,OSType format){
+    const uint8_t *p=base+y*stride;
+    if(format==kCVPixelFormatType_32BGRA){
+        p+=4*x;
+        return (54u*p[2]+183u*p[1]+19u*p[0])>10u*256u;
+    }
+    unsigned value=p[x];
+    // Video-range black is 16, not 0. Compare in full-range luminance units.
+    return format==kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ?
+        value>16 && (value-16)*255u>10u*219u : value>10;
+}
+// Caller holds gLock; this is the sole decision/logging path for detection fallback.
+static void freezeContentRect(const char *reason){
+    CGRect r=gCrop.seen;
+    BOOL fallback=reason || CGRectIsEmpty(r) || CGRectIsNull(r) ||
+        r.size.width<gCrop.size.width-64 || r.size.height<gCrop.size.height-64;
+    selectContentRect(fallback?(CGRect){CGPointZero,gCrop.size}:r,fallback?"full-frame":"detected");
+    LOGE("content detection: frame=%.0fx%.0f detected=(%.0f,%.0f %.0fx%.0f) content=(%.0f,%.0f %.0fx%.0f) fallback=%s (%s)",
+         gCrop.size.width,gCrop.size.height,
+         CGRectIsNull(r)?0:r.origin.x,CGRectIsNull(r)?0:r.origin.y,r.size.width,r.size.height,
+         gCrop.rect.origin.x,gCrop.rect.origin.y,gCrop.rect.size.width,gCrop.rect.size.height,
+         fallback?"yes":"no",reason?:fallback?"empty or more than 64 pixels removed in a dimension":"frozen");
+}
+static void detectContentRect(CVPixelBufferRef frame,double t){
+    CGSize size=CGSizeMake(CVPixelBufferGetWidth(frame),CVPixelBufferGetHeight(frame));
+    if(!CGSizeEqualToSize(size,gCrop.size)){
+        gCrop.size=size; gCrop.seen=CGRectNull; gCrop.rect=(CGRect){CGPointZero,size};
+        gCrop.frames=0; gCrop.started=t; gCrop.frozen=NO;
+        if(selectTableContentRect()) return;
+        gCrop.started=nowSec(); // lookup time is not part of the detection window
+        LOGE("content detection: collecting up to 30 frames / 2s at %.0fx%.0f; using full frame until frozen",size.width,size.height);
+    }
+    if(gCrop.frozen) return;
+    if(t-gCrop.started>=2){ freezeContentRect(NULL); return; }
+    OSType format=CVPixelBufferGetPixelFormatType(frame);
+    BOOL planar=format==kCVPixelFormatType_420YpCbCr8BiPlanarFullRange ||
+                format==kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+    if(!planar && format!=kCVPixelFormatType_32BGRA){
+        freezeContentRect("unsupported pixel format"); return;
+    }
+    if(CVPixelBufferLockBaseAddress(frame,kCVPixelBufferLock_ReadOnly)!=kCVReturnSuccess){
+        freezeContentRect("pixel buffer read lock failed"); return;
+    }
+    const uint8_t *base=planar?CVPixelBufferGetBaseAddressOfPlane(frame,0):CVPixelBufferGetBaseAddress(frame);
+    size_t stride=planar?CVPixelBufferGetBytesPerRowOfPlane(frame,0):CVPixelBufferGetBytesPerRow(frame);
+    size_t w=(size_t)size.width,h=(size_t)size.height;
+    if(!base || !w || !h || stride<w*(planar?1:4)){
+        CVPixelBufferUnlockBaseAddress(frame,kCVPixelBufferLock_ReadOnly);
+        freezeContentRect("invalid pixel buffer storage"); return;
+    }
+    size_t left=w,top=h,right=0,bottom=0;
+    for(size_t x=0;x<w;x++){
+        for(size_t y=0;;y=MIN(y+8,h-1)){
+            if(nonBlack(base,stride,x,y,format)){ left=MIN(left,x); right=x+1; break; }
+            if(y==h-1) break;
+        }
+    }
+    for(size_t y=0;y<h;y++){
+        for(size_t x=0;;x=MIN(x+8,w-1)){
+            if(nonBlack(base,stride,x,y,format)){ top=MIN(top,y); bottom=y+1; break; }
+            if(x==w-1) break;
+        }
+    }
+    CVPixelBufferUnlockBaseAddress(frame,kCVPixelBufferLock_ReadOnly);
+    if(right>left && bottom>top){
+        CGRect found=CGRectMake(left,top,right-left,bottom-top);
+        gCrop.seen=CGRectIsNull(gCrop.seen)?found:CGRectUnion(gCrop.seen,found);
+    }
+    if(++gCrop.frames>=30 || nowSec()-gCrop.started>=2) freezeContentRect(NULL);
+}
+
 @interface InProcSink : NSObject @end
 @implementation InProcSink
 - (void)didReceiveSampleBuffer:(CMSampleBufferRef)sb {
@@ -233,6 +467,7 @@ static void finish(int code,NSString *reason){
         if(!CMTIME_IS_NUMERIC(pts) || !CMSampleBufferGetImageBuffer(sb) ||
            (CMTIME_IS_NUMERIC(gNewestPTS) && CMTimeCompare(pts,gNewestPTS)<=0)) gDrops++;
         else {
+            detectContentRect(CMSampleBufferGetImageBuffer(sb),t);
             gNewestPTS=pts; gFrames++;
             if(gLastFrame) gFrameIntervals[gIntervals++%Capacity]=t-gLastFrame;
             gLastFrame=t;
@@ -547,6 +782,7 @@ static void saveScreenshot(void){
     if(atomic_exchange(&gScreenshotBusy,true)){ LOGE("screenshot: save already in progress; ignored"); return; }
     pthread_mutex_lock(&gLock);
     CVPixelBufferRef frame=gScreenshotFrame?CVPixelBufferRetain(gScreenshotFrame):NULL;
+    CGRect crop=gCrop.rect; // retain image and matching geometry in the same critical section
     pthread_mutex_unlock(&gLock);
     if(!frame){ atomic_store(&gScreenshotBusy,false); LOGE("screenshot: no video frame yet"); return; }
     if(!gScreenshotGroup) gScreenshotGroup=dispatch_group_create();
@@ -554,7 +790,11 @@ static void saveScreenshot(void){
         @try {
             CIImage *image=[CIImage imageWithCVPixelBuffer:frame];
             CIContext *context=[CIContext contextWithOptions:nil];
-            CGImageRef rendered=[context createCGImage:image fromRect:image.extent];
+            // Core Image uses a bottom-left origin; this conversion only affects
+            // pixel extraction, never the existing flipped-view HID mapping.
+            CGRect region=CGRectMake(image.extent.origin.x+crop.origin.x,
+                CGRectGetMaxY(image.extent)-CGRectGetMaxY(crop),crop.size.width,crop.size.height);
+            CGImageRef rendered=[context createCGImage:image fromRect:region];
             NSBitmapImageRep *bitmap=rendered?[[NSBitmapImageRep alloc] initWithCGImage:rendered]:nil;
             if(rendered) CGImageRelease(rendered);
             NSData *png=[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
@@ -579,7 +819,14 @@ static void saveScreenshot(void){
 - (void)layout {
     [super layout];
     [CATransaction begin]; [CATransaction setDisableActions:YES];
-    gDisplay.frame=self.bounds;
+    CGRect content=gVideoSize.width>0 && gVideoSize.height>0 ?
+        AVMakeRectWithAspectRatioInsideRect(gVideoSize,self.bounds):self.bounds;
+    gContentClip.frame=content;
+    if(gVideoSize.width>0 && gVideoSize.height>0){
+        CGFloat sx=content.size.width/gVideoSize.width,sy=content.size.height/gVideoSize.height;
+        gDisplay.frame=CGRectMake(-gContentRect.origin.x*sx,-gContentRect.origin.y*sy,
+                                 gFrameSize.width*sx,gFrameSize.height*sy);
+    }else gDisplay.frame=gContentClip.bounds;
     gDisplay.contentsScale=self.window.backingScaleFactor;
     [CATransaction commit];
 }
@@ -684,11 +931,21 @@ static void createWindow(void){
     gWindow.title=@"ipb mirror";
     MirrorView *view=[[MirrorView alloc] initWithFrame:NSMakeRect(0,0,420,840)];
     view.wantsLayer=YES; view.layer.backgroundColor=NSColor.blackColor.CGColor;
+    view.layer.masksToBounds=YES;
+    // Clip at the same aspect-fit rectangle mapEvent uses, including during resize.
+    gContentClip=[CALayer layer]; gContentClip.masksToBounds=YES;
+    [view.layer addSublayer:gContentClip];
     gDisplay=[AVSampleBufferDisplayLayer layer];
-    gDisplay.videoGravity=AVLayerVideoGravityResizeAspect;
-    [view.layer addSublayer:gDisplay]; gWindow.contentView=view;
+    gDisplay.videoGravity=AVLayerVideoGravityResize; // explicit raw-frame geometry owns the aspect ratio
+    [gContentClip addSublayer:gDisplay]; gWindow.contentView=view;
     [view setNeedsLayout:YES]; [gWindow center]; fitWindow(CGSizeMake(420,840),NO); [gWindow makeKeyAndOrderFront:nil];
     [gWindow makeFirstResponder:view]; [NSApp activateIgnoringOtherApps:YES];
+}
+static void applyContentGeometry(CGSize frameSize,CGRect crop){
+    if(!CGSizeEqualToSize(gFrameSize,frameSize) || !CGRectEqualToRect(gContentRect,crop)){
+        gFrameSize=frameSize; gContentRect=crop; gVideoSize=crop.size;
+        fitWindow(gVideoSize,YES);
+    }
 }
 static void presentLatest(void){
     // A main-run-loop timer (also in event-tracking mode) consumes one latest slot.
@@ -696,9 +953,20 @@ static void presentLatest(void){
     if(gDisplay.status==AVQueuedSampleBufferRenderingStatusFailed){
         fail(6,[NSString stringWithFormat:@"display layer failed: %@",gDisplay.error]); return;
     }
+    pthread_mutex_lock(&gLock);
+    if(!gCrop.frozen && gCrop.frames && nowSec()-gCrop.started>=2) freezeContentRect(NULL);
+    pthread_mutex_unlock(&gLock);
     if(!gDisplay.readyForMoreMediaData) return;
-    pthread_mutex_lock(&gLock); CMSampleBufferRef sb=gLatest; gLatest=NULL; pthread_mutex_unlock(&gLock);
-    if(!sb) return;
+    pthread_mutex_lock(&gLock);
+    CMSampleBufferRef sb=gLatest; gLatest=NULL;
+    CGSize frameSize=gCrop.size; CGRect crop=gCrop.rect;
+    pthread_mutex_unlock(&gLock);
+    if(!sb){
+        // A static stream may stop sending before the 2s deadline. Apply the
+        // frozen crop to its already displayed frame without waiting for motion.
+        if(frameSize.width>0 && CGSizeEqualToSize(gFrameSize,frameSize)) applyContentGeometry(frameSize,crop);
+        return;
+    }
     CMSampleBufferRef copy=NULL;
     // Make an independent sample container around the retained decoded image.
     // CMSampleBuffer.h documents CreateCopy as shallow; constructing a new image
@@ -721,21 +989,10 @@ static void presentLatest(void){
     }
     CFRelease(sb);
     if(status || !copy){ fail(6,[NSString stringWithFormat:@"sample copy failed: %d",(int)status]); return; }
-    CMVideoFormatDescriptionRef format=CMSampleBufferGetFormatDescription(copy);
-    CGSize size=CMVideoFormatDescriptionGetPresentationDimensions(format,YES,YES);
-    if(size.width<=0 || size.height<=0){ CFRelease(copy); fail(6,@"invalid video dimensions"); return; }
-    if(!CGSizeEqualToSize(gVideoSize,size)){
-        gVideoSize=size;
-        fitWindow(size,YES);
+    if(frameSize.width<=0 || frameSize.height<=0 || CGRectIsEmpty(crop)){
+        CFRelease(copy); fail(6,@"invalid video/content dimensions"); return;
     }
-    // M3 brief runtime evidence (13 Pro): presentation/raw=1184x2576,
-    // physical screen=1170x2532, no clean aperture. Encoder alignment padding
-    // implies ~1.2% horizontal / ~1.7% vertical coordinate bias. Its side is
-    // unknown, so do not invent an offset/crop compensation.
-    { static BOOL logged; if(!logged){ logged=YES;
-        CMVideoDimensions raw=CMVideoFormatDescriptionGetDimensions(format);
-        fprintf(stderr,"ipb-mirror: video presentation=%.0fx%.0f raw=%dx%d\n",
-                size.width,size.height,raw.width,raw.height); } }
+    applyContentGeometry(frameSize,crop);
     // Only our new sample container's dictionaries are changed (never Apple's sb).
     CFArrayRef attachments=CMSampleBufferGetSampleAttachmentsArray(copy,true);
     for(CFIndex i=0;attachments && i<CFArrayGetCount(attachments);i++){
@@ -747,15 +1004,16 @@ static void presentLatest(void){
 }
 
 static void usage(void){
-    fprintf(stderr,"usage: ipb-mirror <coredevice-uuid> <utun> <hostIP> <deviceIP> [--service-id ID] [--seconds S] [--csv PATH]\n"
+    fprintf(stderr,"usage: ipb-mirror <coredevice-uuid> <utun> <hostIP> <deviceIP> <productType-or-empty> [--service-id ID] [--seconds S] [--csv PATH]\n"
         "Defaults: touchscreen descriptor discovery, 300 seconds; maximum 3600 seconds / 8192 input events. Summary on stderr; event CSV only with --csv PATH (overwrites PATH). Needs a GUI login session.\n");
 }
 static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
-    if(argc<5){ usage(); DIE(2,"missing arguments"); }
+    if(argc<6){ usage(); DIE(2,"missing arguments"); }
     const char *dev=argv[1],*utun=argv[2],*rxip=argv[3],*txip=argv[4];
+    gProductType=argv[5];
     double runSeconds=300;
     const char *csvPath=NULL;
-    for(int i=5;i<argc;i++){
+    for(int i=6;i<argc;i++){
         if(i+1==argc){ usage(); DIE(2,"incomplete option"); }
         const char *option=argv[i],*value=argv[++i]; char *end=NULL; errno=0;
         if(!strcmp(option,"--service-id")){

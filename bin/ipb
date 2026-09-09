@@ -171,12 +171,13 @@ warm_tunnel() {
 # Resolve the CoreDevice tunnel (device IP, host IP, host utun interface) for the media stream.
 # The device address is connectionProperties.tunnelIPAddress; the host address is the utun
 # interface on this Mac that carries the same /64 (its ::2). Prints "hostIP utun deviceIP".
+# mirror requests a fourth field, productType, from the same device JSON snapshot.
 resolve_tunnel() {
   local json
   json="$(mktemp -t ipb-tunnel)"
   devicectl list devices --json-output "$json" --quiet >/dev/null 2>&1 || true
-  local devip
-  devip="$(python3 - "$json" "$DEVICE" <<'PY2'
+  local devip device_metadata product_type=""
+  device_metadata="$(python3 - "$json" "$DEVICE" <<'PY2'
 import json, sys
 try:
     devs = json.load(open(sys.argv[1]))["result"]["devices"]
@@ -185,15 +186,21 @@ except Exception:
 for d in devs:
     if d.get("identifier") == sys.argv[2]:
         ip = d.get("connectionProperties", {}).get("tunnelIPAddress")
-        if ip: print(ip); sys.exit(0)
+        if ip:
+            hardware = d.get("hardwareProperties")
+            product = hardware.get("productType", "") if isinstance(hardware, dict) else ""
+            print(ip + " " + (product if isinstance(product, str) else ""))
+            sys.exit(0)
 sys.exit(3)
 PY2
 )" || { rm -f "$json"; return 3; }
   rm -f "$json"
+  devip="${device_metadata%% *}"
+  [[ "$device_metadata" == *" "* ]] && product_type="${device_metadata#* }"
   [[ -n "$devip" ]] || return 3
   # device IP is <prefix>::1; find the host utun holding <prefix>::2
   local prefix="${devip%::*}"
-  python3 - "$prefix" <<'PY3'
+  python3 - "$prefix" "${1:-}" "$product_type" <<'PY3'
 import subprocess, sys
 prefix = sys.argv[1].lower()
 out = subprocess.run(["ifconfig"], capture_output=True, text=True).stdout
@@ -205,7 +212,8 @@ for line in out.splitlines():
     if s.startswith("inet6 ") and iface and iface.startswith("utun"):
         addr = s.split()[1].split("%")[0].lower()
         if addr.startswith(prefix + "::"):
-            print(f"{addr} {iface} {prefix}::1")
+            suffix = " " + sys.argv[3] if sys.argv[2] == "mirror" else ""
+            print(f"{addr} {iface} {prefix}::1" + suffix)
             sys.exit(0)
 sys.exit(3)
 PY3
@@ -640,9 +648,11 @@ case "$cmd" in
     (( $# % 2 == 0 )) || { usage; exit 2; }
     DEVICE="$(resolve_device)" || exit 3
     warm_tunnel >/dev/null 2>&1 || true
-    tun="$(resolve_tunnel)" || { print -u2 "ipb: could not resolve the device tunnel (is the device connected?)"; exit 4; }
-    hostip="${tun%% *}"; rest="${tun#* }"; utun="${rest%% *}"; devip="${rest##* }"
-    exec "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$@"
+    tun="$(resolve_tunnel mirror)" || { print -u2 "ipb: could not resolve the device tunnel (is the device connected?)"; exit 4; }
+    hostip="${tun%% *}"; rest="${tun#* }"; utun="${rest%% *}"; rest="${rest#* }"
+    devip="${rest%% *}"; product_type=""
+    [[ "$rest" == *" "* ]] && product_type="${rest#* }"
+    exec "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$product_type" "$@"
     ;;
   screenshot)
     [[ $# -eq 1 ]] || { usage; exit 2; }
