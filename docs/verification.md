@@ -1819,3 +1819,80 @@ what locks a real device. The special-cased hold is gone. `ipb lock`'s 0.7 s def
 and still verified for the CLI path, where it locks and wakes.
 
 **Mirror `⌘L` not yet re-verified after this change.**
+
+## 2026-09-09 — Review of the mirror changes (gpt-6-astra), and three defects fixed
+
+An independent review of this session's `ipb mirror` changes found three defects in the ~15 lines
+that had just been added, plus one wrong causal claim and one stale string. Its verdict on the
+change set was **not ready to treat as accepted**.
+
+### Fixed
+
+1. **The pointer was placed once per *session*, not per gesture.** `starts` is only set when
+   `gScrollActive == NO` (`mirror.m`, `scrollWheel:`), and a phase-less wheel has no AppKit end
+   and no idle timeout, so one session can span scrolling one list, moving the mouse to another,
+   and scrolling again — all against the first position. The pointer is now resent whenever the
+   mapped position has moved (epsilon 0.001), not only when a session opens.
+2. **A gesture starting off the phone view still scrolled.** `mapEvent:` fails in the
+   letterboxing and the failure was recorded but not acted on, so a scroll begun over a black bar
+   was sent anyway and acted on whatever target the device still held — the opposite of the
+   captured oracle, which sends no scroll report at all while the pointer is off the view. A new
+   gesture in that state is now rejected as `scroll_off_target`. An already-running gesture is
+   deliberately left alone so its END still reaches the device; dropping every out-of-bounds event
+   would strand the session open.
+3. **Pointer failures were swallowed.** Both the build result and the send return code were
+   discarded, and the record was then marked `Sent` from the *scroll's* code. A failed pointer now
+   fails the event (`BuildFailed` / `SendFailed`) and the scroll is not sent, since without a
+   current pointer it would act on a stale target. Repo rule: failure is an exit code, not a log
+   line.
+
+While restructuring (3) an error was introduced and caught before commit: guarding only the
+`r.reportCode` assignment with a dangling `else` left the following line to recompute
+`r.result`, which would have rewritten `BuildFailed` as `SendFailed`. The guard is now an
+explicit `pointerFailed` block.
+
+### Corrected claims
+
+- **The "connection teardown truncates the hold" explanation is withdrawn** (see the record
+  above). `HIDCTL_WAIT_MS` defaults to 700 ms and is read before disconnect, so `ipb` does not
+  exit immediately. No replacement root cause has been established.
+- **`mirror.m` advertised `⌘L` as implemented on one line and unimplemented on the next.** Fixed.
+- **The 0.5 ms per-send latency figure was over-claimed.** It comes from the scroll path in
+  `/tmp/scroll.csv`, while App Switcher uses the digitizer path. It supports "no tens-of-
+  milliseconds host stall was observed"; it does not establish App Switcher's per-input cost.
+- **CSV recount**: 661 total events = 594 scroll + 67 touch, not 661 scroll.
+
+### Accepted as-is, with a verification owed
+
+- **`gScrollServiceID = 0x501` for the pointer.** Kept — it works on device — but not confirmed to
+  be Device Hub's target. The capture recorded `x2` as an address without dereferencing it, and an
+  address cannot be resolved offline. Next capture should run, at a `send_id` breakpoint,
+  `register read x2` then `memory read --format x --size 8 --count 1 $x2`, and record the target
+  **separately for the 19-byte pointer and the 21-byte scroll** rather than assuming they match.
+  That earlier service sweep showed no difference does not prove any ID is correct.
+- **Key mapping.** `⌘L` stays: following Device Hub inside a dedicated mirror window is better
+  grounded than importing the browser address-bar convention. Exact-equality modifier comparison
+  is correct and should **not** become a subset test — `⇧⌘H` is a subset of `⌃⇧⌘H`, so Home would
+  capture App Switcher. Siri, recording and Action Button stay explicitly unimplemented; no usage
+  codes should be guessed.
+
+### Still owed, on device
+
+- Mirror `⌘L` at 0.08 s is unverified. A physical short press locking does not establish that
+  0.08 s works through this private input path.
+- `ipb lock`'s 0.7 s default is **not** being changed on the strength of one sweep that conflicts
+  with an earlier one. Re-measure with device, OS, starting state, helper binary and environment
+  all pinned, covering lock and wake. Note also that the passcode screen may still be a locked
+  state; "not locked" was the wrong description.
+- The `HIDCTL_WAIT_MS` = 0 / 700 / 3000 experiment at fixed hold, timed against an external
+  recording rather than a screenshot at a fixed delay after the command returns.
+- `scripts/smoke_matrix.sh` has not been run for any of this.
+
+### App Switcher
+
+Not changed yet. The dwell dominates: 13 samples over ~0.36 s, a 1.05 s dwell, plus 0.25 s holding
+the input drain afterwards, so the earliest a following input is processed is ~1.66 s. Suggested
+experiment is to keep the path and total travel time but sample at ~60 Hz, and separately test
+dwells of 0.15 / 0.25 / 0.40 / 0.60 s for the shortest that reliably enters the switcher, measuring
+first-frame response, UP, card settle and when a following tap becomes usable — not just the final
+screenshot. These are candidates, not verified parameters.

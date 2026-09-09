@@ -87,7 +87,7 @@ typedef struct {
     uint32_t phase,momentum,flags;
     BOOL starts,ends;
 } ScrollReport;
-typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, Interrupted, ScrollUnsupported, ScrollStationary, InputConflict, ScrollUnavailable, ScrollOrphan } Result;
+typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, Interrupted, ScrollUnsupported, ScrollStationary, InputConflict, ScrollUnavailable, ScrollOrphan, ScrollOffTarget } Result;
 typedef struct { uint64_t seq, generation, gesture; Kind kind; double x,y,submit;
                  InputMode mode; ScrollReport scroll;
                  // Where the pointer was when a scroll arrived. For scroll events
@@ -123,12 +123,15 @@ static uint64_t gServiceID,gGesture,gMouseGeneration;
 static double gMouseX,gMouseY;
 static InputMode gMouseMode; // main thread: frozen at Down, copied into every event
 static uint64_t gScrollServiceID,gScrollGesture,gScrollGeneration;
+// Last AbsolutePointer position accepted by the device, input queue only.
+static double lastPointerX=-1,lastPointerY=-1;
+static const double PointerEpsilon=0.001;
 static BOOL gScrollActive,gScrollPrecise,gScrollMomentum,gScrollMomentumAllowed; // main thread
 static BOOL isScroll(Kind kind){ return kind>=ScrollPrecise && kind<=ScrollEnd; }
 static BOOL isEnd(Event event){ return event.kind==Up || (isScroll(event.kind) && event.scroll.ends); }
 static const char *inputResults[]={"pending","running","sent","rejected","overload","build_failed",
     "send_failed","barrier_failed","interrupted","scroll_unsupported","scroll_stationary",
-    "input_conflict","scroll_unavailable","scroll_orphan"};
+    "input_conflict","scroll_unavailable","scroll_orphan","scroll_off_target"};
 // Detector and accepted frames are protected by gLock. Display geometry is main-thread-only.
 static struct {
     CGSize size;
@@ -220,7 +223,7 @@ static void finish(int code,NSString *reason){
     static double values[4][Capacity]; unsigned counts[4]={0};
     unsigned executed=0,rejected=0,overload=0,inflight=0;
     const char *kinds[]={"DOWN","MOVE","UP","SCROLL_PRECISE","SCROLL_WHEEL","SCROLL_END","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN"};
-    unsigned skipCounts[ScrollOrphan+1]={0};
+    unsigned skipCounts[ScrollOffTarget+1]={0};
     for(unsigned i=0;i<n;i++){
         Record *r=&records[i];
         if(r->result==Pending){ r->result=Rejected; }
@@ -238,7 +241,7 @@ static void finish(int code,NSString *reason){
     percentiles(s,"input host total",values[2],counts[2]);
     percentiles(s,"gesture tail",values[3],counts[3]);
     [s appendFormat:@"submitted=%u executed=%u rejected=%u overload=%u in_flight=%u max_queue_depth=%u\n",n,executed,rejected,overload,inflight,maxDepth];
-    for(unsigned i=ScrollUnsupported;i<=ScrollOrphan;i++) [s appendFormat:@"%s=%u\n",inputResults[i],skipCounts[i]];
+    for(unsigned i=ScrollUnsupported;i<=ScrollOffTarget;i++) [s appendFormat:@"%s=%u\n",inputResults[i],skipCounts[i]];
     unsigned intervalN=(unsigned)MIN(intervalCount,Capacity);
     qsort(intervals,intervalN,sizeof *intervals,compareDouble);
     [s appendFormat:@"media frames=%llu interval_p50=%@ interval_p95=%@ drops=%llu errors=%llu interval_n=%u interval_total=%llu (ms; last <=8192)\n",
@@ -713,19 +716,51 @@ static void drainInput(void){
                     // works (it needs no target) but a list scroll has nothing
                     // to act on -- which is exactly the reported symptom of
                     // horizontal working while vertical did nothing.
-                    if(scrolling && starts && event.pointerValid){
+                    // Keep the device's cursor current, not merely opened.
+                    //
+                    // Sending only on `starts` was wrong: `starts` means "no
+                    // scroll session is active" (see scrollWheel:), and a
+                    // phase-less wheel has no AppKit end and no idle timeout, so
+                    // one session can span the user scrolling one list, moving
+                    // the mouse to another, and scrolling again -- all against
+                    // the first position. Resend whenever the mapped position
+                    // has actually moved.
+                    //
+                    // Failures here are not cosmetic. If the pointer is what
+                    // gives the scroll a target, a dropped pointer means the
+                    // scroll lands on whatever the device still had, so a build
+                    // or send failure fails the event rather than being ignored.
+                    if(scrolling && event.pointerValid &&
+                       (starts || fabs(event.pointerX-lastPointerX)>PointerEpsilon
+                               || fabs(event.pointerY-lastPointerY)>PointerEpsilon)){
                         uint64_t pointerWords[2]={0,0};
-                        if(uhid_make_absolute_pointer_hid_report(event.pointerX,event.pointerY,0,pointerWords)==(int)sizeof pointerWords){
-                            coredevice_send_universalhid_hid_report(gInput,pointerWords,gScrollServiceID);
+                        int pointerCount=uhid_make_absolute_pointer_hid_report(event.pointerX,event.pointerY,0,pointerWords);
+                        if(pointerCount!=(int)sizeof pointerWords){
+                            r.result=BuildFailed; r.reportCode=pointerCount;
+                            inputError(@"AbsolutePointer report construction failed");
+                        }else{
+                            int pointerCode=coredevice_send_universalhid_hid_report(gInput,pointerWords,gScrollServiceID);
+                            if(pointerCode){
+                                r.result=SendFailed; r.reportCode=pointerCode;
+                                r.reportReturn=nowSec();
+                                inputError(@"AbsolutePointer send failed; not scrolling a stale target");
+                            }else{ lastPointerX=event.pointerX; lastPointerY=event.pointerY; }
                         }
                     }
-                    r.reportCode=activeMode==BottomEdge?
-                        coredevice_send_hid_digitizer_cgpoint(gDigitizer,event.x,event.y,0,0,1,
-                            starts?0:ends?2:1,3,0,0):
-                        coredevice_send_universalhid_hid_report(gInput,words,scrolling?gScrollServiceID:gServiceID);
-                    r.reportReturn=nowSec(); r.result=r.reportCode?SendFailed:Sent;
+                    // A failed pointer placement ends the event here: sending
+                    // the scroll anyway would act on whatever target the device
+                    // still holds. r.result and r.reportCode are already set.
+                    BOOL pointerFailed=(r.result==BuildFailed || r.result==SendFailed);
+                    if(!pointerFailed){
+                        r.reportCode=activeMode==BottomEdge?
+                            coredevice_send_hid_digitizer_cgpoint(gDigitizer,event.x,event.y,0,0,1,
+                                starts?0:ends?2:1,3,0,0):
+                            coredevice_send_universalhid_hid_report(gInput,words,scrolling?gScrollServiceID:gServiceID);
+                        r.reportReturn=nowSec(); r.result=r.reportCode?SendFailed:Sent;
+                    }
                     pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
-                    if(r.reportCode) inputError(@"HID report sender failed (see report_code)");
+                    if(pointerFailed){ /* already reported by the pointer branch */ }
+                    else if(r.reportCode) inputError(@"HID report sender failed (see report_code)");
                     else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
                     else if(ends){
                         // No digitizer barrier in the existing oracle. Its END return is
@@ -1082,6 +1117,13 @@ static void saveScreenshot(void){
     input.pointerX=px; input.pointerY=py;
     Result result=convertScroll(event,&input.scroll);
     if(!gScrollServiceID){ rejectScroll(input,ScrollUnavailable); return; }
+    // A gesture that opens outside the phone view has no target to scroll:
+    // mapEvent: fails in the letterboxing, and the captured oracle sends no
+    // scroll report at all while the pointer is off the view. Reject the new
+    // gesture rather than scrolling whatever the device still had. An already
+    // running gesture is left alone so its END still reaches the device --
+    // dropping every out-of-bounds event would strand the session open.
+    if(!input.pointerValid && !gScrollActive){ rejectScroll(input,ScrollOffTarget); return; }
     // Decide at arrival, not at drain: a later mouse UP must never replay this scroll.
     if(gMousePressed){ gScrollMomentumAllowed=NO; rejectScroll(input,InputConflict); return; }
     if(result!=Pending){
