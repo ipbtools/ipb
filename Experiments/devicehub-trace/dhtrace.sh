@@ -3,15 +3,24 @@
 #
 #   Experiments/devicehub-trace/dhtrace.sh <action-script> [out.jsonl]
 #
-# The action script drives the operator. Each line is one prompt; the driver
-# prints it, waits for ENTER, then records a short drain window before moving
-# on. Steps are operator-paced rather than timed, because the durations are not
-# knowable in advance -- unlocking a phone means typing a passcode, and a step
-# that assumed a fixed number of seconds simply cut the operator off.
+# The action script drives the operator. There are two kinds of step, because
+# the two constraints pull in opposite directions:
 #
-# A line beginning with "!" is a setup step: it is not traced and not recorded
-# as a capture window. Use it for anything that has to happen before the run
-# proper (unlock the phone, focus the window, put an app on screen).
+#   "!<prompt>"            setup. Waits for ENTER, untimed, not traced, not a
+#                          capture window. For things that take as long as they
+#                          take -- unlocking the phone, typing a passcode,
+#                          getting an app on screen.
+#
+#   "<seconds><TAB><prompt>"  a traced capture window. Timed, because the
+#                          operator must not touch the terminal during it:
+#                          pressing ENTER means moving focus and the pointer to
+#                          the terminal, which destroys the very state some
+#                          steps depend on ("leave the pointer resting on the
+#                          list"). A live countdown is printed so the operator
+#                          can see how long is left without touching anything.
+#
+# An earlier version made every step ENTER-gated and produced steps that were
+# literally impossible to perform.
 #
 # Markers go into the same JSONL stream the tracer writes, so every report lands
 # inside a labelled window and nobody has to reconstruct the order afterwards.
@@ -76,10 +85,22 @@ lldbpid=$!
 sleep 3
 
 print ""
-print "Press ENTER after finishing each step. Take as long as you need."
+print "Setup steps wait for ENTER. Timed steps do not -- do not touch the"
+print "terminal during them; each one prints a live countdown."
 print "================================================================"
+
+countdown() {  # $1 seconds, $2 label
+  local i=$1
+  while (( i > 0 )); do
+    printf "\r          %-12s %2ds remaining   " "$2" "$i"
+    sleep 1
+    i=$((i-1))
+  done
+  printf "\r%-60s\r" ""
+}
+
 step=0
-total=$(grep -vE '^\s*(#|$)' "$script" | grep -cv '^!')
+total=$(grep -vE '^\s*(#|$)' "$script" | grep -c '^[0-9]')
 while IFS= read -r line; do
   [[ $line == \#* || -z ${line//[[:space:]]/} ]] && continue
   if [[ $line == '!'* ]]; then
@@ -89,13 +110,17 @@ while IFS= read -r line; do
     read -r _ < /dev/tty
     continue
   fi
+  secs=${line%%$'\t'*}
+  prompt=${line#*$'\t'}
   step=$((step+1))
   print ""
-  print "  [${step}/${total}] ${line}"
-  print -n "          ...then press ENTER > "
-  mark "$line"
-  read -r _ < /dev/tty
-  mark "DRAIN after: ${line}"
+  print "  [${step}/${total}] ${prompt}"
+  countdown 3 "get ready"
+  mark "$prompt"
+  print "          >>> GO"
+  countdown "$secs" "GO"
+  print "          --- stop, hold still"
+  mark "DRAIN after: ${prompt}"
   sleep "$drain"
 done < "$script"
 

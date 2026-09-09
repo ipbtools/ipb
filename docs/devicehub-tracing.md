@@ -79,21 +79,22 @@ parked forever. `dhrun` switches to async mode, resumes, waits out the clock,
 then stops and detaches. Verified against a live process: it detaches cleanly
 and the target keeps running.
 
-**Captures are self-describing, and operator-paced.** The action script drives
-the operator: one prompt per line, printed in turn, each waiting for ENTER. The
-driver appends a marker to the same JSONL stream the tracer writes, so every
-report lands inside a labelled window and nobody has to remember afterwards what
-they did in which order.
+**Captures are self-describing, and steps come in two kinds.** The action
+script drives the operator, and the driver appends a marker to the same JSONL
+stream the tracer writes, so every report lands inside a labelled window and
+nobody has to remember afterwards what they did in which order.
 
-Steps are not timed. The first version of this used `<seconds><TAB><prompt>`,
-which cut the operator off mid-step: unlocking the phone means typing a
-passcode, and no fixed duration is right for that. A step ends when the operator
-says it ended. A short drain window is recorded after each one to catch release
-events and momentum tails.
+The two kinds exist because two constraints pull against each other:
 
-A line beginning with `!` is a setup step — not traced, not recorded as a
-window. Use it for whatever has to be true before the run proper: unlock the
-phone, focus the window, get an app on screen.
+- `!<prompt>` — **setup**. Waits for ENTER, untimed, not traced. For steps that
+  take as long as they take: unlocking the phone, typing a passcode, getting an
+  app on screen. A first version timed these and cut the operator off mid-step.
+- `<seconds><TAB><prompt>` — a **traced window**. Timed, with a live countdown,
+  and the operator must not touch the terminal during it. A second version made
+  every step ENTER-gated, which produced steps that were impossible to perform:
+  pressing ENTER moves focus and the pointer to the terminal, and "leave the
+  pointer resting on the list, then press ENTER" contradicts itself. Anything
+  that depends on pointer position or window focus has to be timed.
 
 Because step durations are unknown in advance, the run ends when the operator
 finishes or when a wall-clock backstop expires, whichever comes first. The
@@ -115,9 +116,10 @@ Experiments/devicehub-trace/dhtrace.sh \
 Experiments/devicehub-trace/decode.py /tmp/capture.jsonl --bytes
 ```
 
-The driver prints each prompt and waits for ENTER. Take as long as each step
-needs. Idle steps are part of the measurement: they establish the background
-report rate that every other window is compared against.
+Setup steps wait for ENTER; take as long as they need. Timed steps print a
+countdown and must be performed without touching the terminal. Idle steps are
+part of the measurement: they establish the background report rate that every
+other window is compared against.
 
 ## Reading a capture
 

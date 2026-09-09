@@ -1,27 +1,26 @@
-# Action script: lock/unlock and scroll.
+# Action script: lock and scroll.
 #
-# One prompt per line. Do the step, then press ENTER -- steps are not timed, so
-# take as long as you need (entering a passcode, waiting for an animation).
-# Lines starting with "!" are setup: not traced, not recorded as a window.
+# Two kinds of line:
+#   !prompt              setup. Waits for ENTER. Untimed, not traced.
+#   <seconds>TABprompt   a traced window. Do NOT touch the terminal during it;
+#                        the prompt is spoken and there is a beep at each end.
 #
-# Step 1 is a liveness check, not data. Moving the pointer over the phone view
-# is known to make Device Hub send AbsolutePointer reports. If that window comes
-# back empty, the taps did not bind and every negative result in the run is
-# void.
+# Step 1 is a liveness check, not data: moving the pointer over the phone view
+# is known to make Device Hub send AbsolutePointer reports. If that window is
+# empty the taps did not bind and every negative in the run is void.
 #
-# Steps 5 and 6 are the pointer-precedence test: the same scroll gesture with
-# and without an established pointer position. If scroll only works after the
-# pointer has been moved onto the view, that is the answer to why ipb's
-# ScrollReport is accepted and ignored.
+# Steps 4 and 5 are the whole point: the same scroll gesture with the pointer
+# resting on the list, then with the pointer outside the view. They are timed
+# precisely because pressing ENTER would move the pointer and destroy the
+# condition being tested.
 
-! Unlock the phone (type the passcode if it asks) and leave it on the Home screen
-! Bring Device Hub to the front, with the phone screen visible
-LIVENESS: move the mouse slowly back and forth over the phone view, then stop
-Do nothing at all (idle baseline)
-Press Command-L to LOCK the screen
-! Unlock the phone again -- type the passcode if it asks. Take your time.
-Open Settings on the phone and scroll it to somewhere in the middle of a long list
-Move the mouse ONTO the phone view and leave it resting over the list, without clicking
-Two-finger scroll DOWN on the trackpad, twice, without moving the pointer off the list
-Move the mouse well OUTSIDE the phone view, then two-finger scroll DOWN twice
-Do nothing at all (idle baseline)
+!Unlock the phone and leave it on the Home screen
+!Bring Device Hub to the front with the phone screen visible, then take your hands off
+8	LIVENESS: move the mouse slowly back and forth over the phone view
+6	Do nothing at all
+8	Press Command-L to lock the screen
+!Unlock the phone again -- take your time, then get Device Hub back in front
+!Open Settings on the phone and scroll to the middle of a long list
+10	Put the pointer on the list, then two-finger scroll down twice, keeping the pointer on the list
+10	Move the pointer far outside the phone view, then two-finger scroll down twice
+6	Do nothing at all
