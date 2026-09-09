@@ -1666,7 +1666,9 @@ report and the shim path left it zero. Byte 1 carries the phase (`0x80`/`0x01`/`
 byte 2 the momentum, which is exactly what the mirror's `scroll.phase` and `scroll.momentum`
 already held.
 
-**Not yet verified on device** — needs a mirror session to confirm both axes now match Device Hub.
+**Verified on device** (2026-09-09, mirror session): confirmed together with the pointer fix below.
+The sign fix alone was not sufficient — horizontal scrolled the right way afterwards but vertical
+still did nothing, which is what led to the pointer finding.
 
 ### Still not done
 
@@ -1709,4 +1711,9 @@ Fix: the mirror now captures the pointer position on each scroll event -- for sc
 and `y` are the deltas, so the position needed its own field -- and sends an `AbsolutePointer`
 report before the scroll that opens a gesture.
 
-**Not yet verified on device.**
+**Verified on device** (2026-09-09, mirror session): both axes now scroll, in the same direction as
+Device Hub, on the Home screen and in Settings. Operator confirmation after a live mirror session.
+
+Scroll is now working through `ipb mirror`. It took three separate fixes, and only the last one
+mattered on its own: the report had to carry `remoteTimestamp`, both axes had to be negated, and
+the device had to be given a cursor to route the gesture to.
