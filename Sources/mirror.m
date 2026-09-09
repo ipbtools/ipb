@@ -77,7 +77,7 @@ extern int coredevice_send_hid_digitizer_cgpoint(xrc_t,double,double,double,doub
 
 enum { Capacity=8192, PendingLimit=64 };
 typedef enum { Down, Move, Up, ScrollPrecise, ScrollWheel, ScrollEnd,
-               KeyHome, KeyRecents, KeyVolumeUp, KeyVolumeDown } Kind;
+               KeyHome, KeyRecents, KeyVolumeUp, KeyVolumeDown, KeyLock } Kind;
 typedef enum { Touch, BottomEdge, Scroll } InputMode;
 // Product choice: bottom 2% of the mapped content, NOT an Apple/protocol threshold.
 static const double BottomEdgeFraction=.02;
@@ -624,10 +624,15 @@ static void keyStep(unsigned index,unsigned step){
         }else{
             // Home: docs/protocol.md. Volume: M3 brief, 2026-09-08 13 Pro:
             // E9 showed a HUD; EA is the paired usage, rc=0 only (HUD unconfirmed).
-            uint64_t usage=r.event.kind==KeyHome?0x40:r.event.kind==KeyVolumeUp?0xE9:0xEA;
+            uint64_t usage=r.event.kind==KeyHome?0x40:r.event.kind==KeyVolumeUp?0xE9:
+                           r.event.kind==KeyVolumeDown?0xEA:0x30;
             code=step==2?coredevice_send_hid_button_barrier(gButton):
                 coredevice_send_hid_button_custom(gButton,0x0c,usage,(uint8_t)step);
-            done=step==2; delay=step==0?.08:.12;
+            done=step==2;
+            // Lock is the side button and needs a real hold: measured on iPhone
+            // 12 mini / iOS 27, 0.45s does nothing and 0.50s acts. The other
+            // shortcuts are taps. See docs/protocol.md, "Lock".
+            delay=step==0?(r.event.kind==KeyLock?.7:.08):.12;
         }
         double returned=nowSec();
         if(step==0){ r.reportCode=code; r.reportReturn=returned; }
@@ -1029,6 +1034,11 @@ static void saveScreenshot(void){
     else if(flags==(shiftCommand|NSEventModifierFlagControl) && [key isEqualToString:@"h"]) kind=KeyRecents;
     else if(flags==command && key.length==1 && [key characterAtIndex:0]==NSUpArrowFunctionKey) kind=KeyVolumeUp;
     else if(flags==command && key.length==1 && [key characterAtIndex:0]==NSDownArrowFunctionKey) kind=KeyVolumeDown;
+    // Device Hub uses Cmd-L to lock. Its own Cmd-L never reaches UniversalHID
+    // (only the Command modifier does; see docs/protocol.md), so this sends the
+    // Consumer Power usage ipb established instead. Like the side button it
+    // toggles: it locks a lit screen and wakes a dark one.
+    else if(flags==command && [key isEqualToString:@"l"]) kind=KeyLock;
     else if(flags==shiftCommand && [key isEqualToString:@"s"]) action=Screenshot;
     else if(flags==command && [key isEqualToString:@"0"]) action=ZoomToFit;
     else if(flags==command && [key isEqualToString:@"1"]) action=ActualSize;
@@ -1359,7 +1369,7 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     // M4 brief: AX menu capture, Device Hub in Xcode 27 beta 6, iPhone 13 Pro.
     // hardwareGestureControls.actionButton / .sideButton use ConditionalKeyboardShortcut;
     // neither menu item appears with the 13 Pro. Revisit on corresponding hardware.
-    LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size (key repeat ignored).");
+    LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⌘L=Lock/Wake, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size (key repeat ignored).");
     LOGE("Lock (⌘L) / Siri (⇧⌥⌘H): not implemented; usage-code evidence missing. Recording (⇧⌘R): not implemented; capture/recording behavior evidence missing. Action Button / Camera Control: usage-code evidence and corresponding local hardware missing.");
     armWatchdog(watchdog,runSeconds+10);
     double deadline=nowSec()+runSeconds;

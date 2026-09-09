@@ -78,6 +78,8 @@ bin/ipb service-id touchscreen
 bin/ipb reset-gesture
 bin/ipb pointer 0 0
 bin/ipb scroll-report 0x501 0 0
+bin/ipb scroll-gesture 0.5 0.5 0 -25       # trackpad-style scroll (pointer + phase sequence)
+bin/ipb abs-pointer 0.5 0.5                # place the cursor
 bin/ipb scroll-event 0 0 0
 bin/ipb vendor-defined 0 0 0
 bin/ipb key escape

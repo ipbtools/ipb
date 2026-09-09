@@ -1397,8 +1397,6 @@ int main(int argc, const char *argv[]) {
                         send_coredevice_button_click(remote, usage_page, usage_code, hold);
                     } else if (strcmp(kind, "cd_home_button") == 0) {
                         send_coredevice_button_click(remote, 0x0c, 0x40, 80000);
-                    } else if (strcmp(kind, "cd_lock_button") == 0) {
-                        send_coredevice_button_click(remote, 0x0c, 0x30, 80000);
                     } else if (strcmp(kind, "cd_siri_button") == 0) {
                         send_coredevice_button_click(remote, 0x0c, 0xcf, 850000);
                     } else if (strcmp(kind, "cd_recents_button") == 0) {

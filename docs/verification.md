@@ -1672,10 +1672,9 @@ still did nothing, which is what led to the pointer finding.
 
 ### Still not done
 
-The mirror sends no `AbsolutePointerReport`. Device Hub sends one continuously as the pointer
-moves, and the capture showed it emits no scroll report at all unless the pointer is over the
-phone view. If scrolling is still unreliable after the sign fix, establishing the pointer is the
-next thing to add.
+Superseded by the "vertical needs a pointer" record below: the mirror now sends an
+`AbsolutePointerReport` before the scroll that opens a gesture, and that is what made vertical
+scrolling work.
 
 ## 2026-09-09 — Mirror scroll: vertical needs a pointer, horizontal does not
 
@@ -1717,3 +1716,46 @@ Device Hub, on the Home screen and in Settings. Operator confirmation after a li
 Scroll is now working through `ipb mirror`. It took three separate fixes, and only the last one
 mattered on its own: the report had to carry `remoteTimestamp`, both axes had to be negated, and
 the device had to be given a cursor to route the gesture to.
+
+
+## 2026-09-09 — Mirror: Cmd-L lock/wake, and the shortcut inventory
+
+`ipb mirror` gained `⌘L`, which locks a lit screen and wakes a dark one. Device Hub uses the same
+key for it. Device Hub's own `⌘L` never reaches UniversalHID — only the Command modifier does
+(see `docs/protocol.md`, "Lock") — so the mirror sends the Consumer `0x0c`/`0x30` usage `ipb`
+established instead.
+
+The hold had to be special-cased. The shortcut sender presses at step 0 and releases at step 1
+with `delay = step==0 ? .08 : .12`, i.e. an 80 ms tap, which is correct for Home and volume and
+below the threshold for lock: 0.45 s does nothing, 0.50 s acts. Lock now holds 0.7 s and the
+other shortcuts are unchanged.
+
+Full inventory as of this change (`Sources/mirror.m`, `performKeyEquivalent:`), also printed to
+stderr at startup:
+
+| Shortcut | Effect | Path |
+| --- | --- | --- |
+| `⇧⌘H` | Home | Consumer `0x0c/0x40` |
+| `⌃⇧⌘H` | App Switcher | digitizer drag sequence |
+| `⌘↑` | Volume up | Consumer `0x0c/0xE9` |
+| `⌘↓` | Volume down | Consumer `0x0c/0xEA` |
+| `⌘L` | Lock / wake | Consumer `0x0c/0x30`, held 0.7 s |
+| `⇧⌘S` | Screenshot | host-side, latest frame |
+| `⌘0` | Zoom to fit | host-side |
+| `⌘1` | Actual size | host-side |
+
+Modifier matching is exact equality, not a subset test, so a stray modifier silently selects a
+different binding or none. Key repeat is ignored.
+
+**`⌘L` not yet verified on device.**
+
+### Also in this change
+
+- `cd_lock_button` deleted from `Sources/action_sender.m`. It hardcoded `0x0c`/`0x30` with an
+  80 ms hold, was unreachable from the CLI, and would not have worked at that hold. The usage was
+  right the whole time and the hold was the bug. `cd_button_click` is now the only path.
+- `README.md` gained `ipb scroll-gesture` and `ipb abs-pointer`, which were only in the wrapper's
+  usage text.
+- The "Still not done" note in the mirror-scroll sign record contradicted the record below it
+  (it said the mirror sends no `AbsolutePointerReport`, which the next record fixes); it now
+  points at that record instead.
