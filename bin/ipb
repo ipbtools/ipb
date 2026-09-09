@@ -627,15 +627,20 @@ case "$cmd" in
     # off and locks, a screen that is off wakes to the lock screen. `lock` and
     # `wake` are the same press under the two names people reach for.
     #
-    # The hold is not cosmetic. Measured on iPhone 12 mini / iOS 27, from a
-    # verified state in each direction: 0.08/0.20/0.40 s do nothing at all,
-    # 0.45 s does nothing, 0.50 s and above act. The default carries margin.
-    # A short press being inert is why three rounds of usage guessing on the
-    # Keyboard page found nothing.
+    # The hold is not cosmetic, and the default is deliberately 0.5 s. Two CLI
+    # sweeps of this usage disagree with each other: the first called 0.40 and
+    # 0.45 s inert and 0.60 s a lock, the second called 0.35 s a lock and 0.60 s
+    # and above an overshoot onto the passcode screen. 0.50-0.55 s is the only
+    # band both sweeps call a clean lock, so that is where the default sits.
+    # The earlier 0.7 s default was in the overshoot band.
+    #
+    # That the two sweeps disagree at all means the hold-to-outcome mapping is
+    # less stable than either sweep alone suggests; treat this value as measured
+    # but not settled.
     #
     # Waking stops at the lock screen; the passcode is still the user's to enter.
     [[ $# -le 1 ]] || { usage; exit 2; }
-    run_button cd_button_click 0x0c 0x30 "${1:-0.7}"
+    run_button cd_button_click 0x0c 0x30 "${1:-0.5}"
     ;;
   recents|app-switcher|switcher)
     [[ $# -eq 0 ]] || { usage; exit 2; }

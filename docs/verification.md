@@ -1814,9 +1814,28 @@ What does hold regardless: a hold value is **path-specific and measured**, not t
 
 ### Fix
 
-The mirror's `⌘L` is now a short press (0.08 s), identical to every other shortcut there, which is
-what locks a real device. The special-cased hold is gone. `ipb lock`'s 0.7 s default is unchanged
-and still verified for the CLI path, where it locks and wakes.
+The mirror's `⌘L` is now a short press (0.08 s), identical to every other shortcut there. The
+special-cased hold is gone.
+
+**`ipb lock`'s default is changed from 0.7 s to 0.5 s.** Leaving it at 0.7 s while the table above
+puts 0.60/0.70/0.90 s on the passcode screen was a live regression, and this record contradicted
+itself about it three paragraphs apart.
+
+Picking the replacement needs the two sweeps read together, because they disagree:
+
+| Hold | First sweep ("Lock solved") | Second sweep (this record) |
+| --- | --- | --- |
+| 0.35 s | not tested | locked |
+| 0.40 s | not locked | not tested |
+| 0.45 s | not locked | not tested |
+| 0.50 s | locked | locked |
+| 0.55 s | locked | not tested |
+| 0.60 s | locked | passcode screen |
+
+0.50-0.55 s is the only band both sweeps call a clean lock, so the default is 0.5 s. That the
+sweeps disagree at 0.60 s at all is itself evidence the hold-to-outcome mapping is less stable
+than either sweep alone suggests — which weakens the broader "the CLI path is verified" claim, not
+just the specific number.
 
 **Mirror `⌘L` not yet re-verified after this change.**
 
@@ -1896,3 +1915,57 @@ experiment is to keep the path and total travel time but sample at ~60 Hz, and s
 dwells of 0.15 / 0.25 / 0.40 / 0.60 s for the shortest that reliably enters the switcher, measuring
 first-frame response, UP, card settle and when a following tap becomes usable — not just the final
 screenshot. These are candidates, not verified parameters.
+
+## 2026-09-09 — Second, independent review of the same changes
+
+A second review ran independently of the first and converged on the same core findings (pointer
+staleness, discarded pointer return code, the falsified teardown theory, no defect in the key
+mapping). It surfaced two the first did not, and sharpened two more.
+
+### New, and blocking
+
+**`scripts/smoke_matrix.sh` has not run since any of these commits, and they are already on
+`main`.** AGENTS.md Rule 4 makes that the definition of done, so none of this session's mirror
+work is done regardless of the rest.
+
+**`ipb lock`'s 0.7 s default was a live regression.** Fixed above: default is now 0.5 s, chosen as
+the only band both CLI sweeps agree is a clean lock, and the record no longer contradicts itself
+three paragraphs apart.
+
+### Sharpened
+
+- **The teardown theory is falsified at code level, not merely unsupported.** `usleep(hold)`
+  happens *inside* `send_coredevice_button_event` (`action_sender.m:977`) with the connection
+  alive, followed by the release, an explicit button barrier and a further 100 ms, all before the
+  function returns and anything could be torn down. The hold is real and is not truncated by
+  process exit. (The `HIDCTL_WAIT_MS` keep-alive is a second, separate reason the original claim
+  was wrong.)
+- **The Siri observation is n=1.** It was a single first attempt in the mirror, against a CLI
+  sweep with repeated points across 0.6-0.9 s that never reproduced Siri once. Under Rule 3 that
+  should not be theorised over further. The cheap way to settle both the mechanism and the
+  CLI/mirror discrepancy is to run `ipb button 0x0c 0x30 0.7` under the `dhtrace` harness — tap
+  the send on `ipb-helper` itself, which needs no operator round — and read the actual wall-clock
+  gap between the press and release sends.
+- **`0x501` is not a hardcoded guess.** `discoverService` (`mirror.m`) parses live CoreDevice
+  descriptor output at startup, matching `"CoreDevice touchscreen("` against
+  `"CoreDevice touchscreenGesture"`, so the ID is runtime-discovered for a real service. Sending
+  the pointer to the same service the following scroll uses is a coherent choice. It remains
+  unconfirmed only against what Device Hub itself targets, which one capture settles: tap
+  `UniversalHIDService.send`, filter `report_id == 0x13`, dereference `x2`, and diff against the
+  two IDs `discoverService` finds.
+
+### Where the two reviews differed
+
+On the once-per-gesture pointer, the second review found **no evidence of harm** — a trackpad
+gesture does not move the macOS cursor mid-gesture, so one placement per gesture is architecturally
+consistent with how the bottom-edge digitizer gesture already freezes its edge at touch-down. It
+proposed a stress test (one deliberately long 5-10 s continuous scroll, watching for degradation)
+rather than a change. The send-on-move fix already made covers that case anyway, at a measured
+0.5 ms per send.
+
+### App Switcher
+
+Both reviews independently point at the dwell first: 1.05 s is 75% of the total, has never been
+swept downward, and a real switcher animation completes in roughly 0.4-0.6 s. Suggested sweep is
+0.5 / 0.7 / 0.85 / 1.05 s, taking the shortest that passes a 5/5 reliability check through the
+existing `recents` smoke step, together with the 30 ms -> ~16 ms per-step change. Still not done.
