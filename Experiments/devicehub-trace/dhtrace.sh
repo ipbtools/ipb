@@ -3,17 +3,25 @@
 #
 #   Experiments/devicehub-trace/dhtrace.sh <action-script> [out.jsonl]
 #
-# The action script drives the human: each line is "<seconds><TAB><prompt>".
-# The driver prints the prompt, appends a marker to the same JSONL stream the
-# tracer writes, then waits. Every report captured in that interval is
-# therefore labelled by the action that produced it, with no after-the-fact
-# narration from the operator.
+# The action script drives the operator. Each line is one prompt; the driver
+# prints it, waits for ENTER, then records a short drain window before moving
+# on. Steps are operator-paced rather than timed, because the durations are not
+# knowable in advance -- unlocking a phone means typing a passcode, and a step
+# that assumed a fixed number of seconds simply cut the operator off.
+#
+# A line beginning with "!" is a setup step: it is not traced and not recorded
+# as a capture window. Use it for anything that has to happen before the run
+# proper (unlock the phone, focus the window, put an app on screen).
+#
+# Markers go into the same JSONL stream the tracer writes, so every report lands
+# inside a labelled window and nobody has to reconstruct the order afterwards.
 #
 # Two properties this harness guarantees, because their absence is what made
 # earlier rounds expensive:
 #   * Device Hub is never left stopped. Callbacks auto-continue, and a tap that
 #     exceeds its hits/sec budget disables itself (see dhtrace.py).
-#   * The run is bounded and detaches cleanly; the traced process survives.
+#   * The run always ends: the operator ends it, or a wall-clock cap does, and
+#     either way it detaches cleanly and the traced process survives.
 set -u
 setopt PIPE_FAIL
 
@@ -28,7 +36,9 @@ if [[ -z $pid ]]; then
   exit 3
 fi
 
-total=$(awk -F'\t' '!/^#/ && NF>=2 {s+=$1} END {print s+3}' "$script")
+drain=${DHTRACE_DRAIN:-2}          # seconds recorded after each action
+cap=${DHTRACE_CAP:-1800}           # backstop, in case the session is abandoned
+stopfile=$(mktemp -u -t dhtrace-stop)
 lldbfile=$(mktemp -t dhtrace).lldb
 
 {
@@ -44,39 +54,58 @@ lldbfile=$(mktemp -t dhtrace).lldb
     print "breakpoint command add -s python -F dhtrace.on_hit ${n}"
     print "dhtrace_tap ${n} ${label} ${spec}"
   done < "${here}/taps.tsv"
-  print "dhrun ${total}"
+  print "dhrun ${cap} ${stopfile}"
   print "dhtrace_report"
   print "quit"
 } > "$lldbfile"
-
-print "Device Hub pid ${pid}; tracing ${total}s; output ${out}"
-: > "$out"
-
-DHTRACE_OUT=$out lldb --batch -s "$lldbfile" >|"${out%.jsonl}.lldb.log" 2>&1 &
-lldbpid=$!
 
 mark() {
   python3 -c 'import json,time,sys; print(json.dumps({"kind":"mark","ts":round(time.time(),6),"text":sys.argv[1]}))' "$1" >> "$out"
 }
 
-# Let lldb attach and bind every breakpoint before the human is asked to act.
+cleanup() { : > "$stopfile"; }
+trap cleanup INT TERM
+
+print "Device Hub pid ${pid}; output ${out}"
+: > "$out"
+
+DHTRACE_OUT=$out lldb --batch -s "$lldbfile" >|"${out%.jsonl}.lldb.log" 2>&1 &
+lldbpid=$!
+
+# Let lldb attach and bind every breakpoint before the operator is asked to act.
 sleep 3
+
 print ""
-print "==================== BEGIN ===================="
-while IFS=$'\t' read -r secs prompt; do
-  [[ $secs == \#* || -z ${secs:-} ]] && continue
-  mark "$prompt"
+print "Press ENTER after finishing each step. Take as long as you need."
+print "================================================================"
+step=0
+total=$(grep -vE '^\s*(#|$)' "$script" | grep -cv '^!')
+while IFS= read -r line; do
+  [[ $line == \#* || -z ${line//[[:space:]]/} ]] && continue
+  if [[ $line == '!'* ]]; then
+    print ""
+    print "  SETUP  ${line#!}"
+    print -n "         ...then press ENTER > "
+    read -r _ < /dev/tty
+    continue
+  fi
+  step=$((step+1))
   print ""
-  print ">>> ${prompt}"
-  print "    (${secs}s)"
-  sleep "$secs"
+  print "  [${step}/${total}] ${line}"
+  print -n "          ...then press ENTER > "
+  mark "$line"
+  read -r _ < /dev/tty
+  mark "DRAIN after: ${line}"
+  sleep "$drain"
 done < "$script"
+
 mark "END"
 print ""
-print "===================== END ====================="
-
+print "================================================================"
+cleanup
 wait $lldbpid
 rc=$?
+
 print ""
 print "lldb rc=${rc}; log ${out%.jsonl}.lldb.log"
 print "captured $(grep -c . "$out") records -> ${out}"
@@ -85,3 +114,6 @@ if pgrep -x DeviceHub >/dev/null; then
 else
   print "WARNING: Device Hub is gone; restart it before the next run."
 fi
+print ""
+print "Decode with:"
+print "  ${here}/decode.py ${out} --bytes"

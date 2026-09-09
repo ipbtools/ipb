@@ -1,17 +1,27 @@
 # Action script: lock/unlock and scroll.
-# Format: <seconds><TAB><prompt>. Do exactly what each prompt says, then stop
-# and wait for the next one. Do nothing at all during the IDLE steps -- they
-# establish the background report rate everything else is measured against.
 #
-# Step 2 is a liveness check, not data: moving the pointer over the phone view
-# is known to make Device Hub send AbsolutePointer reports. If that window is
-# empty the taps are not bound and every negative result in the run is void.
-6	IDLE -- do not touch anything (baseline)
-8	LIVENESS: move the mouse slowly back and forth over the phone view
-6	IDLE -- do not touch anything
-8	Press Command-L to LOCK the screen, then stop
-8	Unlock the phone however Device Hub normally does it, then stop
-6	IDLE -- do not touch anything
-8	Two-finger scroll DOWN on the trackpad over the phone view, twice
-8	Two-finger scroll UP on the trackpad over the phone view, twice
-6	IDLE -- do not touch anything
+# One prompt per line. Do the step, then press ENTER -- steps are not timed, so
+# take as long as you need (entering a passcode, waiting for an animation).
+# Lines starting with "!" are setup: not traced, not recorded as a window.
+#
+# Step 1 is a liveness check, not data. Moving the pointer over the phone view
+# is known to make Device Hub send AbsolutePointer reports. If that window comes
+# back empty, the taps did not bind and every negative result in the run is
+# void.
+#
+# Steps 5 and 6 are the pointer-precedence test: the same scroll gesture with
+# and without an established pointer position. If scroll only works after the
+# pointer has been moved onto the view, that is the answer to why ipb's
+# ScrollReport is accepted and ignored.
+
+! Unlock the phone (type the passcode if it asks) and leave it on the Home screen
+! Bring Device Hub to the front, with the phone screen visible
+LIVENESS: move the mouse slowly back and forth over the phone view, then stop
+Do nothing at all (idle baseline)
+Press Command-L to LOCK the screen
+! Unlock the phone again -- type the passcode if it asks. Take your time.
+Open Settings on the phone and scroll it to somewhere in the middle of a long list
+Move the mouse ONTO the phone view and leave it resting over the list, without clicking
+Two-finger scroll DOWN on the trackpad, twice, without moving the pointer off the list
+Move the mouse well OUTSIDE the phone view, then two-finger scroll DOWN twice
+Do nothing at all (idle baseline)
