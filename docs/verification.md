@@ -1505,3 +1505,58 @@ path to find. `ipb lock` works by an unrelated and independently verified route 
 - **Unlock.** No route known; Device Hub's own lock does not traverse UniversalHID, so this
   capture says nothing about it.
 - **Media wedge.** Unchanged.
+
+## 2026-09-09 — Correction: waking works, and the button is a toggle
+
+Host: macOS 27 beta, Xcode 27.0.0 Beta 6. Device: iPhone 12 mini, iOS 27.
+
+Two earlier records in this file say unlock is unsolved. **They are wrong**, and the operator
+was right to push back.
+
+Consumer `0x0c`/`0x30` held is the side button, and like the side button it **toggles**. The
+same 0.7 s hold that locks an awake screen wakes a dark one. Shipped as `ipb power`, with
+`ipb lock` and `ipb wake` as aliases for the same press.
+
+### How the error happened
+
+The negative rested on one trial: a locked device, a **0.08 s** press, brightness 0.0 before and
+0.0 after. That is a true observation about a short press, and it was generalised into a property
+of the whole route. The correct reading was available in the same session's own data — locking
+had already been shown to need ≥0.5 s, so a 0.08 s press failing to wake says nothing about
+whether a held press would.
+
+A second, sloppier factor: because the press toggles, a test that does not verify the starting
+state measures nothing. An intermediate run produced "hold 0.08 → 141.8 before" — the device was
+already dark, so the `lock` that was supposed to darken it woke it instead, and the row was
+meaningless. Every row below drives the device to a screenshot-verified state first.
+
+### Measurement, both directions, state verified before each trial
+
+| From | Hold | Result |
+| --- | --- | --- |
+| bright | 0.70 s | dark |
+| dark | 0.08 s | stays dark |
+| dark | 0.20 s | stays dark |
+| dark | 0.40 s | stays dark |
+| dark | 0.70 s | **wakes, 132.0** |
+
+Toggle behaviour end to end, through all three command names:
+
+```
+start            132.1
+after ipb lock     0.0
+after ipb wake   131.8
+after ipb power    0.0
+after ipb power  131.9
+```
+
+Waking stops at the lock screen (padlock, clock, flashlight and camera affordances, confirmed by
+inspecting the screenshot). The passcode is not bypassed.
+
+### Superseded
+
+- The 2026-09-09 "Lock solved" record's *Known, not fixed* entry beginning "**Unlock.** A short
+  `0x0c/0x30` press does not wake a locked device" is withdrawn.
+- The 2026-09-09 "Second capture" record's *Known, not fixed* entry beginning "**Unlock.** No
+  route known" is withdrawn. Device Hub's own lock still does not traverse UniversalHID, which
+  remains true and is unrelated to how `ipb` does it.

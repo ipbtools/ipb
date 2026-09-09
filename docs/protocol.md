@@ -895,9 +895,23 @@ from a key transition to wire bytes. See `docs/devicehub-tracing.md`.
 
 ## Lock (source: runtime capture + on-device A/B)
 
-**`ipb lock` sends Consumer page `0x0c`, usage `0x30` (`kHIDUsage_Csmr_Power`), held.**
+**`ipb power` sends Consumer page `0x0c`, usage `0x30` (`kHIDUsage_Csmr_Power`), held.**
+`ipb lock` and `ipb wake` are the same press under different names.
 
-The hold is the whole trick. Measured on iPhone 12 mini / iOS 27:
+This is the side button, and like the side button it **toggles**: a screen that is on goes off
+and locks, a screen that is off wakes to the lock screen. Verified by driving it in both
+directions from a state confirmed by screenshot each time:
+
+| From | Hold | Result |
+| --- | --- | --- |
+| bright | 0.70 s | dark |
+| dark | 0.08 s | stays dark |
+| dark | 0.20 s | stays dark |
+| dark | 0.40 s | stays dark |
+| dark | 0.70 s | **wakes** |
+
+The hold is the whole trick, and the threshold is the same in both directions. Measured on
+iPhone 12 mini / iOS 27, locking an awake screen:
 
 | Hold | Result |
 | --- | --- |
@@ -930,8 +944,13 @@ correct guess would have looked like a failure without the hold.
 Consistent with the rest of the device's Consumer mapping already verified here: Home is
 `0x0c/0x40` (`kHIDUsage_Csmr_Menu`) and volume is `0x0c/0xE9`/`0xEA`.
 
-**Unlock is not solved.** A short `0x0c/0x30` press does not wake a locked device
-(0.0 brightness before and after), and the device requires a passcode once locked.
+Waking stops at the **lock screen** — padlock, clock, camera and flashlight affordances. The
+passcode itself is not bypassed and remains the user's to enter.
+
+**Correction.** An earlier record here stated that unlock was unsolved, on the grounds that a
+short `0x0c/0x30` press does not wake a locked device. The press does not wake it because it is
+short, not because waking is impossible: the same 0.7 s hold that locks also wakes. The
+conclusion generalised a single 0.08 s trial into a property of the whole route.
 
 ## Scroll: the full sequence Device Hub sends (source: runtime capture)
 

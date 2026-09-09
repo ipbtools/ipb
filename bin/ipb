@@ -42,7 +42,8 @@ usage:
   ipb swipe <x1> <y1> <x2> <y2> [seconds] [hold_seconds]
   ipb scroll <x> <y> <dx> <dy> [seconds]
   ipb home
-  ipb lock [hold_seconds]                    # lock the screen (Consumer 0x0c/0x30, held)
+  ipb power [hold_seconds]                   # side button: locks an on screen, wakes an off one
+  ipb lock | ipb wake                        # the same press, under the name you want
   ipb recents
   ipb screenshot <path>
   ipb stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout   # live screen frames (JPEG), no DeviceHub
@@ -618,12 +619,19 @@ case "$cmd" in
     [[ $# -eq 0 ]] || { usage; exit 2; }
     run_button cd_home_button
     ;;
-  lock)
-    # Consumer page 0x0c, usage 0x30 (kHIDUsage_Csmr_Power), held. The hold is
-    # not cosmetic: measured on iPhone 12 mini / iOS 27, 0.45s does not lock and
-    # 0.50s does, so the default carries margin above that edge. A short press
-    # does nothing at all, which is why three earlier rounds of usage guessing
-    # on the Keyboard page found nothing.
+  power|lock|wake)
+    # Consumer page 0x0c, usage 0x30 (kHIDUsage_Csmr_Power), held. This is the
+    # side button, and like the side button it TOGGLES: a screen that is on goes
+    # off and locks, a screen that is off wakes to the lock screen. `lock` and
+    # `wake` are the same press under the two names people reach for.
+    #
+    # The hold is not cosmetic. Measured on iPhone 12 mini / iOS 27, from a
+    # verified state in each direction: 0.08/0.20/0.40 s do nothing at all,
+    # 0.45 s does nothing, 0.50 s and above act. The default carries margin.
+    # A short press being inert is why three rounds of usage guessing on the
+    # Keyboard page found nothing.
+    #
+    # Waking stops at the lock screen; the passcode is still the user's to enter.
     [[ $# -le 1 ]] || { usage; exit 2; }
     run_button cd_button_click 0x0c 0x30 "${1:-0.7}"
     ;;
