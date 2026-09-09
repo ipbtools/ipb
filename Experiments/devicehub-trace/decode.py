@@ -23,11 +23,33 @@ REPORT_IDS = {
 }
 
 
-def report_name(hexbytes):
-    if not hexbytes:
+# Byte length -> the report type that is that size, for captures where the
+# bytes could not be read. Sizes come from each type's initialReportBitCount
+# plus the grown sizes observed on the wire (see docs/protocol.md).
+LEN_HINTS = {
+    19: "AbsolutePointer(19)", 21: "Scroll(7), grown", 58: "Digitizer(9), grown",
+    13: "Scroll(7), initial", 31: "Keyboard(1), initial", 17: "Pointer(5)",
+    9: "Consumer(2)", 5: "AppleVendorTopCase(4)", 3: "AppleVendorKeyboard(3)",
+}
+
+
+def report_name(rep):
+    """Name a report by its first byte, falling back to its length."""
+    if not isinstance(rep, dict):
         return "?"
-    rid = int(hexbytes[0:2], 16)
-    return "%s(%d)" % (REPORT_IDS.get(rid, "Unknown"), rid)
+    b = rep.get("bytes")
+    if b:
+        rid = int(b[0:2], 16)
+        return "%s(%d)" % (REPORT_IDS.get(rid, "Unknown"), rid)
+    n = rep.get("len")
+    if n is None and rep.get("w0"):
+        # Captures made before the range decode landed carry only the raw
+        # words; the length is still recoverable from word0's range.
+        w0 = int(rep["w0"], 16)
+        n = ((w0 >> 32) & 0xFFFFFFFF) - (w0 & 0xFFFFFFFF)
+    if n:
+        return "%s [%dB, bytes unread]" % (LEN_HINTS.get(n, "unknown"), n)
+    return "?"
 
 
 def iter_reports(rec):
@@ -83,10 +105,18 @@ def main():
         kinds = Counter()
         for rec in recs:
             for rep in iter_reports(rec):
-                b = rep.get("bytes")
-                kinds[report_name(b)] += 1
-                if show_bytes and b:
-                    print("      %-22s %s" % (report_name(b), b))
+                name = report_name(rep)
+                kinds[name] += 1
+                if show_bytes:
+                    b = rep.get("bytes")
+                    if b:
+                        print("      %-26s %s" % (name, b))
+                    else:
+                        alt = {k: v for k, v in rep.items()
+                               if k.startswith("bytes_at_")}
+                        if alt:
+                            for k, v in alt.items():
+                                print("      %-26s %s=%s" % (name, k, v))
             if rec.get("words"):
                 print("      words %s" % rec["words"])
         if kinds:

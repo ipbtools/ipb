@@ -1370,3 +1370,66 @@ Apple's public `IOHIDUsageTables.h` plus the already-verified Home = `0x0c/0x40`
   leading hypothesis is now that `0x501` is a trackpad-hinted service and iOS delivers trackpad
   scroll to the view under the pointer, which requires an `AbsolutePointerReport` (ID 19) session
   that Device Hub maintains continuously and `ipb` never establishes.
+
+## 2026-09-09 — First real Device Hub capture (operator-paced)
+
+Host: macOS 27 beta, Xcode 27.0.0 Beta 6. Device: iPhone 12 mini, iOS 27.
+Capture: 2376 records over 150 s, 11 steps, 0 tap errors, operator-ended detach,
+Device Hub survived.
+
+All five taps bound (verified in the lldb log before trusting any zero).
+
+### Valid negatives (tap bound, zero hits, other taps firing throughout)
+
+- **The `UInt64` `send(report:to:)` overload is never used.** Zero hits while the
+  `HIDServiceID` overload took 493. Device Hub's DeviceKit call site uses the typed one.
+- **`KeyboardFilter.updateCopyMask` is not on the lock path.** Zero hits across the Cmd-L
+  window. The hypothesis that it was the shortest path from key transition to wire bytes was
+  wrong.
+
+### What Device Hub actually sends
+
+Report sizes are read from word0 of the `HIDReport` ABI pair, which is a Data range
+(start in the low 32 bits, end in the high 32 bits).
+
+| Operator action | Reports Device Hub sent |
+| --- | --- |
+| Pointer moved over the phone view | AbsolutePointer, 19 B |
+| Idle | nothing at all |
+| Cmd-L (lock) | AbsolutePointer ×10, **39 B ×4** |
+| Scrolling a Settings list | Scroll 21 B ×198, **Digitizer 58 B ×2**, AbsolutePointer ×31 |
+| Pointer resting on the list, no gesture | AbsolutePointer ×3 |
+| Two-finger scroll, pointer on the list | Scroll 21 B ×163, **Digitizer 58 B ×44**, AbsolutePointer ×29 |
+
+Two findings that change the scroll work:
+
+- **Device Hub's scroll reports are 21 bytes / 168 bits**, not the 104-bit
+  `initialReportBitCount`. The 104 -> 168 change in `ipb` therefore matches what Device Hub
+  puts on the wire. The 2026-09-09 retraction above was right that it did not fix a
+  *truncation* (the fields written fit in 104 bits) but wrong to imply 168 was arbitrary.
+- **Device Hub sends 58-byte Digitizer reports throughout a trackpad scroll** — 44 of them
+  during a single two-finger scroll. `ipb` sends none. A two-finger trackpad gesture is being
+  reported as digitizer contacts alongside the scroll reports, which is a stronger candidate
+  for the missing precondition than the AbsolutePointer cursor hypothesis.
+
+### Invalidated by the harness's own guard
+
+All three taps shed at 121-123 s for exceeding their hit budget. The decisive
+pointer-precedence window ("move the pointer outside the view, then scroll") begins at
+127.6 s, **after** the shed, so its emptiness is not evidence. Per the methodology's own rule,
+that comparison is void and needs a re-run. The shed was recorded, surfaced by `decode.py`,
+and caught before the window was read as a result — which is what the guard is for.
+
+Cause: the filter chain is a reduce over every filter, so `KeyboardFilter.filterEvent` and
+`ScrollFilter.filterEvent` fire for *every* event regardless of type. Three taps at ~31 hits/s
+each exceeded a 20/s budget. The manifest is now reduced to the single universal `send` tap and
+the budget raised to 60/s; the filter taps are commented out with this evidence rather than
+deleted.
+
+### Decoder defect found and fixed
+
+Every report came back "storage header unreadable" while the lengths decoded perfectly. The
+decoder looked for the storage pointer in word0, but word0 is the Data *range* and the tagged
+pointer is in word1 (top byte a discriminator, e.g. `0x4000000a89eba800`). Fixed, and the raw
+storage head is now always recorded so a wrong guess about the buffer offset shows up as data.
+The bytes themselves are still uncaptured; that is what the next run is for.

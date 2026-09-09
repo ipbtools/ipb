@@ -30,7 +30,7 @@ import lldb
 
 # Per-breakpoint budget. 20/s is ~10% of the measured saturation rate, which
 # leaves Device Hub visibly responsive.
-BUDGET_HITS_PER_S = float(os.environ.get("DHTRACE_BUDGET", "20"))
+BUDGET_HITS_PER_S = float(os.environ.get("DHTRACE_BUDGET", "60"))
 BUDGET_WINDOW_S = 1.0
 
 # A HIDReport wraps a Foundation Data value, which is a tagged representation
@@ -92,29 +92,60 @@ def _read(proc, addr, size):
 
 
 def decode_report_words(proc, word0, word1):
-    """Decode a HIDReport from its two ABI words. Never raises."""
-    tag = (word1 >> 62) & 0x3
-    if tag == 0:
-        n = (word1 >> 48) & 0xFF
-        if n <= INLINE_MAX:
-            raw = struct.pack("<QQ", word0, word1)[:n]
-            return {"repr": "inline", "len": n, "bytes": raw.hex()}
-        return {"repr": "inline", "len": n, "error": "inline length out of range",
-                "w0": hex(word0), "w1": hex(word1)}
-    hdr = _read(proc, word0 + STORAGE_BYTES_PTR_OFF, 16)
-    if hdr is None:
-        return {"repr": "heap", "tag": tag, "w0": hex(word0), "w1": hex(word1),
-                "error": "storage header unreadable"}
-    ptr, length = struct.unpack("<QQ", hdr)
-    if not ptr or not (0 < length <= REPORT_LEN_MAX):
-        return {"repr": "heap", "tag": tag, "w0": hex(word0), "w1": hex(word1),
-                "bytes_ptr": hex(ptr), "len": length,
-                "error": "implausible storage length"}
-    body = _read(proc, ptr, length)
-    if body is None:
-        return {"repr": "heap", "tag": tag, "len": length,
-                "error": "storage body unreadable"}
-    return {"repr": "heap", "tag": tag, "len": length, "bytes": body.hex()}
+    """Decode a HIDReport from its two ABI words. Never raises.
+
+    Measured shape, from a live capture (2026-09-09):
+
+        word0 = 0x0000002700000000   a Data range: start in the low 32 bits,
+                                     end in the high 32 bits, so length 39
+        word1 = 0x4000000a89eba800   a tagged reference: the top byte is a
+                                     discriminator, the rest is the pointer
+
+    An earlier version looked for the storage pointer in word0 and read a range
+    field as an address, which is why every report in that capture came back
+    "storage header unreadable" while the lengths were perfectly good. Both
+    plausible readings of the pointer are attempted and the raw storage head is
+    always recorded, so a wrong guess shows up as data rather than as silence.
+    """
+    start = word0 & 0xFFFFFFFF
+    end = (word0 >> 32) & 0xFFFFFFFF
+    length = end - start
+    rec = {"start": start, "len": length, "w0": hex(word0), "w1": hex(word1)}
+    if not (0 < length <= REPORT_LEN_MAX):
+        rec["error"] = "implausible length"
+        return rec
+
+    ptr = word1 & 0x00FFFFFFFFFFFFFF
+    if not ptr:
+        rec["error"] = "null storage pointer"
+        return rec
+    rec["storage"] = hex(ptr)
+
+    head = _read(proc, ptr, 48)
+    if head is not None:
+        rec["storage_head"] = head.hex()
+
+    # (a) the storage object holds a pointer to the bytes at +16
+    hdr = _read(proc, ptr + STORAGE_BYTES_PTR_OFF, 8)
+    if hdr is not None:
+        (bp,) = struct.unpack("<Q", hdr)
+        if bp:
+            body = _read(proc, bp + start, length)
+            if body is not None:
+                rec["bytes"] = body.hex()
+                rec["via"] = "storage+16"
+                return rec
+
+    # (b) the bytes live inside the storage object itself
+    if head is not None:
+        for off in (32, 24, 16):
+            body = _read(proc, ptr + off + start, length)
+            if body is not None:
+                rec["bytes_at_%d" % off] = body.hex()
+        rec["via"] = "inline-candidates"
+    else:
+        rec["error"] = "storage unreadable"
+    return rec
 
 
 def read_report_array(proc, arr):

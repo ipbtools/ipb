@@ -16,15 +16,30 @@
 # --- the transport boundary: every report that reaches the device ----------
 # This is the universal tap. It is also the one that sees the AbsolutePointer
 # flood, so it relies on the governor to shed itself if Device Hub gets busy.
-send	CoreDevice	$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HIDReportV_s6UInt64VtAA0aB5ErrorVYKFTj	{"report_arg":"x0"}
+#send	CoreDevice	$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HIDReportV_s6UInt64VtAA0aB5ErrorVYKFTj	{"report_arg":"x0"}
 send_id	CoreDevice	$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HIDReportV_AA0D2IDVtAA0aB5ErrorVYKFTj	{"report_arg":"x0"}
 
 # --- lock / unlock: the keyboard filter and the function that builds reports -
 # updateCopyMask takes two HIDEventMask values. HIDEventMask is an OptionSet
 # over UInt, so both arrive as plain integers, and it returns [HIDReport]
 # directly — this is where a key transition becomes wire bytes.
-kbd_copymask	UniversalHID	$s12UniversalHID14KeyboardFilterC14updateCopyMask8oldValue03newI0SayAA9HIDReportVGAA08HIDEventG0V_AKtF	{"args_are_words":["x0","x1"],"returns":"report_array"}
-kbd_filter	UniversalHID	$s12UniversalHID14KeyboardFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"report_array_x1"}
+#kbd_copymask	UniversalHID	$s12UniversalHID14KeyboardFilterC14updateCopyMask8oldValue03newI0SayAA9HIDReportVGAA08HIDEventG0V_AKtF	{"args_are_words":["x0","x1"],"returns":"report_array"}
+#kbd_filter	UniversalHID	$s12UniversalHID14KeyboardFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"report_array_x1"}
 
 # --- scroll ----------------------------------------------------------------
-scroll_filter	UniversalHID	$s12UniversalHID12ScrollFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"report_array_x1"}
+#scroll_filter	UniversalHID	$s12UniversalHID12ScrollFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"report_array_x1"}
+
+# Disabled above, with the evidence, rather than deleted:
+#
+#   send          the UInt64 overload. Bound, zero hits across a 150 s capture
+#                 in which the HIDServiceID overload took 493. DeviceKit uses
+#                 the typed one.
+#   kbd_copymask  bound, zero hits while Cmd-L was pressed and other taps fired
+#                 throughout. updateCopyMask is not on the lock path.
+#   kbd_filter    every filter runs for every event (the chain is a reduce over
+#   scroll_filter the filter array), so these fire on all traffic regardless of
+#                 type and triple the hit rate for attribution the send tap
+#                 already provides. They shed at ~31 hits/s each and took the
+#                 send tap down with them, voiding the last two windows of the
+#                 2026-09-09 capture. Re-enable one at a time when attribution
+#                 is the actual question.
