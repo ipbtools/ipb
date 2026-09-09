@@ -1638,3 +1638,39 @@ move the list about as far as a real swipe does.
   earlier work rather than confirmed. Sweeping 0x300/0x301/0x101/0x400/0x500/0x501 produced no
   difference, which is consistent with the service not being the blocker, but does not confirm
   the value. The tracer should dereference `x2` on the next capture.
+
+## 2026-09-09 — Mirror scroll: both axes were inverted
+
+Reported from real use of `ipb mirror`: horizontal scroll worked but ran opposite to Device Hub,
+and vertical scroll did nothing on either the Home screen or Settings.
+
+Both are one bug. `convertScroll` passed AppKit's `scrollingDeltaX/Y` through with its delivered
+sign, carrying a comment that the sign was `UNVERIFIED` and needed real-device calibration. It is
+now calibrated:
+
+- A captured two-finger scroll **down** put `y = -5..-8` on the wire (`docs/protocol.md`).
+- The mirror, passing AppKit's sign through, moved the device the **opposite** way from Device Hub
+  for the same physical gesture.
+
+So Device Hub negates the delivered delta on both axes. This host has natural scrolling on
+(`com.apple.swipescrolldirection` unset).
+
+The asymmetry in the report — horizontal "reversed", vertical "dead" — is explained by where the
+inverted direction lands rather than by the axes differing. An inverted vertical scroll on
+Settings pushes against the top of the list, and the Home screen does not scroll vertically at
+all, so vertical reads as nothing happening while horizontal reads as backwards.
+
+Also changed: the mirror now builds its reports with `uhid_make_scroll_wire_hid_report` instead
+of `uhid_make_scroll_hid_report`, so they carry `remoteTimestamp`. Device Hub sets it on every
+report and the shim path left it zero. Byte 1 carries the phase (`0x80`/`0x01`/`0x02`/`0x04`) and
+byte 2 the momentum, which is exactly what the mirror's `scroll.phase` and `scroll.momentum`
+already held.
+
+**Not yet verified on device** — needs a mirror session to confirm both axes now match Device Hub.
+
+### Still not done
+
+The mirror sends no `AbsolutePointerReport`. Device Hub sends one continuously as the pointer
+moves, and the capture showed it emits no scroll report at all unless the pointer is over the
+phone view. If scrolling is still unreliable after the sign fix, establishing the pointer is the
+next thing to add.

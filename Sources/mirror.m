@@ -65,6 +65,7 @@ extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc
 // using the existing Xcode 27 oracle glue unchanged.
 extern int uhid_make_digitizer_hid_report(double,double,int,int,void*);
 extern int uhid_make_scroll_hid_report(int64_t,int64_t,uint32_t,uint32_t,uint32_t,double,double,void*);
+extern int uhid_make_scroll_wire_hid_report(int32_t,int32_t,uint32_t,uint32_t,double,double,void*);
 extern int coredevice_print_connected_descriptors_async_raw(xrc_t);
 extern int coredevice_send_universalhid_hid_report(xrc_t,const void*,uint64_t);
 extern int coredevice_send_universalhid_barrier(xrc_t);
@@ -682,8 +683,14 @@ static void drainInput(void){
                 int count=sizeof words;
                 if(activeMode!=BottomEdge){
                     ScrollReport scroll=event.scroll;
-                    count=scrolling?uhid_make_scroll_hid_report(scroll.rawX,scroll.rawY,scroll.phase,
-                        scroll.momentum,scroll.flags,scroll.accelX,scroll.accelY,words):
+                    // The wire builder, not uhid_make_scroll_hid_report: it stamps
+                    // remoteTimestamp, which Device Hub sets on every report and
+                    // the shim path leaves zero. Byte 1 carries the phase
+                    // directly (0x80/0x01/0x02/0x04) and byte 2 the momentum,
+                    // which is exactly what scroll.phase and scroll.momentum
+                    // already hold.
+                    count=scrolling?uhid_make_scroll_wire_hid_report((int32_t)scroll.rawX,(int32_t)scroll.rawY,
+                        scroll.phase,scroll.momentum,scroll.accelX,scroll.accelY,words):
                         uhid_make_digitizer_hid_report(event.x,event.y,!ends,!ends,words);
                 }
                 if(count!=sizeof words){ r.result=BuildFailed; r.reportCode=count; inputError(@"HID report construction failed"); }
@@ -782,7 +789,15 @@ static Result convertScroll(NSEvent *event,ScrollReport *out){
     if(out->phase && out->momentum) return ScrollUnsupported;
     BOOL precise=event.hasPreciseScrollingDeltas;
     if(precise?(!out->phase && !out->momentum):(out->phase || out->momentum)) return ScrollUnsupported;
-    double gain=precise?ScrollPreciseGain:ScrollWheelGain;
+    // Device Hub negates AppKit's delivered delta on both axes. Established
+    // two ways: a captured two-finger scroll DOWN put y = -5..-8 on the wire
+    // (docs/protocol.md), and the mirror, which passed AppKit's sign straight
+    // through, scrolled the device the opposite way from Device Hub for the
+    // same physical gesture. Passing the sign through also made vertical scroll
+    // look dead rather than reversed, because an inverted downward scroll runs
+    // straight into the top of the list on Settings, and the Home screen does
+    // not scroll vertically at all.
+    double gain=precise?-ScrollPreciseGain:-ScrollWheelGain;
     double x=event.scrollingDeltaX*gain,y=event.scrollingDeltaY*gain;
     // Signed 16.16 capacity; glue accepts Double and performs fixed-point encoding.
     if(!isfinite(x) || !isfinite(y) || x<-32768 || y<-32768 ||
