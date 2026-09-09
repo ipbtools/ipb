@@ -932,3 +932,82 @@ Consistent with the rest of the device's Consumer mapping already verified here:
 
 **Unlock is not solved.** A short `0x0c/0x30` press does not wake a locked device
 (0.0 brightness before and after), and the device requires a passcode once locked.
+
+## Scroll: the full sequence Device Hub sends (source: runtime capture)
+
+Captured at `UniversalHIDService.send(report:to:)` (the `HIDServiceID` overload) while an operator
+performed two two-finger trackpad scrolls over a Settings list, 2026-09-09.
+
+A single trackpad scroll is **not** one report. It is:
+
+| Order | Report | flags | momentum | x, y | Meaning |
+| --- | --- | --- | --- | --- | --- |
+| 1 | AbsolutePointer (19) ×N | — | — | position | establishes where the pointer is |
+| 2 | Scroll (7) ×1 | `0x80` | 0 | 0, 0 | may-begin; carries no movement |
+| 3 | Scroll (7) ×1 | `0x01` | 0 | first delta | began |
+| 4 | Scroll (7) ×N | `0x02` | 0 | deltas | changed — the actual movement |
+| 5 | Scroll (7) ×1 | `0x04` | 0 | 0, 0 | ended; carries no movement |
+| 6 | Scroll (7) ×N | `0x00` | 2, then 1 | decaying deltas | momentum / inertia tail |
+
+Observed twice in one window, once per physical scroll.
+
+### Wire layout, confirmed against these bytes
+
+21 bytes / 168 bits (not the 104-bit `initialReportBitCount`):
+
+```
+07 02 00 00 fb f4 fd ff ff 6e da ff ff 52 0c 79 06 46 01 00 00
+|  |  |  |  |  \__________/ \__________/ \____________________/
+|  |  |  |  |   accelX       accelY       remoteTimestamp
+|  |  |  |  y (int8)
+|  |  |  x (int8)
+|  |  momentum
+|  flags (phase)
+report ID 7
+```
+
+`accelX`/`accelY` are 32-bit signed 16.16 fixed point. `remoteTimestamp` occupies bytes 13-20 and
+is populated on every report.
+
+### Why `ipb`'s scroll is accepted and ignored
+
+`ipb` sends a single `ScrollReport` and nothing else. Compared with the above it is missing:
+
+1. **Any `AbsolutePointer` report.** Device Hub keeps the pointer position current; `ipb` never
+   sends report ID 19 at all.
+2. **The `0x80` may-begin and `0x01` began reports.** `ipb` sends a bare movement report with no
+   phase opening.
+3. **The `0x04` ended report and the momentum tail.**
+4. **`remoteTimestamp`**, which `ipb`'s builder leaves unset.
+
+The pointer requirement is directly evidenced rather than inferred: with the pointer resting on
+the list, a two-finger scroll produced 67 `Scroll` reports; with the pointer moved outside the
+phone view, the same gesture produced **zero** `Scroll` reports and only `AbsolutePointer` traffic.
+Device Hub itself will not emit a scroll report unless the pointer is over the view.
+
+## Lock: Device Hub does not send it over UniversalHID
+
+Cmd-L in Device Hub produces exactly **two** reports at the send boundary, both `KeyboardReport`
+(ID 1), 39 bytes:
+
+```
+press    01 00 ... 00 08 00 4a 52 10 bd 45 01 00 00
+                     ^^ byte 29
+release  01 00 ... 00 00 00 91 aa ce bf 45 01 00 00
+```
+
+They differ in one byte. Byte 29 bit 3 is absolute bit **235**; `ipb`'s own builder maps a usage to
+`bit = usage + 8`, so bit 235 is usage **227 = 0xE3 = Keyboard Left GUI**, i.e. the Command
+modifier. Bytes 31-38 are `remoteTimestamp`.
+
+So what crosses the wire for Cmd-L is **Command down, Command up, and nothing else**. The "L" is
+consumed by AppKit as a menu shortcut and never reaches the device, and no lock command appears at
+`UniversalHIDService.send` either — during that window the universal tap captured these two reports
+and no others, while capturing 497 reports across the run as a whole.
+
+Device Hub therefore locks the phone through some channel that is not UniversalHID. This does not
+block `ipb`: `ipb lock` locks the device by a different and independently verified route
+(Consumer `0x0c`/`0x30`, held; see above).
+
+Note also that `KeyboardReport` on the wire is 39 bytes, where `ipb`'s builder allocates
+`0xf8` = 248 bits = 31 bytes and writes no timestamp.

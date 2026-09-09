@@ -1433,3 +1433,75 @@ decoder looked for the storage pointer in word0, but word0 is the Data *range* a
 pointer is in word1 (top byte a discriminator, e.g. `0x4000000a89eba800`). Fixed, and the raw
 storage head is now always recorded so a wrong guess about the buffer offset shows up as data.
 The bytes themselves are still uncaptured; that is what the next run is for.
+
+## 2026-09-09 — Second capture: clean, and it answers both open questions
+
+Host: macOS 27 beta, Xcode 27.0.0 Beta 6. Device: iPhone 12 mini, iOS 27.
+Capture: 497 reports over 127 s, one tap, **0 sheds, 0 tap errors**, operator-ended detach,
+Device Hub survived. **497 of 497 reports decoded to bytes** via the storage pointer in word1.
+
+The three fixes from the previous run all held: the manifest reduced to the single universal
+`send` tap stayed at ~4 hits/s average and never approached the 60/s budget; the word1 pointer
+decode produced bytes on every record; and the timed windows let the operator perform steps that
+depend on pointer position, which the ENTER-gated version had made impossible.
+
+### Per-window result
+
+| Window | Reports |
+| --- | --- |
+| Pointer moved over the phone view (liveness) | AbsolutePointer ×61 |
+| Idle | **nothing** |
+| Cmd-L to lock | **Keyboard ×2, nothing else** |
+| Two-finger scroll, pointer **on** the list | Scroll ×67, AbsolutePointer ×19 |
+| Two-finger scroll, pointer **outside** the view | **Scroll ×0**, AbsolutePointer ×44 |
+| Idle | **nothing** |
+
+The liveness window was non-empty, so the negatives in this run are valid.
+
+### Scroll: answered
+
+The pointer-precedence comparison that the previous run lost to a shed now has a clean result.
+The same gesture produces 67 scroll reports with the pointer over the list and **zero** with the
+pointer outside the view. Device Hub will not emit a scroll report unless the pointer is over the
+phone view.
+
+A scroll is also a six-part sequence, not one report: AbsolutePointer to place the cursor, then
+Scroll with flags `0x80` (may-begin), `0x01` (began), `0x02` ×N (the movement), `0x04` (ended),
+then a momentum tail with flags `0x00` and momentum 2 then 1, deltas decaying to zero. Observed
+twice, once per physical scroll. Full byte layout, verified field by field against these captures,
+is in `docs/protocol.md`.
+
+`ipb` sends a single bare movement report with no pointer, no phase opening, no end, no momentum
+tail and no timestamp. That is why it is accepted and ignored.
+
+### Lock: answered, and it is not what we were looking for
+
+Cmd-L produces exactly two `KeyboardReport`s (ID 1, 39 bytes) differing in one byte. Byte 29 bit 3
+is absolute bit 235, and `ipb`'s own builder maps usage to `bit = usage + 8`, so that is usage
+`0xE3` = Keyboard Left GUI — the Command modifier. Command down, Command up, nothing else.
+
+AppKit consumes the "L" as a menu shortcut, and no lock command reaches
+`UniversalHIDService.send`. **Device Hub does not lock the phone over UniversalHID at all.** The
+universal tap captured 497 reports across the run and only those two during the lock window, so
+this is a valid negative rather than a missed capture.
+
+This closes the question that three earlier rounds chased: there was never a lock report on this
+path to find. `ipb lock` works by an unrelated and independently verified route (Consumer
+`0x0c`/`0x30`, held).
+
+### Corrections this run forces
+
+- The 2026-09-09 retraction of the `ScrollReport` 104 -> 168 change was too strong. Device Hub's
+  scroll reports are 21 bytes / 168 bits on the wire, so 168 is correct; the change simply was not
+  a *truncation* fix, since the fields `ipb` writes fit in 104 bits.
+- `KeyboardFilter.updateCopyMask` is not on the lock path (bound, zero hits). The hypothesis that
+  it was the shortest route from key transition to wire bytes was wrong.
+- The `UInt64` `send(report:to:)` overload is never used; Device Hub uses the `HIDServiceID` one.
+
+### Known, not fixed
+
+- **Scroll is understood but not yet implemented.** `ipb` needs AbsolutePointer support plus the
+  full phase sequence and momentum tail.
+- **Unlock.** No route known; Device Hub's own lock does not traverse UniversalHID, so this
+  capture says nothing about it.
+- **Media wedge.** Unchanged.
