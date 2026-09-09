@@ -198,6 +198,14 @@ func uhidFluidSetXABI(_ report: UnsafeMutableRawPointer, _ metadata: UnsafeRawPo
 func uhidFluidSetYABI(_ report: UnsafeMutableRawPointer, _ metadata: UnsafeRawPointer, _ witness: UnsafeRawPointer, _ y: Double)
 
 let universalHIDFrameworkPath = "/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks/UniversalHID.framework/UniversalHID"
+// Source: disassembly of universalHIDFrameworkPath, UniversalHID 90.1 on macOS 26.5.1,
+// LC_UUID E3C64825-61D8-3DF4-97CE-F86D53955566 (fix-reports.md evidence).
+// Digitizer: swipe pending/locked/up setters at 0x53344/0x533d0/0x5345c
+// address bits 424/429/434; remaining swipe fields and padding end at bit 464.
+let digitizerReportBitCount = 464
+// ScrollReport layout: remoteTimestamp occupies bits 104..<168. Leave it zero,
+// as ScrollReport.init(scrollEvent:) does; initialD8BitCount only covers 104 bits.
+let scrollReportBitCount = 168
 let universalHIDHandle = dlopen(universalHIDFrameworkPath, RTLD_NOW | RTLD_GLOBAL)
 
 func universalHIDSymbol(_ name: String) -> UnsafeRawPointer {
@@ -217,7 +225,6 @@ let navigationSwipeFluidWitness = universalHIDSymbol("$s12UniversalHID21Navigati
 
 func makeDigitizerReportData(x: Double, y: Double, touching: Bool, inRange: Bool) -> Data {
     let digitizerReportID: UInt8 = 0x09
-    let digitizerReportBitCount = 0x140
 
     let hidReport = uhidHIDReportInit(digitizerReportBitCount, digitizerReportID)
     var report = uhidDigitizerReportInitUnderscore(hidReport)
@@ -358,7 +365,7 @@ func makeScrollHIDReport(
         return nil
     }
 
-    let hidReport = uhidHIDReportInit(uhidScrollReportInitialBitCount(), uhidScrollReportID())
+    let hidReport = uhidHIDReportInit(scrollReportBitCount, uhidScrollReportID())
     var report = uhidScrollReportInitUnderscore(hidReport)
     var collection = uhidScrollCollectionInit()
 
@@ -406,7 +413,7 @@ public func uhidMakeDigitizerHIDReport(
     _ inRange: Int32,
     _ output: UnsafeMutableRawPointer?
 ) -> Int32 {
-    let hidReport = uhidHIDReportInit(0x140, 0x09)
+    let hidReport = uhidHIDReportInit(digitizerReportBitCount, 0x09)
     var report = uhidDigitizerReportInitUnderscore(hidReport)
     var contact = uhidDigitizerContactInit()
 
@@ -520,7 +527,7 @@ public func uhidMakeDigitizerSwipeHIDReport(
     _ swipeUp: Int32,
     _ output: UnsafeMutableRawPointer?
 ) -> Int32 {
-    let hidReport = uhidHIDReportInit(0x140, 0x09)
+    let hidReport = uhidHIDReportInit(digitizerReportBitCount, 0x09)
     var report = uhidDigitizerReportInitUnderscore(hidReport)
     var contact = uhidDigitizerContactInit()
 

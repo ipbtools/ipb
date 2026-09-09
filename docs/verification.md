@@ -1037,3 +1037,166 @@ and bottom rows contain image data (mean 195-215) rather than padding, confirmin
 than a rescale.
 
 This closes the "known and uncompensated ~1.2%/1.7% offset" recorded in the M2/M3 entry above.
+
+## 2026-09-09 — mirror gestures: bottom edge works, scroll does not, and why
+
+User-reported gaps after the mirror shipped: the window did not forward scroll events, and a
+bottom-up drag did nothing. Both are things DeviceHub does.
+
+### Bottom-edge gesture: fixed and user-verified
+
+A controlled experiment settled which report type is needed. Same coordinates, same duration,
+only the report type differs, iPhone 13 Pro / iOS 27.0 starting from Settings, judged by the mean
+saturation of the bottom 8% of a device screenshot plus looking at the image:
+
+| condition | bottom saturation | result |
+| --- | --- | --- |
+| Settings baseline | 0.033 | — |
+| plain touch report on 0x101, `(0.5,0.995)->(0.5,0.55)`, 420 ms | 0.033 | **nothing happened** |
+| `ipb recents` (digitizer `IndigoDigitizerEvent`, `edge=bottom`) | 0.721 | App Switcher |
+
+This corrects an earlier claim in this session that plain touch reports "do not trigger system edge
+gestures" — that had been an inference; this is the experiment that establishes it, and its scope is
+exactly these parameters, not every possible parameterisation.
+
+Apple's own path was then traced by disassembly (DeviceKit 255.2.3, UniversalHID 90.1):
+
+```
+DigitizerState.handleTouch(mouseEventType:...)   DeviceKit 0x421e04
+  -> TouchResult.digitizerEvent()                DeviceKit 0x4216f0   -> UniversalHID.DigitizerEvent
+  -> bottom branch adds swipeUp|swipeLocked      DeviceKit 0x4219d0
+  -> DigitizerFilter.filterEvent(...)            UniversalHID 0x8875c
+  -> UniversalHIDService.send(report:to:)        DeviceKit 0x435b64
+```
+
+`handleTouch` stores `initialEdge` at touch-down and keeps it for the whole gesture, with
+`DigitizerState.detectEdge` (0x4224a4) using inner/outer insets — so edge membership is decided on
+press, not re-evaluated per move. The mirror now mirrors that: mode is frozen at mouseDown, the
+bottom 2% is the hit zone (a product choice, noted as such in the source, not an Apple threshold),
+and each real mouse event sends one `start`/`position`/`end` with `edge=bottom`, no interpolation,
+no fixed delays, and no client-side Home-vs-App-Switcher decision. **The user confirmed dragging
+now works.**
+
+A correction worth recording: an earlier reading of this session concluded from
+`UniversalHID.FluidTouchGestureReportProtocol` (fields `phase, progress, delta, velocity,
+velocityX/Y, swipeMask, gestureMotion, flavor, flags, x, y`) that DeviceHub sends velocity from the
+host. That inference had the direction wrong. `NavigationSwipeGesture.dispatch(report:)`
+(UniversalHID 0x7372c) **consumes** a report and builds IOHIDEvents from it; it is the decoding
+side. No call from the mouse path into FluidTouch report construction exists in DeviceKit.
+
+### Scroll: sent successfully, ignored by the device
+
+Through the mirror, one process, one connection, real timing:
+
+```
+submitted=185  executed=185  rejected=0  scroll_unsupported=0
+device: 0.0% pixel change (both precise/trackpad and discrete/line synthetic events)
+```
+
+Via the CLI, all three field combinations — raw `dx/dy` only, accel only, both — also produced
+**0.0%**, while `ipb scroll` (a touch swipe, not a scroll report) moved 27.7% of pixels. So the
+failure is not the unverified gain constants; the whole path has no device effect.
+
+The repo's own history explains why this was never noticed: the scroll-report record at
+`docs/protocol.md:499` was a **zero-movement** send. `ipb scroll-report` has never been shown to
+scroll anything since it shipped.
+
+### Root cause candidate: report allocation uses a static bit count
+
+Captured live with lldb on DeviceHub during a real trackpad scroll — breakpoint on
+`ScrollReport.init(scrollEvent:)`, which fires only for scrolls:
+
+```
+DeviceKit sub_42874c -> UniversalHIDKit EventObserver.processEvent(_:)
+  -> Sequence.reduce(into:_:) -> UniversalHIDKit sub_2777dda50
+  -> UniversalHID ScrollFilter.filterEvent(_:) -> ScrollReport.init(scrollEvent:)
+```
+
+Disassembling that initialiser shows the construction order:
+
+```
+HIDReportDescriptor.reportBitCount(for: ReportID) -> Int      <- queries the descriptor
+HIDReport.init(bitCount:id:)                                  <- allocates with that
+ScrollCollection.init(scrollEvent:)                           <- then fills fields
+```
+
+`static ScrollReport.initialReportBitCount.getter` is `mov w0, #0x68` — **104 bits**. Apple does not
+use it; it asks the descriptor every time. Our glue does the opposite:
+
+| builder | allocation | note |
+| --- | --- | --- |
+| `Sources/universalhid_glue.swift:361` scroll | `uhidScrollReportInitialBitCount()` = 104 | static |
+| `:409` digitizer | `uhidHIDReportInit(0x140, 0x09)` | hardcoded 320 |
+| `:523` digitizer swipe | `uhidHIDReportInit(0x140, 0x09)` | hardcoded 320, while contact 0's swipe pending/locked/up bits are at **424/429/434** |
+
+`setContactSwipePending` (UniversalHID 0x5339c) returns early when capacity is short, so oversized
+field writes are **silently dropped**. That is a single systematic defect with two visible symptoms:
+`ipb uhid-swipe-report` accepts `pending/locked/up` arguments and discards them, and scroll reports
+go out without whatever the device needs.
+
+**Not yet established:** the exact bit offsets and widths of the scroll fields, whether 104 is
+actually short, and whether `ScrollReport.init(scrollEvent:)` also sets fields our field-by-field
+construction never touches. Fixing the bit count may be necessary but not sufficient. Under
+investigation; no code changed on this basis yet.
+
+### Method note, and a mistake
+
+An earlier attempt to capture DeviceHub put a breakpoint on `UniversalHIDService.send(report:to:)`,
+which fires on every HID report — 162 hits in 16 s with a register dump each — and froze DeviceHub
+badly enough that the user had to restart it. The working approach is a breakpoint on a
+scroll-specific symbol with no auto-continue: it stops once, dumps, and detaches.
+
+Synthetic `CGEvent` drags and scrolls reach our own mirror reliably but **do not** reproduce
+DeviceHub's gestures, even with `kCGMouseEventDeltaX/Y` populated, so DeviceHub comparisons need
+real user input. Two rounds of synthetic tests were invalidated by a stale window rectangle after
+the DeviceHub window resized below a size filter in the test tool.
+
+### Still to do
+
+- Scroll: confirm the bit offsets, fix allocation, re-verify with a device effect (not `rc=0`).
+- Horizontal scroll rides the same path; it needs no separate protocol work once scroll works.
+- Lock/unlock (DeviceHub's `Cmd-L`) still has no usage code. It is now obtainable the same way:
+  breakpoint the send path while the user presses the shortcut in DeviceHub.
+
+
+## 2026-09-09 — Report allocation and mirror scroll fields (build only)
+
+- Scope: `fix-reports.md` supplied brief; disassembly evidence supplied by peer, not independently recaptured: UniversalHID 90.1, UUID E3C64825-61D8-3DF4-97CE-F86D53955566, macOS 26.5.1. All three Digitizer allocations now use 464 bits; Scroll uses 168 bits. This addresses swipe-field truncation, not proof of a gesture fix.
+- Mirror precise and wheel conversion now both populate raw and accel fields. Raw uses nearest rounding with ties away from zero and the brief's symmetric [-127, 127] clamp; `scroll_raw_clamped_axes` counts saturated axes. Accel retains the Double input for existing 16.16 encoding; explicit gains remain 1.0 and UNVERIFIED. Bottom-edge gestures, Y mapping, flags and timestamp handling are unchanged; no ABI shim added.
+- Host: local Mac, macOS 26.5.1 (25F80). `make` first exited 2 because the sandbox denied the default Swift module-cache output. `CLANG_MODULE_CACHE_PATH=/private/tmp/ipb-fix-reports-module-cache make` exited 0; rebuilt `build/universalhid_glue.o`, `build/mirror.o`, linked `build/ipb-helper`, `build/ipb-mirror`, `build/ipb-mirror-probe`, and signed the mirror binaries.
+- No device or smoke-matrix run, per the brief; device/build compatibility and actual scrolling remain unverified. Main remaining uncertainty: AppKit delta units/gain are uncalibrated, and filling both fields does not establish equivalence to Apple's conditionally selected accelerated event.
+
+### 2026-09-09 — device results for the allocation/scroll change
+
+Run on this Mac against the iPhone 13 Pro.
+
+| check | result |
+| --- | --- |
+| `ipb recents` after the 320 -> 464 bit digitizer change | bottom saturation 0.554, App Switcher — **no regression** |
+| mirror bottom-edge gesture, synthetic drag | 0.033 -> 0.005, **gesture fires** (previously only the user's real mouse triggered it) |
+| mirror scroll, precise, 125 events | `submitted=125 executed=125 rejected=0`, **device 0.0%** |
+
+**Scroll still does not work**, and the allocation change did not alter that — as predicted, since the
+written fields were never out of bounds.
+
+Eliminated as causes:
+
+- report too small (fields were inside 104 bits; now 168 anyway)
+- writing only raw or only accel (both are written now)
+- per-process / per-socket effects (single connection, 125 events on it)
+- events not reaching the app (`submitted == executed`, zero rejects, zero unsupported)
+- **a bug in the test harness**: the synthetic scroll tool had been writing NSEventPhase constants
+  into `kCGScrollWheelEventScrollPhase`, which uses CGScrollPhase — so every mid-scroll event
+  arrived as `NSEventPhaseEnded` carrying a delta and the mirror correctly rejected it as an orphan
+  (`scroll dropped: scroll_orphan ... phase=0x8 delta=(0,-25)`, 14 rejected). Fixed to 1/2/4; the
+  events are now accepted cleanly and the device still does nothing.
+
+Still open, in order of suspicion:
+
+1. **flags-byte encoding.** `phase.getter` masks with `0xffffff8f`, so phase occupies bits 0-3 **and
+   bit 7** of the flags byte — a non-contiguous field. Whether our glue packs it that way is unchecked.
+2. Whether `0x501` (touchscreenGesture, DeviceTypeHint Trackpad) is even the right target service.
+3. Whatever else `ScrollReport.init(scrollEvent:)` does that field-by-field construction does not.
+
+The decisive next step is to capture DeviceHub's actual scroll report bytes during a real trackpad
+scroll and diff them against ours, rather than continue eliminating hypotheses one at a time.

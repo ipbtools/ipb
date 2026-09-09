@@ -64,6 +64,7 @@ extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc
 // HID evidence: docs/protocol.md Wire Format and Sources/action_sender.m:625,
 // using the existing Xcode 27 oracle glue unchanged.
 extern int uhid_make_digitizer_hid_report(double,double,int,int,void*);
+extern int uhid_make_scroll_hid_report(int64_t,int64_t,uint32_t,uint32_t,uint32_t,double,double,void*);
 extern int coredevice_print_connected_descriptors_async_raw(xrc_t);
 extern int coredevice_send_universalhid_hid_report(xrc_t,const void*,uint64_t);
 extern int coredevice_send_universalhid_barrier(xrc_t);
@@ -73,9 +74,21 @@ extern int coredevice_send_hid_button_barrier(xrc_t);
 extern int coredevice_send_hid_digitizer_cgpoint(xrc_t,double,double,double,double,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t);
 
 enum { Capacity=8192, PendingLimit=64 };
-typedef enum { Down, Move, Up, KeyHome, KeyRecents, KeyVolumeUp, KeyVolumeDown } Kind;
-typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, Interrupted } Result;
-typedef struct { uint64_t seq, generation, gesture; Kind kind; double x,y,submit; } Event;
+typedef enum { Down, Move, Up, ScrollPrecise, ScrollWheel, ScrollEnd,
+               KeyHome, KeyRecents, KeyVolumeUp, KeyVolumeDown } Kind;
+typedef enum { Touch, BottomEdge, Scroll } InputMode;
+// Product choice: bottom 2% of the mapped content, NOT an Apple/protocol threshold.
+static const double BottomEdgeFraction=.02;
+typedef struct {
+    int64_t rawX,rawY;
+    double accelX,accelY;
+    uint32_t phase,momentum,flags;
+    BOOL starts,ends;
+} ScrollReport;
+typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, Interrupted, ScrollUnsupported, ScrollStationary, InputConflict, ScrollUnavailable, ScrollOrphan } Result;
+typedef struct { uint64_t seq, generation, gesture; Kind kind; double x,y,submit;
+                 InputMode mode; ScrollReport scroll;
+                 NSUInteger appPhase,appMomentum; } Event;
 typedef struct { Event event; unsigned depth; Result result; int reportCode,barrierCode;
                  double received,reportReturn,barrierReturn; } Record;
 static pthread_mutex_t gLock=PTHREAD_MUTEX_INITIALIZER;
@@ -87,6 +100,7 @@ static BOOL gWorker,gStopping,gCollect;
 static _Atomic uint64_t gGeneration=1;
 static _Atomic int gFailure=0;
 static _Atomic bool gFinished=false;
+static _Atomic uint64_t gScrollRawClamps=0; // number of axes saturated during conversion
 static NSString *gReason;
 static uint64_t gFrames,gDrops,gMediaErrors,gIntervals;
 static double gFrameIntervals[Capacity],gLastFrame;
@@ -100,6 +114,14 @@ static uint64_t gDisplayDrops,gDisplayed,gBlackBars;
 static BOOL gReady,gClosing,gMousePressed;
 static uint64_t gServiceID,gGesture,gMouseGeneration;
 static double gMouseX,gMouseY;
+static InputMode gMouseMode; // main thread: frozen at Down, copied into every event
+static uint64_t gScrollServiceID,gScrollGesture,gScrollGeneration;
+static BOOL gScrollActive,gScrollPrecise,gScrollMomentum,gScrollMomentumAllowed; // main thread
+static BOOL isScroll(Kind kind){ return kind>=ScrollPrecise && kind<=ScrollEnd; }
+static BOOL isEnd(Event event){ return event.kind==Up || (isScroll(event.kind) && event.scroll.ends); }
+static const char *inputResults[]={"pending","running","sent","rejected","overload","build_failed",
+    "send_failed","barrier_failed","interrupted","scroll_unsupported","scroll_stationary",
+    "input_conflict","scroll_unavailable","scroll_orphan"};
 // Detector and accepted frames are protected by gLock. Display geometry is main-thread-only.
 static struct {
     CGSize size;
@@ -187,10 +209,11 @@ static void finish(int code,NSString *reason){
     NSMutableString *s=[NSMutableString string];
     [s appendFormat:@"enqueued=%llu display_backpressure_drops=%llu black_bar_rejections=%llu\n",
         (unsigned long long)displayed,(unsigned long long)displayDrops,(unsigned long long)blackBars];
+    [s appendFormat:@"scroll_raw_clamped_axes=%llu\n",(unsigned long long)atomic_load(&gScrollRawClamps)];
     static double values[4][Capacity]; unsigned counts[4]={0};
     unsigned executed=0,rejected=0,overload=0,inflight=0;
-    const char *kinds[]={"DOWN","MOVE","UP","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN"};
-    const char *results[]={"pending","running","sent","rejected","overload","build_failed","send_failed","barrier_failed","interrupted"};
+    const char *kinds[]={"DOWN","MOVE","UP","SCROLL_PRECISE","SCROLL_WHEEL","SCROLL_END","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN"};
+    unsigned skipCounts[ScrollOrphan+1]={0};
     for(unsigned i=0;i<n;i++){
         Record *r=&records[i];
         if(r->result==Pending){ r->result=Rejected; }
@@ -198,6 +221,7 @@ static void finish(int code,NSString *reason){
         else if(r->result==Running) inflight++;
         else rejected++;
         if(r->result==Overload) overload++;
+        if(r->result>=ScrollUnsupported) skipCounts[r->result]++;
         if(r->received) values[0][counts[0]++]=r->received-r->event.submit;
         if(r->reportReturn){ values[1][counts[1]++]=r->reportReturn-r->received; values[2][counts[2]++]=r->reportReturn-r->event.submit; }
         if(r->barrierReturn) values[3][counts[3]++]=r->barrierReturn-r->reportReturn;
@@ -207,6 +231,7 @@ static void finish(int code,NSString *reason){
     percentiles(s,"input host total",values[2],counts[2]);
     percentiles(s,"gesture tail",values[3],counts[3]);
     [s appendFormat:@"submitted=%u executed=%u rejected=%u overload=%u in_flight=%u max_queue_depth=%u\n",n,executed,rejected,overload,inflight,maxDepth];
+    for(unsigned i=ScrollUnsupported;i<=ScrollOrphan;i++) [s appendFormat:@"%s=%u\n",inputResults[i],skipCounts[i]];
     unsigned intervalN=(unsigned)MIN(intervalCount,Capacity);
     qsort(intervals,intervalN,sizeof *intervals,compareDouble);
     [s appendFormat:@"media frames=%llu interval_p50=%@ interval_p95=%@ drops=%llu errors=%llu interval_n=%u interval_total=%llu (ms; last <=8192)\n",
@@ -215,15 +240,19 @@ static void finish(int code,NSString *reason){
         intervalN?[NSString stringWithFormat:@"%.3f",intervals[(unsigned)ceil(intervalN*.95)-1]*1000]:@"NA",
         (unsigned long long)drops,(unsigned long long)errors,intervalN,(unsigned long long)intervalCount];
     [s appendString:@"KEY_* report_return=first send return; barrier_return=button barrier or RECENTS end return (digitizer has no barrier in the existing oracle).\n"];
+    [s appendString:@"BOTTOM_EDGE UP: end return only; no digitizer barrier exists in the oracle. Scroll x/y are relative AppKit deltas; scroll calibration is UNVERIFIED.\n"];
     [s appendString:@"drops=local invalid/non-increasing PTS only; transport/decoder losses unknown. Times=CLOCK_MONOTONIC seconds; blank=not reached.\n"];
     NSMutableString *csv=nil;
-    if(gCSVFD>=0) csv=[NSMutableString stringWithString:@"seq,type,generation,gesture,result,queue_depth,x,y,t_submit,t_received,t_report_return,t_barrier_return,report_code,barrier_code\n"];
+    if(gCSVFD>=0) csv=[NSMutableString stringWithString:@"seq,type,generation,gesture,result,queue_depth,x,y,t_submit,t_received,t_report_return,t_barrier_return,report_code,barrier_code,mode,scroll_phase,scroll_momentum,scroll_flags,raw_x,raw_y,accel_x,accel_y,app_phase,app_momentum\n"];
     for(unsigned i=0;gCSVFD>=0 && i<n;i++){
         Record r=records[i];
-        [csv appendFormat:@"%llu,%s,%llu,%llu,%s,%u,%.5f,%.5f,%.9f,%@,%@,%@,%d,%d\n",(unsigned long long)r.event.seq,kinds[r.event.kind],(unsigned long long)r.event.generation,(unsigned long long)r.event.gesture,results[r.result],r.depth,r.event.x,r.event.y,r.event.submit,
+        [csv appendFormat:@"%llu,%s,%llu,%llu,%s,%u,%.5f,%.5f,%.9f,%@,%@,%@,%d,%d,%s,%u,%u,%u,%lld,%lld,%.9f,%.9f,%lu,%lu\n",(unsigned long long)r.event.seq,kinds[r.event.kind],(unsigned long long)r.event.generation,(unsigned long long)r.event.gesture,inputResults[r.result],r.depth,r.event.x,r.event.y,r.event.submit,
             r.received?[NSString stringWithFormat:@"%.9f",r.received]:@"",
             r.reportReturn?[NSString stringWithFormat:@"%.9f",r.reportReturn]:@"",
-            r.barrierReturn?[NSString stringWithFormat:@"%.9f",r.barrierReturn]:@"",r.reportCode,r.barrierCode];
+            r.barrierReturn?[NSString stringWithFormat:@"%.9f",r.barrierReturn]:@"",r.reportCode,r.barrierCode,
+            r.event.mode==BottomEdge?"BOTTOM_EDGE":r.event.mode==Scroll?"SCROLL":"TOUCH",
+            r.event.scroll.phase,r.event.scroll.momentum,r.event.scroll.flags,
+            (long long)r.event.scroll.rawX,(long long)r.event.scroll.rawY,r.event.scroll.accelX,r.event.scroll.accelY,(unsigned long)r.event.appPhase,(unsigned long)r.event.appMomentum];
     }
     if(gCSVFD>=0){
         BOOL written=writeOutput(gCSVFD,csv);
@@ -620,6 +649,7 @@ static void keyStep(unsigned index,unsigned step){
 static void drainInput(void){
     static enum { Idle, Pressed, Ending } state=Idle;
     static uint64_t activeGesture,activeGeneration;
+    static InputMode activeMode;
     for(;;){ @autoreleasepool {
         pthread_mutex_lock(&gLock);
         if(!gCount){ gWorker=NO; pthread_mutex_unlock(&gLock); return; }
@@ -630,35 +660,55 @@ static void drainInput(void){
         const Event event=r.event; // immutable main-thread-produced value
         uint64_t generation=atomic_load(&gGeneration);
         if(activeGeneration!=generation){ state=Idle; activeGesture=0; }
-        if(event.generation!=generation || (atomic_load(&gFailure) && event.kind!=Up)) r.result=Rejected;
+        if(event.generation!=generation || (atomic_load(&gFailure) && !isEnd(event))) r.result=Rejected;
         else if(event.kind>=KeyHome){
             if(state!=Idle){ r.result=Rejected; inputError(@"shortcut reached active touch; release required"); }
             else { dispatch_group_enter(gInputGroup); keyStep(index,0); return; }
         }
-        else if((event.kind==Down && state!=Idle) ||
-                (event.kind!=Down && (state!=Pressed || activeGesture!=event.gesture))) {
-            r.result=Rejected; inputError(@"invalid input state transition");
-        }else{
-            if(event.kind==Down){
-                state=Pressed; activeGesture=event.gesture; activeGeneration=event.generation;
-            }else if(event.kind==Up) state=Ending;
-            uint64_t words[2]={0,0};
-            int count=uhid_make_digitizer_hid_report(event.x,event.y,event.kind!=Up,event.kind!=Up,words);
-            if(count!=sizeof words){ r.result=BuildFailed; r.reportCode=count; inputError(@"digitizer report construction failed"); }
-            else if(event.generation!=atomic_load(&gGeneration)) r.result=Rejected;
-            else {
-                r.reportCode=coredevice_send_universalhid_hid_report(gInput,words,gServiceID);
-                r.reportReturn=nowSec(); r.result=r.reportCode?SendFailed:Sent;
-                // Publish the third point before a possibly stalled barrier.
-                pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
-                if(r.reportCode) inputError(@"UHID report sender failed (see report_code)");
-                else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
-                else if(event.kind==Up){
-                    r.barrierCode=coredevice_send_universalhid_barrier(gInput);
-                    r.barrierReturn=nowSec();
-                    if(r.barrierCode){ r.result=BarrierFailed; inputError(@"UHID barrier failed (see barrier_code)"); }
+        else {
+            BOOL scrolling=isScroll(event.kind);
+            BOOL starts=scrolling?event.scroll.starts:event.kind==Down;
+            BOOL ends=isEnd(event);
+            if((starts && state!=Idle) || (!starts &&
+               (state!=Pressed || activeGesture!=event.gesture || activeMode!=event.mode))){
+                r.result=Rejected; inputError(@"invalid input state transition");
+            }else{
+                if(starts){
+                    state=Pressed; activeGesture=event.gesture; activeGeneration=event.generation;
+                    activeMode=event.mode;
+                }
+                if(ends) state=Ending;
+                uint64_t words[2]={0,0};
+                int count=sizeof words;
+                if(activeMode!=BottomEdge){
+                    ScrollReport scroll=event.scroll;
+                    count=scrolling?uhid_make_scroll_hid_report(scroll.rawX,scroll.rawY,scroll.phase,
+                        scroll.momentum,scroll.flags,scroll.accelX,scroll.accelY,words):
+                        uhid_make_digitizer_hid_report(event.x,event.y,!ends,!ends,words);
+                }
+                if(count!=sizeof words){ r.result=BuildFailed; r.reportCode=count; inputError(@"HID report construction failed"); }
+                else if(event.generation!=atomic_load(&gGeneration)) r.result=Rejected;
+                else {
+                    // gesture-impl.md task 1: one IndigoDigitizerEvent per real mouse
+                    // event, optional second point absent, edge=bottom, mainScreen=(0,0).
+                    // Never use the 320-bit swipe-contact report or shortcut interpolation.
+                    r.reportCode=activeMode==BottomEdge?
+                        coredevice_send_hid_digitizer_cgpoint(gDigitizer,event.x,event.y,0,0,1,
+                            starts?0:ends?2:1,3,0,0):
+                        coredevice_send_universalhid_hid_report(gInput,words,scrolling?gScrollServiceID:gServiceID);
+                    r.reportReturn=nowSec(); r.result=r.reportCode?SendFailed:Sent;
+                    pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
+                    if(r.reportCode) inputError(@"HID report sender failed (see report_code)");
                     else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
-                    state=Idle; activeGesture=0;
+                    else if(ends){
+                        // No digitizer barrier in the existing oracle. Its END return is
+                        // the fourth point, just as for RECENTS; not device acknowledgement.
+                        r.barrierCode=activeMode==BottomEdge?0:coredevice_send_universalhid_barrier(gInput);
+                        r.barrierReturn=nowSec();
+                        if(r.barrierCode){ r.result=BarrierFailed; inputError(@"UHID barrier failed (see barrier_code)"); }
+                        else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
+                        state=Idle; activeGesture=0;
+                    }
                 }
             }
         }
@@ -666,17 +716,18 @@ static void drainInput(void){
         pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
     }}
 }
-static void submit(Kind kind,uint64_t gesture,uint64_t generation,double x,double y,double submitted){
+static void submitEvent(Event event,Result disposition){
     NSCAssert([NSThread isMainThread],@"producer must run on main thread");
     // Existing oracle retains each report. End this prototype run before the ring
     // wraps, reserving its final slot for the release (same bounded policy as M1).
     if(gSubmitted>=Capacity) return;
-    const Event event={gSubmitted+1,generation,gesture,kind,x,y,submitted};
+    event.seq=gSubmitted+1;
     BOOL overloaded=NO;
     pthread_mutex_lock(&gLock);
     unsigned index=gSubmitted++%Capacity;
     Record r={.event=event,.depth=gCount,.result=Pending};
-    if(gStopping || generation!=atomic_load(&gGeneration) || (atomic_load(&gFailure) && kind!=Up)) r.result=Rejected;
+    if(disposition!=Pending) r.result=disposition; // dropped now, never queued/replayed
+    else if(gStopping || event.generation!=atomic_load(&gGeneration) || (atomic_load(&gFailure) && !isEnd(event))) r.result=Rejected;
     else if(gCount==PendingLimit){ r.result=Overload; overloaded=YES; }
     else {
         gPending[(gHead+gCount)%PendingLimit]=index; gCount++;
@@ -687,6 +738,81 @@ static void submit(Kind kind,uint64_t gesture,uint64_t generation,double x,doubl
     pthread_mutex_unlock(&gLock);
     // Losing DOWN/UP/MOVE invalidates the entire gesture, never sends a partial replay.
     if(overloaded) inputError(@"pending input queue overloaded");
+}
+static void submit(Kind kind,uint64_t gesture,uint64_t generation,double x,double y,double submitted){
+    submitEvent((Event){.generation=generation,.gesture=gesture,.kind=kind,.x=x,.y=y,.submit=submitted,
+        .mode=kind<=Up?gMouseMode:Touch},Pending);
+}
+// Single conversion boundary, gesture-impl.md task 2, UniversalHID 90.1 enums.
+// UNVERIFIED: units, sign, gain and flags=0 need real-device calibration. These
+// signed gains preserve AppKit's delivered direction (including natural scrolling).
+// Both event types populate raw and accelerated fields (fix-reports.md).
+static const double ScrollPreciseGain=1.0,ScrollWheelGain=1.0;
+static const uint32_t ScrollFlags=0;
+static int64_t scrollRawValue(double value){
+    // UniversalHID 90.1 ScrollReport.init(scrollEvent:) uses frinta: nearest,
+    // ties away from zero. The brief requests symmetric signed-byte limits.
+    double rounded=round(value);
+    if(rounded<-127 || rounded>127){
+        atomic_fetch_add(&gScrollRawClamps,1);
+        rounded=MAX(-127,MIN(127,rounded));
+    }
+    return (int64_t)rounded;
+}
+static Result convertScroll(NSEvent *event,ScrollReport *out){
+    *out=(ScrollReport){.flags=ScrollFlags};
+    if((event.phase|event.momentumPhase)&NSEventPhaseStationary) return ScrollStationary;
+    switch(event.phase){
+        case NSEventPhaseNone: break;
+        case NSEventPhaseBegan: out->phase=1; break;
+        case NSEventPhaseChanged: out->phase=2; break;
+        case NSEventPhaseEnded: out->phase=4; break;
+        case NSEventPhaseCancelled: out->phase=8; break;
+        case NSEventPhaseMayBegin: out->phase=128; break;
+        default: return ScrollUnsupported; // unknown/combined phases have no supported mapping
+    }
+    switch(event.momentumPhase){
+        case NSEventPhaseNone: break;
+        case NSEventPhaseBegan: out->momentum=2; break;
+        case NSEventPhaseChanged: out->momentum=1; break;
+        case NSEventPhaseEnded: out->momentum=4; break;
+        // Cancelled -> interrupted is not established by the brief; do not guess.
+        default: return ScrollUnsupported;
+    }
+    if(out->phase && out->momentum) return ScrollUnsupported;
+    BOOL precise=event.hasPreciseScrollingDeltas;
+    if(precise?(!out->phase && !out->momentum):(out->phase || out->momentum)) return ScrollUnsupported;
+    double gain=precise?ScrollPreciseGain:ScrollWheelGain;
+    double x=event.scrollingDeltaX*gain,y=event.scrollingDeltaY*gain;
+    // Signed 16.16 capacity; glue accepts Double and performs fixed-point encoding.
+    if(!isfinite(x) || !isfinite(y) || x<-32768 || y<-32768 ||
+       x>32767+65535.0/65536 || y>32767+65535.0/65536) return ScrollUnsupported;
+    out->rawX=scrollRawValue(x); out->rawY=scrollRawValue(y);
+    out->accelX=x; out->accelY=y;
+    out->ends=out->phase==4 || out->phase==8 || out->momentum==4;
+    return Pending;
+}
+static void rejectScroll(Event event,Result result){
+    static unsigned warned; // main thread; one diagnostic per reason, every event counted in CSV
+    if(!(warned&(1u<<result))){
+        warned|=1u<<result;
+        LOGE("scroll dropped: %s type=%s AppKit phase=0x%lx momentum=0x%lx delta=(%g,%g); unsupported mappings/ranges are not coerced (subsequent occurrences counted in summary/CSV)",
+            inputResults[result],event.kind==ScrollPrecise?"precise":"wheel",
+            (unsigned long)event.appPhase,(unsigned long)event.appMomentum,event.x,event.y);
+    }
+    submitEvent(event,result);
+}
+static void releaseScroll(double submitted){
+    gScrollMomentumAllowed=NO;
+    if(!gScrollActive) return;
+    ScrollReport end={.flags=ScrollFlags,.ends=YES};
+    if(gScrollMomentum) end.momentum=4;
+    else if(gScrollPrecise) end.phase=4;
+    // Phase-less wheels have no AppKit end. Close their local session with a zero
+    // report + barrier on ownership/focus change; no invented phase or idle timer.
+    submitEvent((Event){.generation=gScrollGeneration,.gesture=gScrollGesture,
+        .kind=ScrollEnd,.submit=submitted,.mode=Scroll,.scroll=end},Pending);
+    gScrollActive=NO; // end is queued before another producer can take ownership
 }
 static void pumpUntil(double deadline){
     while(nowSec()<deadline && !atomic_load(&gFailure))
@@ -713,13 +839,21 @@ static void discoverService(void){
     rewind(capture);
     char *line=NULL; size_t capacity=0;
     while(getline(&line,&capacity,capture)>0){
-        if(strncmp(line,"connectedDescriptor[",20) || !strstr(line,"string:\"CoreDevice touchscreen(")) continue;
+        if(strncmp(line,"connectedDescriptor[",20)) continue;
+        BOOL touch=strstr(line,"string:\"CoreDevice touchscreen(")!=NULL;
+        BOOL scroll=strstr(line,"string:\"CoreDevice touchscreenGesture\"")!=NULL;
+        if(!touch && !scroll) continue;
         char *id=strstr(line,"serviceID:");
         if(id){ char *end=NULL; errno=0; uint64_t value=strtoull(id+10,&end,0);
-            if(!errno && end!=id+10 && (*end==' ' || *end=='\n') && value){ gServiceID=value; break; }
+            if(!errno && end!=id+10 && (*end==' ' || *end=='\n') && value){
+                if(touch && !gServiceID) gServiceID=value; // preserve explicit touchscreen override
+                if(scroll) gScrollServiceID=value;
+            }
         }
     }
     free(line); fclose(capture);
+    if(!gScrollServiceID) LOGE("scroll disabled: no CoreDevice touchscreenGesture descriptor; no fallback ID or second socket");
+    else LOGE("scroll service=0x%llx on existing universalhidservice; units/direction/gains/flags UNVERIFIED",(unsigned long long)gScrollServiceID);
     if(!gServiceID) fail(3,@"no touchscreen descriptor; use --service-id only with a known touchscreen ID");
 }
 
@@ -730,7 +864,7 @@ static void releaseMouse(double submitted){
 }
 static void requestClose(NSString *reason){
     if(gClosing) return;
-    releaseMouse(nowSec());
+    releaseMouse(nowSec()); releaseScroll(nowSec());
     gReady=NO; gClosing=YES;
     // First failure keeps its precise reason; successful close records its event.
     pthread_mutex_lock(&gLock);
@@ -870,7 +1004,7 @@ static void saveScreenshot(void){
     if(gSubmitted>=Capacity-2){ requestClose(@"event capacity reached"); return YES; }
     // Main producer clears pressed immediately: subsequent drag/up cannot revive
     // the old gesture. FIFO worker completes this UP + barrier before the key.
-    releaseMouse(t);
+    releaseMouse(t); releaseScroll(t);
     if(action==DeviceKey) submit(kind,0,atomic_load(&gGeneration),0,0,t);
     else if(!gLocalShortcutPending){
         gLocalShortcutPending=YES;
@@ -886,11 +1020,46 @@ static void saveScreenshot(void){
     }
     return YES;
 }
+- (void)scrollWheel:(NSEvent*)event {
+    double t=nowSec();
+    if(!gReady || gClosing || atomic_load(&gFailure)) return;
+    if(gSubmitted>=Capacity-2){ requestClose(@"event capacity reached"); return; }
+    Event input={.generation=atomic_load(&gGeneration),.kind=event.hasPreciseScrollingDeltas?ScrollPrecise:ScrollWheel,
+        .x=event.scrollingDeltaX,.y=event.scrollingDeltaY,.submit=t,.mode=Scroll,
+        .appPhase=event.phase,.appMomentum=event.momentumPhase};
+    Result result=convertScroll(event,&input.scroll);
+    if(!gScrollServiceID){ rejectScroll(input,ScrollUnavailable); return; }
+    // Decide at arrival, not at drain: a later mouse UP must never replay this scroll.
+    if(gMousePressed){ gScrollMomentumAllowed=NO; rejectScroll(input,InputConflict); return; }
+    if(result!=Pending){
+        if(result!=ScrollStationary) releaseScroll(t);
+        rejectScroll(input,result); return;
+    }
+    BOOL precise=event.hasPreciseScrollingDeltas,momentum=input.scroll.momentum!=0;
+    BOOL begin=input.scroll.phase==1 || input.scroll.phase==128 || input.scroll.momentum==2;
+    if(gScrollActive && (gScrollPrecise!=precise || gScrollMomentum!=momentum)){
+        releaseScroll(t); // ordered END before any new source; continuations below are rejected
+    }
+    if(!gScrollActive){
+        if((precise && !begin) || (momentum && !gScrollMomentumAllowed)){
+            rejectScroll(input,ScrollOrphan); return;
+        }
+        gScrollActive=YES; gScrollPrecise=precise; gScrollMomentum=momentum;
+        gScrollGeneration=input.generation; gScrollGesture=++gGesture;
+        input.scroll.starts=YES;
+    }
+    input.gesture=gScrollGesture; input.generation=gScrollGeneration;
+    gScrollMomentumAllowed=precise && input.scroll.phase==4;
+    if(input.scroll.ends) gScrollActive=NO;
+    submitEvent(input,Pending);
+}
 - (void)mouseDown:(NSEvent*)event {
     double t=nowSec(),x,y; // real AppKit arrival, before conversion/submission
     if(!gReady || gClosing || gMousePressed || atomic_load(&gFailure)) return;
     if(gSubmitted>=Capacity-2){ requestClose(@"event capacity reached"); return; }
     if(![self mapEvent:event x:&x y:&y]) return;
+    releaseScroll(t);
+    gMouseMode=y>=1.0-BottomEdgeFraction?BottomEdge:Touch;
     gMousePressed=YES; gGesture++; gMouseGeneration=atomic_load(&gGeneration);
     gMouseX=x; gMouseY=y; submit(Down,gGesture,gMouseGeneration,x,y,t);
 }
@@ -915,8 +1084,8 @@ static void saveScreenshot(void){
 - (void)windowDidChangeScreen:(NSNotification*)n {
     if(gVideoSize.width>0 && gVideoSize.height>0) fitWindow(gVideoSize,YES);
 }
-- (void)windowDidResignKey:(NSNotification*)n { releaseMouse(nowSec()); }
-- (void)applicationDidResignActive:(NSNotification*)n { releaseMouse(nowSec()); }
+- (void)windowDidResignKey:(NSNotification*)n { releaseMouse(nowSec()); releaseScroll(nowSec()); }
+- (void)applicationDidResignActive:(NSNotification*)n { releaseMouse(nowSec()); releaseScroll(nowSec()); }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)app {
     requestClose(@"application quit"); return NSTerminateCancel;
 }
@@ -1137,7 +1306,7 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     gInputGroup=dispatch_group_create();
     dispatch_group_async(gInputGroup,gInputQueue,^{
         if(openInput(dev,"com.apple.coredevice.feature.remote.universalhidservice",&gInput,&gInputFD)) return;
-        if(!gServiceID) discoverService();
+        discoverService(); // scroll ID is discovered even with --service-id
         if(atomic_load(&gFailure)) return;
         if(openInput(dev,"com.apple.coredevice.feature.remote.hid.button",&gButton,&gButtonFD)) return;
         if(atomic_load(&gFailure)) return;
