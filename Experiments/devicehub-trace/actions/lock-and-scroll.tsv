@@ -1,12 +1,17 @@
 # Action script: lock/unlock and scroll.
-# Format: <seconds><TAB><prompt>. Do exactly what each prompt says, then wait
-# for the next one. Do nothing at all during the IDLE steps — they establish
-# the background report rate that everything else is measured against.
-6	IDLE — do not touch anything (baseline)
-6	Click once in the Device Hub window to focus it, then stop
-8	Press Command-L to LOCK the screen. Then stop.
-8	Press any key / Command-L again to UNLOCK. Then stop.
-6	IDLE — do not touch anything
-8	Two-finger scroll DOWN on the trackpad, twice, over the phone view
-8	Two-finger scroll UP on the trackpad, twice, over the phone view
-6	IDLE — do not touch anything
+# Format: <seconds><TAB><prompt>. Do exactly what each prompt says, then stop
+# and wait for the next one. Do nothing at all during the IDLE steps -- they
+# establish the background report rate everything else is measured against.
+#
+# Step 2 is a liveness check, not data: moving the pointer over the phone view
+# is known to make Device Hub send AbsolutePointer reports. If that window is
+# empty the taps are not bound and every negative result in the run is void.
+6	IDLE -- do not touch anything (baseline)
+8	LIVENESS: move the mouse slowly back and forth over the phone view
+6	IDLE -- do not touch anything
+8	Press Command-L to LOCK the screen, then stop
+8	Unlock the phone however Device Hub normally does it, then stop
+6	IDLE -- do not touch anything
+8	Two-finger scroll DOWN on the trackpad over the phone view, twice
+8	Two-finger scroll UP on the trackpad over the phone view, twice
+6	IDLE -- do not touch anything
