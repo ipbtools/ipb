@@ -1969,3 +1969,45 @@ Both reviews independently point at the dwell first: 1.05 s is 75% of the total,
 swept downward, and a real switcher animation completes in roughly 0.4-0.6 s. Suggested sweep is
 0.5 / 0.7 / 0.85 / 1.05 s, taking the shortest that passes a 5/5 reliability check through the
 existing `recents` smoke step, together with the 30 ms -> ~16 ms per-step change. Still not done.
+
+## 2026-09-09 — Smoke gate for the mirror work
+
+Host: macOS 27 beta, Xcode 27.0.0 Beta 6. Device: iPhone 12 mini, iOS 27.0 (24A5430a), localNetwork.
+Commit: the mirror scroll/pointer/lock series through the `ipb lock` default fix.
+
+```sh
+DEVICE_ID=<uuid> SMOKE_INTERACTIVE=1 ./scripts/smoke_matrix.sh "$PWD" /tmp/ipb-smoke2
+```
+
+**SMOKE PASSED**, rc=0, **0 warnings, 0 identical consecutive frames** across 13 screenshots.
+`05_after_recents.png` was inspected and shows the App Switcher card view, so the interactive
+steps had real effect rather than merely returning zero.
+
+This closes the Rule 4 gate that both reviews flagged as outstanding for this session's mirror
+changes.
+
+### The first attempt was a false pass, and that is a gate weakness worth recording
+
+The run before this one reported `SMOKE PASSED` with rc=0 while the device sat on the **passcode
+entry screen** for its entire duration. Every step returned rc=0 because the reports were sent
+successfully; the device simply ignored all of them. 9 of 13 screenshots were identical to their
+predecessor, including `after_tap`, `after_recents`, `after_long` and `after_escape`.
+
+The script did print nine `WARN: ... identical to previous frame` lines, but **those warnings do
+not affect its exit code** — it still exited 0 and printed `SMOKE PASSED`. AGENTS.md describes the
+gate as exiting non-zero "on any failed step or unexpected output", and nine identical-frame
+warnings on interactive steps are unexpected output. As it stands the gate reports a pass on a
+locked device.
+
+Cause of the lock state: the run was preceded by `ipb power` to light the screen, but the device
+was already dark, so that press woke it to the passcode screen rather than to Home. `ipb` cannot
+get past a passcode.
+
+Procedure that avoids it, used for the passing run: take a screenshot and **look at it** before
+starting, rather than assuming a wake command reached the Home screen.
+
+### Known, not fixed
+
+`scripts/smoke_matrix.sh` treats identical-frame warnings as advisory. It should fail the run, or
+at minimum exit non-zero when an interactive step produces no visual change, so a locked or
+unresponsive device cannot report a pass.
