@@ -1852,13 +1852,13 @@ change set was **not ready to treat as accepted**.
    and no idle timeout, so one session can span scrolling one list, moving the mouse to another,
    and scrolling again — all against the first position. The pointer is now resent whenever the
    mapped position has moved (epsilon 0.001), not only when a session opens.
-2. **A gesture starting off the phone view still scrolled.** `mapEvent:` fails in the
+2. **A gesture starting off the phone view still scrolled** — *but see the reachability
+   correction below; this path is effectively dead in the current build.* `mapEvent:` fails in the
    letterboxing and the failure was recorded but not acted on, so a scroll begun over a black bar
-   was sent anyway and acted on whatever target the device still held — the opposite of the
-   captured oracle, which sends no scroll report at all while the pointer is off the view. A new
-   gesture in that state is now rejected as `scroll_off_target`. An already-running gesture is
-   deliberately left alone so its END still reaches the device; dropping every out-of-bounds event
-   would strand the session open.
+   would be sent anyway and act on whatever target the device still held. A new gesture in that
+   state is now rejected as `scroll_off_target`. An already-running gesture is deliberately left
+   alone so its END still reaches the device; dropping every out-of-bounds event would strand the
+   session open.
 3. **Pointer failures were swallowed.** Both the build result and the send return code were
    discarded, and the record was then marked `Sent` from the *scroll's* code. A failed pointer now
    fails the event (`BuildFailed` / `SendFailed`) and the scroll is not sent, since without a
@@ -1897,8 +1897,8 @@ explicit `pointerFailed` block.
 
 ### Still owed, on device
 
-- Mirror `⌘L` at 0.08 s is unverified. A physical short press locking does not establish that
-  0.08 s works through this private input path.
+- ~~Mirror `⌘L` at 0.08 s is unverified.~~ **Verified 2026-09-09**: `⌘L` locks and wakes in a live
+  mirror session, no Siri.
 - `ipb lock`'s 0.7 s default is **not** being changed on the strength of one sweep that conflicts
   with an earlier one. Re-measure with device, OS, starting state, helper binary and environment
   all pinned, covering lock and wake. Note also that the passcode screen may still be a locked
@@ -2011,3 +2011,35 @@ starting, rather than assuming a wake command reached the Home screen.
 `scripts/smoke_matrix.sh` treats identical-frame warnings as advisory. It should fail the run, or
 at minimum exit non-zero when an interactive step produces no visual change, so a locked or
 unresponsive device cannot report a pass.
+
+
+## 2026-09-09 — Reachability correction: the off-target scroll guard is near-dead code
+
+`⌘L` at 0.08 s is **verified on device**: it locks a lit screen and wakes a dark one from a live
+mirror session, with no Siri. That closes the last outstanding item from the mirror review.
+
+The `scroll_off_target` guard added in response to review finding 4 does **not** guard a reachable
+bug, and the record above overstated it.
+
+`fitWindow` is called with `lockAspect = YES` at every site that runs once a video frame exists
+(`mirror.m` 982, 1180, 1211), setting `gWindow.contentAspectRatio = gVideoSize`. The only
+`lockAspect = NO` call (1205) is the placeholder window created before the first frame, when
+`gVideoSize` is still zero and `mapEvent:` fails on its first check regardless. With the window
+aspect locked to the video aspect, `AVMakeRectWithAspectRatioInsideRect` returns the full bounds
+and every point inside the view is inside the content rect, so `pointerValid` is always true.
+
+There are no black bars to scroll over. The path is reachable at most as a transient while
+`gVideoSize` changes on device rotation, or before the first frame, where scrolling is already
+rejected elsewhere.
+
+The review read the code path correctly but did not check that the aspect ratio is locked, and I
+applied the fix without checking reachability myself — which is exactly what Rule 3 exists to
+prevent ("Edge cases with low reachability ... are recorded under 'known, not fixed' and are not
+patched one by one"). This is the second time this session I acted on an assertion before testing
+it; the first was asserting that plain touch reports cannot trigger system edge gestures, which
+also only got settled by a controlled experiment after being challenged.
+
+The guard stays — it is one condition plus an enum value, it is harmless, and the rotation
+transient is real if rare — but it is recorded here as **near-dead code**, not as a defect fix.
+Empirical check available at no cost: the mirror's summary prints a `black_bars` counter, which is
+the number of `mapEvent:` failures. If it reads 0 across sessions, that is direct confirmation.
