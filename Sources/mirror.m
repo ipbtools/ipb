@@ -66,6 +66,7 @@ extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc
 extern int uhid_make_digitizer_hid_report(double,double,int,int,void*);
 extern int uhid_make_scroll_hid_report(int64_t,int64_t,uint32_t,uint32_t,uint32_t,double,double,void*);
 extern int uhid_make_scroll_wire_hid_report(int32_t,int32_t,uint32_t,uint32_t,double,double,void*);
+extern int uhid_make_absolute_pointer_hid_report(double,double,uint32_t,void*);
 extern int coredevice_print_connected_descriptors_async_raw(xrc_t);
 extern int coredevice_send_universalhid_hid_report(xrc_t,const void*,uint64_t);
 extern int coredevice_send_universalhid_barrier(xrc_t);
@@ -89,6 +90,11 @@ typedef struct {
 typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, Interrupted, ScrollUnsupported, ScrollStationary, InputConflict, ScrollUnavailable, ScrollOrphan } Result;
 typedef struct { uint64_t seq, generation, gesture; Kind kind; double x,y,submit;
                  InputMode mode; ScrollReport scroll;
+                 // Where the pointer was when a scroll arrived. For scroll events
+                 // x/y are the deltas, so the position needs its own field: the
+                 // device routes a scroll to the view under the cursor, and
+                 // without one a list scroll has no target. See pointerValid.
+                 double pointerX,pointerY; BOOL pointerValid;
                  NSUInteger appPhase,appMomentum; } Event;
 typedef struct { Event event; unsigned depth; Result result; int reportCode,barrierCode;
                  double received,reportReturn,barrierReturn; } Record;
@@ -699,6 +705,19 @@ static void drainInput(void){
                     // gesture-impl.md task 1: one IndigoDigitizerEvent per real mouse
                     // event, optional second point absent, edge=bottom, mainScreen=(0,0).
                     // Never use the 320-bit swipe-contact report or shortcut interpolation.
+                    // Place the cursor before opening a scroll gesture. The
+                    // device routes a scroll to the view under the pointer, and
+                    // Device Hub keeps an AbsolutePointer stream running as the
+                    // mouse moves. Without it, a Home-screen page gesture still
+                    // works (it needs no target) but a list scroll has nothing
+                    // to act on -- which is exactly the reported symptom of
+                    // horizontal working while vertical did nothing.
+                    if(scrolling && starts && event.pointerValid){
+                        uint64_t pointerWords[2]={0,0};
+                        if(uhid_make_absolute_pointer_hid_report(event.pointerX,event.pointerY,0,pointerWords)==(int)sizeof pointerWords){
+                            coredevice_send_universalhid_hid_report(gInput,pointerWords,gScrollServiceID);
+                        }
+                    }
                     r.reportCode=activeMode==BottomEdge?
                         coredevice_send_hid_digitizer_cgpoint(gDigitizer,event.x,event.y,0,0,1,
                             starts?0:ends?2:1,3,0,0):
@@ -1042,6 +1061,9 @@ static void saveScreenshot(void){
     Event input={.generation=atomic_load(&gGeneration),.kind=event.hasPreciseScrollingDeltas?ScrollPrecise:ScrollWheel,
         .x=event.scrollingDeltaX,.y=event.scrollingDeltaY,.submit=t,.mode=Scroll,
         .appPhase=event.phase,.appMomentum=event.momentumPhase};
+    double px=0,py=0;
+    input.pointerValid=[self mapEvent:event x:&px y:&py];
+    input.pointerX=px; input.pointerY=py;
     Result result=convertScroll(event,&input.scroll);
     if(!gScrollServiceID){ rejectScroll(input,ScrollUnavailable); return; }
     // Decide at arrival, not at drain: a later mouse UP must never replay this scroll.

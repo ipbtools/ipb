@@ -1674,3 +1674,39 @@ The mirror sends no `AbsolutePointerReport`. Device Hub sends one continuously a
 moves, and the capture showed it emits no scroll report at all unless the pointer is over the
 phone view. If scrolling is still unreliable after the sign fix, establishing the pointer is the
 next thing to add.
+
+## 2026-09-09 — Mirror scroll: vertical needs a pointer, horizontal does not
+
+Reported after the sign fix: horizontal scroll works, vertical still does nothing on Home or
+Settings. A `--csv` capture from a real mirror session settled it.
+
+661 events, **every one `sent`, zero rejects, every `report_code = 0`**. So nothing was being
+dropped or refused; the mirror was successfully sending vertical scroll reports the device did
+nothing with.
+
+Bursts, split on gaps over 1 s:
+
+| Burst | events | Σx | Σy | median &#124;dx&#124; | median &#124;dy&#124; | rate | outcome |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 vertical | 372 | -103 | -346 | 1 | **6** | 60 Hz | **no effect** |
+| 2 horizontal | 117 | +492 | 2 | 3 | 0 | 60 Hz | worked |
+| 3 horizontal | 105 | -710 | -56 | 4 | 0 | 60 Hz | worked |
+| Device Hub vertical (captured) | 67 | — | — | — | 5-8 | 48 Hz | works |
+
+This killed two hypotheses on the spot. **Magnitude is not the problem**: the failing vertical
+burst had a median |dy| of 6, squarely inside Device Hub's working 5-8 band, while the *working*
+horizontal bursts had smaller deltas (3 and 4). **Rounding loss is not the problem** either: the
+float sums equal the integer sums exactly, so AppKit was already delivering integral deltas.
+**Rate is not the problem**: all three bursts ran at 60 Hz.
+
+What is left is the target. Horizontal scrolling on the Home screen is a page gesture that needs
+no particular view under the cursor; a Settings list scroll has to be routed to the view being
+scrolled. The mirror sent **no `AbsolutePointerReport` at all**, so the device had no cursor
+position to route to. This also explains why `ipb scroll-gesture`, which does send one, scrolled
+Settings vertically in the earlier test while the mirror could not.
+
+Fix: the mirror now captures the pointer position on each scroll event -- for scroll events `x`
+and `y` are the deltas, so the position needed its own field -- and sends an `AbsolutePointer`
+report before the scroll that opens a gesture.
+
+**Not yet verified on device.**
