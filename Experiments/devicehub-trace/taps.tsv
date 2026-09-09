@@ -24,7 +24,7 @@ send_id	CoreDevice	$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HI
 # over UInt, so both arrive as plain integers, and it returns [HIDReport]
 # directly — this is where a key transition becomes wire bytes.
 kbd_copymask	UniversalHID	$s12UniversalHID14KeyboardFilterC14updateCopyMask8oldValue03newI0SayAA9HIDReportVGAA08HIDEventG0V_AKtF	{"args_are_words":["x0","x1"],"returns":"report_array"}
-kbd_filter	UniversalHID	$s12UniversalHID14KeyboardFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"indirect"}
+kbd_filter	UniversalHID	$s12UniversalHID14KeyboardFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"report_array_x1"}
 
 # --- scroll ----------------------------------------------------------------
-scroll_filter	UniversalHID	$s12UniversalHID12ScrollFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"indirect"}
+scroll_filter	UniversalHID	$s12UniversalHID12ScrollFilterC11filterEventyAA16HIDEventProtocol_pSg5event_Sb6notifySayAA9HIDReportVG7reportstAaE_pF	{"returns":"report_array_x1"}

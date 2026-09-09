@@ -33,17 +33,30 @@ import lldb
 BUDGET_HITS_PER_S = float(os.environ.get("DHTRACE_BUDGET", "20"))
 BUDGET_WINDOW_S = 1.0
 
-# A HIDReport value is a reference to a heap object laid out as
-#   +0 isa | +8 refcount | +16 pointer to bytes | +24 byte length
-# validated against HIDReport.init(bitCount:id:) with x0=0x98 (152 bits) and
-# x1=0x13, which produced a 19-byte buffer.
-REPORT_BYTES_PTR_OFF = 16
-REPORT_LEN_OFF = 24
+# A HIDReport wraps a Foundation Data value, which is a tagged representation
+# rather than a plain object pointer. `HIDReport.reportID.getter`
+# (UniversalHID 0x5cae4) begins `lsr x16, x1, #62`, branching on the top two
+# bits of the second word:
+#
+#   tag 0  bytes are inline in the two words; length in word1 bits 48..55
+#   other  heap-backed; the storage object carries a bytes pointer at +16 and
+#          a length at +24, which is the layout validated earlier against
+#          HIDReport.init(bitCount:id:) (x0=0x98 bits, x1=0x13 bytes)
+#
+# Both are decoded, and anything unrecognised is recorded raw rather than
+# guessed at, so a wrong assumption shows up as data instead of as silence.
+INLINE_MAX = 14
+STORAGE_BYTES_PTR_OFF = 16
+STORAGE_LEN_OFF = 24
 REPORT_LEN_MAX = 512
 
-# Swift array storage: +16 count | +24 capacity | +32 first element.
-ARRAY_COUNT_OFF = 16
-ARRAY_ELEMS_OFF = 32
+# Swift array storage: count at +0x10, elements from +0x20. A HIDReport element
+# is two words, so the stride is 16 bytes, not 8 (disassembly of
+# KeyboardFilter.updateCopyMask, which writes elements at array+0x20 and
+# array+0x30).
+ARRAY_COUNT_OFF = 0x10
+ARRAY_ELEMS_OFF = 0x20
+ARRAY_STRIDE = 16
 ARRAY_COUNT_MAX = 64
 
 _out = None
@@ -78,21 +91,30 @@ def _read(proc, addr, size):
     return data if err.Success() else None
 
 
-def read_report(proc, ref):
-    """Decode one HIDReport reference into {len, bytes}. Never raises."""
-    if not ref:
-        return None
-    hdr = _read(proc, ref + REPORT_BYTES_PTR_OFF, 16)
+def decode_report_words(proc, word0, word1):
+    """Decode a HIDReport from its two ABI words. Never raises."""
+    tag = (word1 >> 62) & 0x3
+    if tag == 0:
+        n = (word1 >> 48) & 0xFF
+        if n <= INLINE_MAX:
+            raw = struct.pack("<QQ", word0, word1)[:n]
+            return {"repr": "inline", "len": n, "bytes": raw.hex()}
+        return {"repr": "inline", "len": n, "error": "inline length out of range",
+                "w0": hex(word0), "w1": hex(word1)}
+    hdr = _read(proc, word0 + STORAGE_BYTES_PTR_OFF, 16)
     if hdr is None:
-        return {"ref": hex(ref), "error": "header unreadable"}
+        return {"repr": "heap", "tag": tag, "w0": hex(word0), "w1": hex(word1),
+                "error": "storage header unreadable"}
     ptr, length = struct.unpack("<QQ", hdr)
     if not ptr or not (0 < length <= REPORT_LEN_MAX):
-        return {"ref": hex(ref), "bytes_ptr": hex(ptr), "len": length,
-                "error": "implausible length"}
+        return {"repr": "heap", "tag": tag, "w0": hex(word0), "w1": hex(word1),
+                "bytes_ptr": hex(ptr), "len": length,
+                "error": "implausible storage length"}
     body = _read(proc, ptr, length)
     if body is None:
-        return {"ref": hex(ref), "len": length, "error": "body unreadable"}
-    return {"len": length, "bytes": body.hex()}
+        return {"repr": "heap", "tag": tag, "len": length,
+                "error": "storage body unreadable"}
+    return {"repr": "heap", "tag": tag, "len": length, "bytes": body.hex()}
 
 
 def read_report_array(proc, arr):
@@ -109,12 +131,12 @@ def read_report_array(proc, arr):
                 "raw": raw.hex() if raw else None}
     out = []
     for i in range(count):
-        cell = _read(proc, arr + ARRAY_ELEMS_OFF + 8 * i, 8)
+        cell = _read(proc, arr + ARRAY_ELEMS_OFF + ARRAY_STRIDE * i, 16)
         if cell is None:
             out.append({"error": "element unreadable"})
             continue
-        (ref,) = struct.unpack("<Q", cell)
-        out.append(read_report(proc, ref))
+        w0, w1 = struct.unpack("<QQ", cell)
+        out.append(decode_report_words(proc, w0, w1))
     return {"count": count, "reports": out}
 
 
@@ -159,9 +181,16 @@ def on_return(frame, bp_loc, extra, internal_dict):
            "regs": {k: (hex(v) if v is not None else None) for k, v in regs.items()}}
     want = ctx.get("returns")
     if want == "report_array":
+        # Which register holds the array depends on the function: updateCopyMask
+        # returns it in x0, filterEvent in x1 (w0 is `notify`). Both are read;
+        # the implausible one decodes to an error record rather than silence.
         rec["result"] = read_report_array(proc, regs.get("x0") or 0)
+    elif want == "report_array_x1":
+        rec["notify"] = (regs.get("x0") or 0) & 1
+        rec["result"] = read_report_array(proc, regs.get("x1") or 0)
     elif want == "report":
-        rec["result"] = read_report(proc, regs.get("x0") or 0)
+        rec["result"] = decode_report_words(
+            proc, regs.get("x0") or 0, regs.get("x1") or 0)
     elif want == "indirect" and ctx.get("x8"):
         buf = _read(proc, ctx["x8"], 64)
         rec["indirect_x8"] = buf.hex() if buf else None
@@ -193,7 +222,10 @@ def on_hit(frame, bp_loc, extra, internal_dict):
         }
         arg = spec.get("report_arg")
         if arg:
-            rec["report"] = read_report(proc, regs.get(arg) or 0)
+            # The report arrives as two ABI words in consecutive registers.
+            pair = {"x0": "x1", "x1": "x2", "x2": "x3"}.get(arg)
+            w1 = regs.get(pair) or 0 if pair else 0
+            rec["report"] = decode_report_words(proc, regs.get(arg) or 0, w1)
         if spec.get("args_are_words"):
             rec["words"] = {k: regs.get(k) for k in spec["args_are_words"]}
         if spec.get("returns"):
