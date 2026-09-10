@@ -48,6 +48,21 @@ run "descriptors" --expect 'connected descriptors count=[1-9]' -- "$CTL" descrip
 run "descriptors list >=4 services" --expect 'connectedDescriptor\[3\]' -- "$CTL" descriptors
 HAS_GESTURE=0; print -r -- "$LAST_OUT" | grep -q 'touchscreenGesture' && HAS_GESTURE=1
 SEL="$("$CTL" device 2>/dev/null || true)"
+# Device selection: a UUID prefix and the device name must resolve to the same device the
+# default pick returns. devicectl accepts neither, so this is the only check that ipb's own
+# resolver works. A name that is a substring of another device's name is a genuine ambiguity
+# and fails here by design.
+if [[ -z "$SEL" ]]; then
+  fail "device selection: 'ipb device' printed nothing"
+else
+  run "select by uuid prefix" --expect "^$SEL\$" -- "$CTL" -s "${SEL:0:8}" device
+  SEL_NAME="$("$CTL" devices 2>/dev/null | awk -F'\t' -v id="$SEL" '$1 == id {print $2}')"
+  if [[ -n "$SEL_NAME" ]]; then
+    run "select by device name" --expect "^$SEL\$" -- "$CTL" --device "$SEL_NAME" device
+  else
+    fail "device selection: no name for $SEL in 'ipb devices'"
+  fi
+fi
 OS_MAJOR="$("$CTL" devices 2>/dev/null | awk -F'\t' -v id="$SEL" '$1 == id {split($3, v, "."); print v[1]}')"
 EXPECT_GESTURE="${EXPECT_GESTURE:-}"
 if [[ -z "$EXPECT_GESTURE" ]]; then

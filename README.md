@@ -2,15 +2,21 @@
 
 `ipb` (iOS Physical-device Bridge, "the adb for iPhone"; formerly devicehubctl and briefly hdb) is a small CLI for driving basic iOS 27 device interactions through CoreDevice private services, without XCUITest or WebDriverAgent.
 
-It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. The current implementation covers tap, long press, swipe, scroll, keyboard keys, pointer reports, scroll reports, raw scroll events, vendor-defined HID events, Home, App Switcher, screenshots, and descriptor-based HID service discovery.
+It was extracted from a macOS 27 / Xcode 27 beta Device Hub investigation. It drives the device
+itself over the CoreDevice HID path — tap, long press, swipe, drag-scroll, trackpad scroll,
+keyboard keys, Home, App Switcher, side button (lock/wake), pointer and raw HID reports, plus a
+live JPEG screen stream (`ipb stream`) and an interactive mirror window (`ipb mirror`) — and wraps
+`xcrun devicectl` for everything Apple already exposes: install, launch, files, clipboard,
+location, screenshots.
 
-The basic interaction path is verified, and the CLI now uses DeviceHub's async descriptor-discovery path to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
+The interaction path is verified, and the CLI uses DeviceHub's own async descriptor-discovery path
+to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
 
 ## Requirements
 
 - A host whose installed CoreDevice package is 636.x or newer. This ships with Xcode 27 beta (`XcodeSystemResources.pkg`); it is what puts `UniversalHIDService`, the `HIDServiceID` helpers, and the embedded `UniversalHID.framework` into `/Library/Developer/PrivateFrameworks`.
 - Xcode 27 beta on the host. Its minimum macOS is 26.4, so macOS 26.4+ hosts qualify as well as macOS 27 beta hosts. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
-- A connected iOS 27 or iOS 26.6+ device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted. On iOS 26 the `touchscreenGesture` service is absent, so `pointer` and `scroll-report` are iOS 27 only; see `docs/verification.md`.
+- A connected iOS 27 or iOS 26.6+ device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted. On iOS 26 the `touchscreenGesture` service (`0x501`) is absent, so everything that rides it is iOS 27 only: `pointer`, `abs-pointer`, `scroll-report`, `scroll-gesture`, and the mirror's scroll wheel. See `docs/verification.md`.
 - GitHub-hosted code should be treated as beta/private-ABI research, because Apple may change these interfaces between seeds.
 
 Xcode 26.x hosts cannot run this tool as-is: CoreDevice 518.x lacks the UniversalHID service protocol, and the Xcode 26 DDI ships no HID daemon, so every `feature.remote.hid.*` / `universalhidservice` socket request is refused with "Create Service Socket is not supported by this device".
@@ -52,9 +58,12 @@ build/ipb-helper
 
 ## Usage
 
-Touch coordinates are normalized from top-left to bottom-right, in the `0..1` range. Pointer deltas are signed relative integers.
+`ipb help` prints the commands grouped by what they do; `ipb help hid` prints the low-level HID
+report commands used for protocol work. Touch coordinates are normalized from top-left to
+bottom-right, in the `0..1` range. Pointer deltas are signed relative integers.
 
 ```sh
+bin/ipb help                    # grouped command list
 bin/ipb devices                 # physical devices: uuid, name, os, transport, tunnel
 bin/ipb device                  # the device the other commands would use
 bin/ipb tap 0.5 0.5
@@ -87,16 +96,33 @@ bin/ipb button 0x0c 0x40
 bin/ipb raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
 ```
 
-`DEVICE_ID` is optional. Without it the wrapper picks the single wired or tunnelled physical device; with several devices it lists them and exits. Use the CoreDevice UUID from `devicectl list devices --json-output` (the 642.x table view prints UDIDs, which the service rejects):
+### Choosing a device
+
+With one device connected there is nothing to choose: `ipb` picks the single wired or tunnelled
+physical device. With several, name one with `-s` / `--device` (adb's `-s`, idb's `--udid`) or by
+exporting `DEVICE_ID`; the flag wins.
 
 ```sh
-DEVICE_ID=<coredevice-uuid> bin/ipb tap 0.5 0.5
+bin/ipb -s <coredevice-uuid> tap 0.5 0.5     # the full CoreDevice UUID
+bin/ipb -s 1D533177 device                   # a unique prefix of one
+bin/ipb -s "12 mini" screenshot before.png   # part of the device name or model
+export DEVICE_ID=<coredevice-uuid>           # the default for this shell
 ```
+
+A selector is matched most-specific-first — whole UUID, then UUID prefix, then a case-insensitive
+substring of the device name or marketing model. `xcrun devicectl --device` accepts none of these
+shorthands, so `ipb` resolves them itself against `devicectl list devices --json-output`; a full
+UUID is passed straight through and costs no enumeration. Anything that matches nothing, or more
+than one device, exits 3 and lists what is attached. `ipb devices` prints the same list, and
+`ipb device` prints the UUID the other commands would use.
+
+Device identity is the CoreDevice UUID, not the UDID: the 642.x `devicectl list devices` table view
+prints UDIDs, which the HID services reject.
 
 Useful runtime overrides:
 
 ```sh
-DEVICE_ID=<coredevice-uuid>          # pick a device explicitly
+DEVICE_ID=<coredevice-uuid>          # pick a device explicitly (-s overrides it)
 UHID_SERVICE_ID=auto                 # or a fixed id such as 0x101
 UHID_SERVICE_FALLBACK=0x101          # opt in to a fixed id when descriptor discovery fails; unset = error
 DEVELOPER_DIR=/path/to/Xcode-beta.app/Contents/Developer   # only needed for `make`; runtime uses the CoreDevice package
@@ -153,16 +179,20 @@ bin/ipb mirror [--seconds S] [--csv PATH]
 bin/ipb mirror --help
 ```
 
-Click, hold, and drag directly on the screen. The shortcuts match DeviceHub:
+Click, hold, drag, and scroll directly on the screen; trackpad and wheel scrolling both drive the
+device's own scroll path (`0x501`, iOS 27 only). The shortcuts match DeviceHub:
 
 | Shortcut | Action |
 | --- | --- |
 | ⇧⌘H | Home |
 | ⌃⇧⌘H | App Switcher |
+| ⌘L | Lock, or wake a dark screen — the same side-button press |
 | ⌘↑ / ⌘↓ | Volume up / down |
 | ⇧⌘S | Save the latest decoded frame as a PNG in `~/Pictures` |
 | ⌘0 | Zoom to fit |
 | ⌘1 | Actual size (falls back to fit if it exceeds the available screen) |
+
+Key repeat is ignored, so holding a shortcut sends one press.
 
 **Requires a GUI login session**, just like `ipb stream`: in-process decoding needs
 `CVDisplayLink`. It works with SIP enabled and needs no entitlement; plain ssh is unsupported.
@@ -175,15 +205,14 @@ that file (overwriting it; its parent directory must exist). CSV open/write fail
 `build/ipb-mirror`. The source is `Sources/mirror.m`. The helper's existing `--service-id ID`
 option is also passed through for a known touchscreen ID; descriptor discovery remains the default.
 
-Known coordinate bias on the iPhone 13 Pro: decoded frames are **1184×2576**, versus the
-**1170×2532** physical screen. Encoder padding for 16-pixel alignment and a format description
-without clean aperture leave approximately **1.2% horizontal / 1.7% vertical** coordinate error.
-No compensation is applied because the padding's side is unknown. See the M2/M3 and M4 records
-in [docs/verification.md](docs/verification.md) for the existing device evidence.
+Decoded frames carry encoder padding for 16-pixel alignment (on the iPhone 13 Pro, 1184×2576
+against a 1170×2532 screen). The mirror crops it rather than compensating for it, so the window's
+aspect ratio matches the phone's and a click lands where it is drawn; see the 2026-09-09 record in
+[docs/verification.md](docs/verification.md).
 
-Not implemented: Lock (⌘L), Siri (⇧⌥⌘H), screen recording (⇧⌘R), Action Button, and Camera Control.
-Lock, Siri, and the hardware buttons lack usage-code evidence; recording lacks capture/recording
-behavior evidence. The local 13 Pro also lacks Action Button and Camera Control hardware.
+Not implemented: Siri (⇧⌥⌘H), screen recording (⇧⌘R), Action Button, and Camera Control. Siri and
+the hardware buttons lack usage-code evidence; recording lacks capture/recording behaviour
+evidence. The local 13 Pro also lacks Action Button and Camera Control hardware.
 
 Exit codes: 0 success, **1 input/connection failure**, 2 usage/local setup, 3 service socket or
 descriptor discovery failure, 4 tunnel/interface/bind failure, 5 negotiation failure,
@@ -222,13 +251,16 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Capability | adb | ipb | idb (real device) | devicectl |
 | --- | --- | --- | --- | --- |
 | List devices | `adb devices` | `ipb devices` (devicectl) | `idb list-targets` | `list devices` |
+| Select a device | `-s <serial>`, `$ANDROID_SERIAL` | `-s <uuid\|prefix\|name>`, `DEVICE_ID` | `--udid <udid>` | `--device <uuid>` |
 | Tap / swipe / long press | `input tap/swipe` | `ipb tap/swipe/long` (own) | no | no |
-| Scroll | `input swipe` | `ipb scroll` (own) | no | no |
+| Scroll | `input swipe` | `ipb scroll` (drag) and `ipb scroll-gesture` (trackpad phases, iOS 27; own) | no | no |
 | Key / text | `input keyevent/text` | `ipb key` (HID usages, own); Unicode via `ipb clipboard set` + paste | no | no |
 | Home / App Switcher | `keyevent HOME/APP_SWITCH` | `ipb home` / `ipb recents` (own) | no | no |
 | Lock / wake screen | `input keyevent POWER` | `ipb power` (aliases `lock`, `wake`; own) | no | no |
 | Screenshot | `screencap` | `ipb screenshot` (devicectl) | yes | `capture screenshot` |
 | Screen recording | `screenrecord` | `ipb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
+| Live screen stream | scrcpy (an on-device server) | `ipb stream` (own, JPEG frames) | no | no |
+| Interactive mirror | scrcpy | `ipb mirror` (own) | no | Device Hub, GUI only |
 | UI hierarchy | `uiautomator dump` | no (captions only via accessibility, no frames) | `ui describe-all` (simulator) | no |
 | Install / uninstall | `install` / `uninstall` | `ipb install` / `ipb uninstall` (devicectl) | yes | `install app` / `uninstall app` |
 | Launch / kill / ps | `am start` / `am force-stop` / `ps` | `ipb launch` / `ipb kill <pid>` / `ipb ps` (devicectl) | launch / terminate | `process launch/signal`, `info processes` |
@@ -258,30 +290,23 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 - `long`: CoreDevice HID digitizer with repeated hold pulses
 - `home`: CoreDevice HID button service
 - `recents`: CoreDevice HID digitizer bottom-edge gesture
+- `scroll-gesture` and `abs-pointer`: UniversalHID AbsolutePointer and Scroll wire reports to the `gesture`/trackpad service, in DeviceHub's captured phase sequence
+- `power` / `lock` / `wake`: CoreDevice HID button service, consumer usage `0x0c`/`0x30` held 0.5 s
 - `screenshot`: `devicectl device capture screenshot`, using the copy shipped in the CoreDevice package
+- `stream` and `mirror`: the device's own AVConference media path over the CoreDevice tunnel, decoded in process; `mirror` sends input over the same UniversalHID services as the commands above
 
 `CoreDevice.framework` exposes `HIDKeyboard` and `HIDPointer` protocols, but on the verified Xcode 27 beta 2 build their implementations are `UniversalHIDKeyboard` / `UniversalHIDPointer` adapters backed by the UniversalHID service, not separate `feature.remote.hid.keyboard` or `feature.remote.hid.pointer` sockets.
 
 ## Verified Scope
 
-The interaction commands below were manually verified against an iPhone 13 Pro on iOS 27.0 with the Xcode 27 beta 2 host stack (CoreDevice 636.3). See [docs/verification.md](docs/verification.md) for the later compatibility re-check against Xcode 27 beta 6 / CoreDevice 642.15, which covers the build and host-side paths and lists what still needs an attached device.
+Every claim in this README rests on a dated record in [docs/verification.md](docs/verification.md),
+which names the host, the device, the CoreDevice and DDI builds, and the artefacts. The oldest
+records are against an iPhone 13 Pro on iOS 27.0 with Xcode 27 beta 2 (CoreDevice 636.3); the
+compatibility matrix at the top of that file is the current state.
 
-Verified on that beta 2 stack:
-
-- tap opens an app
-- long press opens a context menu
-- scroll moves a list
-- swipe moves a list
-- key sends a UniversalHID keyboard report to `CoreDevice keyboard`
-- pointer sends a zero-movement UniversalHID pointer report to `CoreDevice touchscreenGesture`
-- scroll-report sends a zero-movement UniversalHID scroll report to `CoreDevice touchscreenGesture`
-- scroll-event sends a zero-movement `CoreDevice.HIDScroll` event through `IndigoHIDScroll`
-- vendor-defined sends a zero-length `CoreDevice.HIDVendorDefined` event through `IndigoHIDVendorDefined`
-- Home returns to SpringBoard
-- Recents opens App Switcher
-- descriptors returns five CoreDevice HID services on the verified device
-
-See [docs/verification.md](docs/verification.md) for the exact command set used.
+The smoke gate is what keeps this honest: `scripts/smoke_matrix.sh` exercises service discovery,
+device selection, one report per HID feature, and — with `SMOKE_INTERACTIVE=1` — home, tap,
+recents, swipe, scroll, long press and a key, with a screenshot before and after each step.
 
 ## License and notice
 

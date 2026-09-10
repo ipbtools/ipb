@@ -2043,3 +2043,80 @@ The guard stays — it is one condition plus an enum value, it is harmless, and 
 transient is real if rare — but it is recorded here as **near-dead code**, not as a defect fix.
 Empirical check available at no cost: the mirror's summary prints a `black_bars` counter, which is
 the number of `mapEvent:` failures. If it reads 0 across sessions, that is direct confirmation.
+
+
+## 2026-09-09 — Device selection by prefix and name; grouped help
+
+Host: macOS 26.5.1 25F74, CoreDevice 642.15, Xcode 27 beta 6.
+Device: iPhone 12 mini, iOS 27.0 24A5430a, localNetwork transport.
+
+### What changed in the contract
+
+`ipb` now takes `-s <device>` / `--device <device>` before the command, matching adb's `-s` and
+idb's `--udid`. The selector is a full CoreDevice UUID, a unique prefix of one, or a
+case-insensitive substring of the device name or marketing model. `DEVICE_ID` still works and the
+flag wins over it.
+
+The reason it has to be resolved in `ipb` and not passed through: `devicectl` accepts neither form.
+
+```
+$ xcrun devicectl device info details --device 1D53
+ERROR: The specified device was not found. (Name: 1D53) (com.apple.dt.CoreDeviceError error 1000)
+$ xcrun devicectl device info details --device "iPhone 12 mini"
+ERROR: The specified device was not found. (Name: iPhone 12 mini) (com.apple.dt.CoreDeviceError error 1000)
+```
+
+A full UUID is therefore passed straight through with no enumeration — the common case, and the one
+an exported `DEVICE_ID` hits on every command, costs nothing. `devicectl list devices
+--json-output` measured at 76 ms on this host, which is why the fast path exists rather than
+validating every selector against the list.
+
+Matching is most-specific-first (whole UUID, then prefix, then name/model substring) and each tier
+must produce exactly one hit; ambiguity and no-match both exit 3 and print the attached devices with
+transport and tunnel state. Observed with three devices attached:
+
+```
+$ ipb -s iPhone device
+"iPhone" matches 3 devices; pick one with -s <uuid|uuid-prefix|name> or by setting DEVICE_ID:
+  <uuid-a>  <name-a>  iPhone 15 Pro  (?, tunnel unavailable)
+  <uuid-b>  <name-b>  iPhone 12 mini  (localNetwork, tunnel disconnected)
+  <uuid-c>  <name-c>  iPhone 13 Pro  (wired, tunnel disconnected)
+```
+
+`ipb devices` and `ipb device` output are byte-for-byte unchanged, because `scripts/smoke_matrix.sh`
+parses both.
+
+`ipb help` now prints the ~30 user-facing commands in groups (device selection, input, screen, apps
+and processes, files, system, escape hatches) instead of one flat list of 43; the HID report
+commands moved behind `ipb help hid`. No command was renamed or removed. `ipb help` previously
+fell through to the catch-all and exited 2; it exits 0.
+
+### Gate
+
+Two steps added to `scripts/smoke_matrix.sh`, right after the default device is resolved: the
+default device's UUID prefix and its full name must both resolve back to the same UUID. That is the
+only check that the resolver agrees with the auto-pick, and it is non-interactive.
+
+```sh
+DEVICE_ID=<uuid-b> scripts/smoke_matrix.sh . build/smoke-cli
+DEVICE_ID=<uuid-b> SMOKE_INTERACTIVE=1 TAP_XY="0.15 0.12" scripts/smoke_matrix.sh . build/smoke-cli-i
+```
+
+Both `SMOKE PASSED`. The interactive run: 38 steps, all rc=0, **0 WARN lines and no identical
+consecutive frames** across the 13 screenshots (checked with `md5 -q` over the frames in order).
+Artefacts: `build/smoke-cli/`, `build/smoke-cli-i/`.
+
+### Documentation
+
+`README.md`: the overview now names `stream`, `mirror`, `power` and the devicectl verbs; a "Choosing
+a device" section replaces the `DEVICE_ID`-only paragraph; the iOS-27-only list gained
+`abs-pointer`, `scroll-gesture` and mirror scroll (everything on `0x501`); the mirror shortcut table
+gained ⌘L and mentions scrolling; the feature matrix gained device selection, live stream and
+mirror rows and splits `scroll` from `scroll-gesture`; "Interaction Backends" gained `power`,
+`scroll-gesture`/`abs-pointer`, `stream` and `mirror`.
+
+Two stale claims removed. The mirror section still described the 1184×2576 vs 1170×2532 coordinate
+bias as uncompensated — commit `91ece71` crops the padding, so the window aspect matches the phone.
+And it still listed Lock (⌘L) under "not implemented" after the 2026-09-09 record above verified it
+on device. "Verified Scope" was a snapshot of the beta 2 run duplicating this file; it is now a
+pointer to this file plus what the gate covers.

@@ -31,70 +31,115 @@ quiet_env=(HIDCTL_QUIET=1 HIDCTL_WAIT_MS="${HIDCTL_WAIT_MS:-700}")
 
 usage() {
   cat <<'EOF'
-usage:
-  ipb doctor                  # layered self-check: install, Apple stack, device, DDI, HID services
-  ipb version
-  ipb update                  # update ipb in place (Homebrew install or git checkout)
-  ipb devices                 # physical devices: uuid, name, os, transport, tunnel
-  ipb device                  # the device the other commands would use
-  ipb tap <x> <y>
-  ipb long <x> <y> [seconds]
-  ipb swipe <x1> <y1> <x2> <y2> [seconds] [hold_seconds]
-  ipb scroll <x> <y> <dx> <dy> [seconds]
-  ipb home
-  ipb power [hold_seconds]                   # side button: locks an on screen, wakes an off one
-  ipb lock | ipb wake                        # the same press, under the name you want
-  ipb recents
-  ipb screenshot <path>
-  ipb stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout   # live screen frames (JPEG), no DeviceHub
-  ipb mirror [--seconds S] [--csv PATH]   # live screen + mouse/keyboard control (needs a GUI session)
-  ipb screenrecord <path> [seconds]          # devicectl capture screen-record
-  ipb apps | ps | info | lock-state          # devicectl info apps/processes/details/lockState
-  ipb install <app|ipa>  | uninstall <bundle-id>
-  ipb launch <bundle-id> [args...]           # terminates a running instance first
-  ipb open <url>                             # open a URL / deep link
-  ipb kill <pid> [signal]                    # devicectl process signal
-  ipb ls <remote-path> [--app <bundle-id>]   # list files (app data container with --app)
-  ipb push <local> <remote> [--app <bundle-id>]
-  ipb pull <remote> <local> [--app <bundle-id>]
-  ipb clipboard get | clipboard set <text>   # device pasteboard
-  ipb location <lat> <lon> | location clear  # simulate location
-  ipb orientation [portrait|landscapeLeft|landscapeRight|portraitUpsideDown]
-  ipb reboot | sysdiagnose <dir> | pair | unpair
-  ipb devicectl <args...>                    # raw devicectl with --device filled in
-  ipb service-ids
-  ipb service-id <role>
-  ipb descriptors
-  ipb services
-  ipb reset-gesture [service_id]
-  ipb pointer <dx> <dy> [button_mask] [service_id]
-  ipb key <usage_or_name> [hold_seconds] [service_id]
-  ipb key-down <usage_or_name> [service_id]
-  ipb key-up [usage_or_name] [service_id]
-  ipb button <usage_page> <usage_code> [hold_seconds]
-  ipb scroll-event <x> <y> <z> [phase] [momentum] [target]
-  ipb vendor-defined <usage_page> <usage> <version> [hex_payload]
-  ipb pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
-  ipb scroll-gesture <x> <y> [dx] [dy] [service_id] [steps]  # full trackpad scroll
-  ipb abs-pointer <x> <y> [buttons] [service_id]             # place the cursor
-  ipb scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
-  ipb keyboard-report <service_id> <usage_or_name> <pressed>
-  ipb uhid-report <service_id> <x> <y> <touching> [in_range]
-  ipb uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
-  ipb digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
-  ipb nav-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
-  ipb dock-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
-  ipb raw <feature> <helper_kind> [args...]
+usage: ipb [-s <device>] <command> [args...]
 
-Touch coordinates are normalized: 0..1 from top-left to bottom-right.
+ipb drives a physical iPhone from a Mac over Apple's CoreDevice HID path: no
+XCTest, no WebDriverAgent, nothing installed on the phone. Commands marked
+(devicectl) are thin verbs over Apple's own devicectl; the rest speak the HID
+protocol directly.
+
+device selection
+  -s, --device <id>     CoreDevice UUID, a unique prefix of one, or part of the
+                        device name ("12 mini"). DEVICE_ID does the same; the
+                        flag wins. Default: the one wired or tunnelled device.
+  devices               list physical devices: uuid, name, os, transport, tunnel, model
+  device                print the UUID the other commands would use
+  doctor                layered self-check: install, Apple stack, device, DDI, HID services
+  version               ipb, macOS and CoreDevice versions
+  update                update ipb in place (Homebrew install or git checkout)
+
+input
+  tap <x> <y>                                  a touch, down and up
+  long <x> <y> [seconds]                       press and hold (default 1.0)
+  swipe <x1> <y1> <x2> <y2> [seconds] [hold_seconds]
+  scroll <x> <y> <dx> <dy> [seconds]           drag-style scroll: dx/dy are normalized distances
+  scroll-gesture <x> <y> [dx] [dy] [service_id] [steps]
+                                               trackpad-style scroll; dx/dy are wheel deltas
+  home                                         SpringBoard
+  recents                                      App Switcher
+  power [hold_seconds]                         side button: locks a lit screen, wakes a dark one
+  lock | wake                                  the same press, under the name you want
+  key <usage_or_name> [hold_seconds] [service_id]        one keyboard key
+  key-down <usage_or_name> [service_id]        hold a key (paired with key-up)
+  key-up [usage_or_name] [service_id]          release it, or all keys
+  button <usage_page> <usage_code> [hold_seconds]        a hardware button by HID usage
+  pointer <dx> <dy> [button_mask] [service_id] relative mouse movement (iOS 27 only)
+  abs-pointer <x> <y> [buttons] [service_id]   place the cursor (iOS 27 only)
+
+screen
+  screenshot <path>                            (devicectl)
+  screenrecord <path> [seconds]                (devicectl; unsupported on the tested iOS 27.0)
+  stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout
+                                               live JPEG frames, no DeviceHub
+  mirror [--seconds S] [--csv PATH]            live screen plus mouse and keyboard (needs a GUI session)
+
+apps and processes (devicectl)
+  apps                                         installed apps
+  ps                                           running processes
+  install <app|ipa> | uninstall <bundle-id>
+  launch <bundle-id> [args...]                 terminates a running instance first
+  open <url>                                   open a URL or deep link
+  kill <pid> [signal]
+
+files (devicectl)
+  ls <remote-path> [--app <bundle-id>]         --app reads an app's data container
+  push <local> <remote> [--app <bundle-id>]
+  pull <remote> <local> [--app <bundle-id>]
+
+system (devicectl)
+  info | lock-state                            device details, passcode/lock state
+  clipboard get | clipboard set <text>         device pasteboard
+  location <lat> <lon> | location clear        simulate location
+  orientation [portrait|landscapeLeft|landscapeRight|portraitUpsideDown]
+  reboot | sysdiagnose <dir> | pair | unpair
+
+escape hatches
+  devicectl <args...>                          raw devicectl with --device filled in
+  raw <feature> <helper_kind> [args...]        raw helper call
+  help hid                                     the low-level HID report commands
+
+Coordinates are normalized: 0..1 from top-left to bottom-right. Seconds are
+decimal. Set DEVICE_ID in your shell to make a device the default for the
+session; UHID_SERVICE_ID overrides the UniversalHID service (default auto,
+which resolves the touchscreen service from the device's own descriptors), and
+UHID_SERVICE_FALLBACK=0x101 tolerates a discovery failure instead of erroring
+out. IPB_HELPER overrides the built helper path.
+
+Exit codes: 0 ok, 1 the device or connection reported failure, 2 usage or local
+error, 3 device selection or service socket refused, 4 the device tunnel is not
+connected, 5 watchdog timeout. stream and mirror define more; see README.md.
+EOF
+}
+
+# The HID report commands: one report on the wire per call, arguments in protocol
+# units. These are for protocol work, not for driving a phone; see docs/protocol.md.
+usage_hid() {
+  cat <<'EOF'
+usage: ipb [-s <device>] <command> [args...]   -- low-level HID commands
+
+service discovery
+  services                                     the device's connected HID descriptors
+  service-ids                                  the service ids UniversalHID knows (host-side)
+  service-id <role>                            resolve one: touchscreen, gesture, keyboard, buttons, avp
+  reset-gesture [service_id]                   clear a stuck gesture state
+
+one report per call
+  uhid-report <service_id> <x> <y> <touching> [in_range]
+  uhid-swipe-report <service_id> <x> <y> <touching> <in_range> <pending> <locked> <up>
+  keyboard-report <service_id> <usage_or_name> <pressed>
+  pointer-report <service_id> <dx> <dy> [button_mask] [accel_x] [accel_y] [flags]
+  scroll-report <service_id> <dx> <dy> [phase] [momentum] [flags] [accel_x] [accel_y]
+  nav-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
+  dock-report <service_id> <phase> <swipe_mask> <gesture_motion> <flavor> <progress> <x> <y>
+
+standalone HID features
+  digitizer-event <x1> <y1> <x2> <y2> <point2_tag> <event_type|start|position|end> <edge|none|bottom> [target_low] [target_high]
+  scroll-event <x> <y> <z> [phase] [momentum] [target]
+  vendor-defined <usage_page> <usage> <version> [hex_payload]
+
 Pointer dx/dy are signed relative deltas; button_mask is the raw PointerReport
-button mask.
-Set DEVICE_ID to pick a device (CoreDevice UUID from devicectl list devices --json-output);
-otherwise the single wired or tunnelled physical device is used.
-Set UHID_SERVICE_ID to override the UniversalHID service. The default, auto,
-resolves the touchscreen service from descriptors; set UHID_SERVICE_FALLBACK=0x101
-to tolerate discovery failures instead of erroring out.
-Set IPB_HELPER to override the built helper path.
+button mask. Scroll phases follow the captured sequence in docs/protocol.md:
+0x80 mayBegin, 0x01 began, 0x02 changed, 0x04 ended, 0x00 momentum.
 EOF
 }
 
@@ -125,38 +170,77 @@ PY
   return $rc
 }
 
-# Pick the device: DEVICE_ID wins; otherwise the single wired/tunnelled physical device.
+# Pick the device. A full CoreDevice UUID is used as given, so the common case costs no
+# enumeration; anything else (a UUID prefix, part of a device name) is matched against the
+# device list here, because devicectl --device accepts neither. With no selector at all,
+# the single wired or tunnelled physical device is used.
 resolve_device() {
-  if [[ -n "${DEVICE_ID:-}" ]]; then
-    print -r -- "$DEVICE_ID"
+  local sel="${DEVICE_SELECTOR:-}"
+  if [[ "$sel" =~ '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$' ]]; then
+    print -r -- "$sel"
     return 0
   fi
   local json
   json="$(mktemp -t ipb-devices)"
   devicectl list devices --json-output "$json" --quiet >/dev/null 2>&1 || true
   local picked
-  picked="$(python3 - "$json" <<'PY'
+  picked="$(python3 - "$json" "$sel" <<'PY'
 import json, sys
+
+HINT = 'pick one with -s <uuid|uuid-prefix|name> or by setting DEVICE_ID'
+
 try:
     devices = json.load(open(sys.argv[1]))["result"]["devices"]
 except Exception:
+    print("could not list devices; is the CoreDevice package installed?", file=sys.stderr)
     sys.exit(3)
-usable = []
+selector = sys.argv[2]
+
+physical = []
 for d in devices:
     hw = d.get("hardwareProperties", {}); cp = d.get("connectionProperties", {})
     if hw.get("reality", "physical") != "physical":
         continue
-    if cp.get("transportType") == "wired" or cp.get("tunnelState") == "connected":
-        usable.append((d["identifier"], d.get("deviceProperties", {}).get("name", "?"), cp.get("tunnelState")))
-if len(usable) == 1:
-    print(usable[0][0])
-elif not usable:
-    print("no wired or tunnelled physical device found; set DEVICE_ID", file=sys.stderr); sys.exit(3)
-else:
-    print("several devices are connected; set DEVICE_ID to one of:", file=sys.stderr)
-    for ident, name, state in usable:
-        print(f"  {ident}  {name}  ({state})", file=sys.stderr)
+    physical.append({
+        "id": d["identifier"],
+        "name": d.get("deviceProperties", {}).get("name", "?"),
+        "model": hw.get("marketingName") or hw.get("productType", "?"),
+        "transport": cp.get("transportType", "?"),
+        "tunnel": cp.get("tunnelState", "?"),
+    })
+
+def bail(head, candidates):
+    print(f"{head}; {HINT}:", file=sys.stderr)
+    for c in candidates:
+        print(f"  {c['id']}  {c['name']}  {c['model']}  ({c['transport']}, tunnel {c['tunnel']})",
+              file=sys.stderr)
     sys.exit(3)
+
+if selector:
+    needle = selector.lower()
+    # Most specific match first: whole id, then a prefix of one, then part of a name or model.
+    for match in (lambda c: c["id"].lower() == needle,
+                  lambda c: c["id"].lower().startswith(needle),
+                  lambda c: needle in c["name"].lower() or needle in c["model"].lower()):
+        hits = [c for c in physical if match(c)]
+        if len(hits) == 1:
+            print(hits[0]["id"])
+            sys.exit(0)
+        if len(hits) > 1:
+            bail(f'"{selector}" matches {len(hits)} devices', hits)
+    bail(f'no device matches "{selector}"', physical)
+
+usable = [c for c in physical if c["transport"] == "wired" or c["tunnel"] == "connected"]
+if len(usable) == 1:
+    print(usable[0]["id"])
+elif physical:
+    bail("no device is wired or tunnelled; connect one over USB", physical)
+elif not usable:
+    print("no physical device found; plug one in over USB, unlock it, and accept Trust",
+          file=sys.stderr)
+    sys.exit(3)
+else:
+    bail(f"{len(usable)} devices are connected", usable)
 PY
 )" || { rm -f "$json"; return 3; }
   rm -f "$json"
@@ -542,7 +626,7 @@ doctor() {
   DEVICE="$selected"
   dev_line="$(print -r -- "$devices" | awk -F'\t' -v id="$DEVICE" '$1 == id')"
   if [[ -z "$dev_line" ]]; then
-    d_fail "selection" "DEVICE_ID $DEVICE is not a device CoreDevice knows; use a UUID from 'ipb devices'"
+    d_fail "selection" "$DEVICE is not a device CoreDevice knows; use a UUID from 'ipb devices'"
     print -r -- "== result: $DOCTOR_FAILS failure(s); device checks skipped =="
     return 1
   fi
@@ -587,6 +671,19 @@ doctor() {
   (( DOCTOR_FAILS == 0 ))
 }
 # ---------------------------------------------------------------------------
+
+# Device selection comes from -s/--device or DEVICE_ID; the flag wins. It is read before the
+# command so that the deferred resolutions (doctor, mirror) see the same selector.
+DEVICE_SELECTOR="${DEVICE_ID:-}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -s|--device)
+      [[ $# -ge 2 ]] || { print -u2 "ipb: $1 needs a device (uuid, uuid prefix, or part of a name)"; exit 2; }
+      DEVICE_SELECTOR="$2"; shift 2 ;;
+    --device=*) DEVICE_SELECTOR="${1#--device=}"; shift ;;
+    *) break ;;
+  esac
+done
 
 cmd="${1:-}"
 [[ -n "$cmd" ]] || { usage; exit 2; }
@@ -715,6 +812,14 @@ case "$cmd" in
       exit 2
     fi
     ;;
+  help|-h|--help)
+    [[ $# -le 1 ]] || { usage; exit 2; }
+    case "${1:-}" in
+      "") usage ;;
+      hid|protocol|reports) usage_hid ;;
+      *) print -u2 "ipb: no help topic \"$1\"; try 'ipb help' or 'ipb help hid'"; exit 2 ;;
+    esac
+    ;;
   devices)
     [[ $# -eq 0 ]] || { usage; exit 2; }
     list_devices
@@ -734,7 +839,7 @@ case "$cmd" in
     ;;
   service-ids|ids)
     [[ $# -eq 0 ]] || { usage; exit 2; }
-    env "${quiet_env[@]}" "$BIN" "${DEVICE_ID:-host}" "$ACTION" "$UHID_FEATURE" 0 cd_hid_service_ids
+    env "${quiet_env[@]}" "$BIN" "${DEVICE_SELECTOR:-host}" "$ACTION" "$UHID_FEATURE" 0 cd_hid_service_ids
     ;;
   reset-gesture)
     [[ $# -le 1 ]] || { usage; exit 2; }
