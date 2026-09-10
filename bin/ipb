@@ -803,8 +803,28 @@ case "$cmd" in
     elif command -v brew >/dev/null 2>&1 && brew list --formula ipb >/dev/null 2>&1; then
       print -r -- "ipb: Homebrew install; updating tap and formula"
       brew update || true
-      brew upgrade --fetch-HEAD ipb || { print -u2 "ipb: brew upgrade failed"; exit 1; }
-      print -r -- "ipb: updated ($(command ipb version 2>/dev/null || true))"
+      installed="$(brew list --versions ipb 2>/dev/null | awk '{print $2}')"   # HEAD-<sha>
+      head_url="$(brew info --json=v2 ipb 2>/dev/null | python3 -c \
+        'import json,sys; print(json.load(sys.stdin)["formulae"][0]["urls"]["head"]["url"])' 2>/dev/null)"
+      remote=""
+      [[ -n "$head_url" ]] && remote="$(git ls-remote "$head_url" HEAD 2>/dev/null | awk 'NR==1 {print substr($1, 1, 7)}')"
+      if [[ -n "$remote" && "$installed" == "HEAD-$remote" ]]; then
+        print -r -- "ipb: already at the latest HEAD ($installed)"
+        exit 0
+      fi
+      # Neither of Homebrew 6.0.22's own answers can be trusted for a HEAD formula:
+      # `brew outdated --fetch-HEAD` calls it outdated unconditionally, and
+      # `brew upgrade --fetch-HEAD` answers "HEAD-<sha> already installed" by comparing against a
+      # cached clone it did not refresh, so it refuses even when the remote has moved. The sha
+      # comparison above is the real signal, and a reinstall is the only path that rebuilds from
+      # a fresh fetch.
+      brew reinstall ipb || { print -u2 "ipb: brew reinstall failed"; exit 1; }
+      updated="$(brew list --versions ipb 2>/dev/null | awk '{print $2}')"
+      if [[ -n "$remote" && "$updated" != "HEAD-$remote" ]]; then
+        print -u2 "ipb: reinstall finished at ${updated:-unknown}, but the remote HEAD is $remote"
+        exit 1
+      fi
+      print -r -- "ipb: updated ${installed:-unknown} -> ${updated:-unknown} ($(command ipb version 2>/dev/null || true))"
     else
       print -u2 "ipb: not a git checkout and not a Homebrew install; update manually"
       print -u2 "  brew:   brew update && brew upgrade --fetch-HEAD ipb"
