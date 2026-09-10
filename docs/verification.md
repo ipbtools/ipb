@@ -2163,3 +2163,80 @@ Nothing about the tap changed; `brew install --HEAD ipb` tracks this repository'
 GitHub and nothing else — the formula, its caveats and its install layout are unchanged apart from
 the completion file, which `make install` handles. `VERSION` moved 0.1.0 → 0.2.0 because `-s` is a
 new CLI contract and `ipb version` should tell the two apart.
+
+
+## 2026-09-10 — `ipb update` reported success without updating
+
+Host: macOS 26.5.1 25F80, Homebrew 6.0.22, CoreDevice 642.15.
+
+### Reproduction
+
+Homebrew install at `HEAD-047d906`, remote `main` at `9fba884`:
+
+```
+$ ipb update
+ipb: Homebrew install; updating tap and formula
+Warning: ipbtools/ipb/ipb HEAD-047d906 already installed
+ipb: updated (ipb 0.1.0 (macOS 26.5.1 25F80, CoreDevice 642.15))
+$ ipb version
+ipb 0.1.0 ...
+```
+
+`brew upgrade` exits 0 when it decides there is nothing to do, and the wrapper took that as proof.
+Reachability is every Homebrew user on every update; self-recovery is nil, because the next run
+prints the same thing.
+
+### Why both of Homebrew's answers are unusable here
+
+`brew upgrade --fetch-HEAD ipb` compares the installed sha against the cached clone in
+`~/Library/Caches/Homebrew/ipb--git`, which it does not refresh first. With the cache at 047d906
+and the remote at 9fba884 it answered "already installed". `--greedy` and the fully qualified
+`ipbtools/ipb/ipb` behaved identically.
+
+`brew outdated --fetch-HEAD ipb` cannot be used as the gate either — it calls a HEAD formula
+outdated unconditionally:
+
+```
+$ git -C ~/Library/Caches/Homebrew/ipb--git log --oneline -1
+9fba884 Tab completion for -s, and the devices behind it
+$ git ls-remote https://github.com/ipbtools/ipb.git HEAD
+9fba8844f1ff4ec50b4fd92e28577fba6e095fda	HEAD
+$ brew outdated --fetch-HEAD --verbose ipb
+ipbtools/ipb/ipb (HEAD-9fba884) < latest HEAD
+```
+
+Cache, remote and installed all at 9fba884, still reported behind. An earlier draft of the fix
+used this as the signal and consequently rebuilt on every run, then failed its own
+did-it-move check — caught here, not shipped.
+
+`brew reinstall ipb` is the one path that rebuilds from a fresh fetch; it moved 047d906 → 9fba884
+correctly.
+
+### The fix
+
+Compare the shas directly: `brew list --versions ipb` gives `HEAD-<sha>`, and `git ls-remote` on
+the formula's own head url (read from `brew info --json=v2`, not hardcoded, so a moved tap still
+works) gives the remote. Equal is an early exit; otherwise `brew reinstall`, and the result is
+checked against the remote sha before anything claims success. `brew upgrade` was removed rather
+than kept as a first attempt — it cannot succeed where reinstall is needed, and two paths to one
+concern is what Rule 2 forbids.
+
+Verified after the fix was installed:
+
+```
+$ ipb update
+ipb: already at the latest HEAD (HEAD-ef61d06)
+$ echo $?
+0
+```
+
+### Note for existing installs
+
+The fix cannot fix its own delivery: an install predating it runs the old `update`, which will keep
+reporting a false success. One `brew reinstall ipb` lands the new wrapper, and `ipb update` is
+honest from then on.
+
+### Gate
+
+`DEVICE_ID=<uuid-b> scripts/smoke_matrix.sh . build/smoke-upd` → `SMOKE PASSED` on the iPhone
+12 mini, 19 steps, all rc=0.

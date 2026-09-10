@@ -68,6 +68,12 @@ autoload -Uz compinit && compinit
 
 Only zsh is provided; bash has no completion.
 
+`ipb update` refreshes a Homebrew install or a source checkout in place. On a Homebrew install it
+compares the installed `HEAD-<sha>` against the remote HEAD and reinstalls only when they differ:
+`brew upgrade --fetch-HEAD` cannot be used, because it compares against a cached clone it does not
+refresh and answers "already installed" when the remote has moved. An install predating this fix
+runs the old wrapper and will report a false success once; `brew reinstall ipb` lands the new one.
+
 `make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`, `libexec/ipb-helper`, `libexec/ipb-video`, `libexec/ipb-mirror`, `share/ipb/VERSION`, `share/ipb/smoke_matrix.sh`, `share/zsh/site-functions/_ipb`.
 
 ## Build
