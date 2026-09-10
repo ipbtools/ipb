@@ -1,0 +1,129 @@
+#compdef ipb
+# zsh completion for ipb. Installed to share/zsh/site-functions/_ipb by `make install`,
+# which is where Homebrew's completion link picks it up. From a source checkout:
+#   fpath=(/path/to/ipb/completions $fpath); autoload -Uz compinit; compinit
+
+# Devices, from `ipb devices` (uuid, name, os, transport, tunnel, model). Both the UUID and
+# the device name complete, because -s accepts either; the description carries the rest so
+# a list of UUIDs is still readable.
+_ipb_devices() {
+  local -a uuids names
+  local line uuid name os transport tunnel model
+  local ipb="${words[1]}"
+  for line in ${(f)"$(command $ipb devices 2>/dev/null)"}; do
+    IFS=$'\t' read -r uuid name os transport tunnel model <<< "$line"
+    [[ -n "$uuid" ]] || continue
+    # _describe splits value from description on the first colon, so escape any in a name.
+    uuids+=( "${uuid}:${name} (${model}, iOS ${os%% *}, ${transport}, tunnel ${tunnel})" )
+    names+=( "${name//:/\\:}:${model}, iOS ${os%% *}" )
+  done
+  (( $#uuids )) || return 1
+  _describe -t ipb-uuids 'device uuid' uuids
+  _describe -t ipb-names 'device name' names
+}
+
+_ipb_commands() {
+  local -a cmds
+  cmds=(
+    'devices:list physical devices'
+    'device:print the UUID the other commands would use'
+    'doctor:layered self-check of every layer'
+    'version:ipb, macOS and CoreDevice versions'
+    'update:update ipb in place'
+    'help:grouped command list (help hid for the HID commands)'
+
+    'tap:a touch, down and up'
+    'long:press and hold'
+    'swipe:drag between two points'
+    'scroll:drag-style scroll'
+    'scroll-gesture:trackpad-style scroll (iOS 27)'
+    'home:SpringBoard'
+    'recents:App Switcher'
+    'power:side button; locks a lit screen, wakes a dark one'
+    'lock:the side button, under the name you want'
+    'wake:the side button, under the name you want'
+    'key:one keyboard key'
+    'key-down:hold a key'
+    'key-up:release a key, or all keys'
+    'button:a hardware button by HID usage'
+    'pointer:relative mouse movement (iOS 27)'
+    'abs-pointer:place the cursor (iOS 27)'
+
+    'screenshot:save a PNG'
+    'screenrecord:record the screen'
+    'stream:live JPEG frames'
+    'mirror:live screen plus mouse and keyboard'
+
+    'apps:installed apps'
+    'ps:running processes'
+    'install:install an .app or .ipa'
+    'uninstall:remove an app by bundle id'
+    'launch:launch an app by bundle id'
+    'open:open a URL or deep link'
+    'kill:signal a process'
+
+    'ls:list files'
+    'push:copy a file to the device'
+    'pull:copy a file from the device'
+
+    'info:device details'
+    'lock-state:passcode and lock state'
+    'clipboard:device pasteboard'
+    'location:simulate or clear location'
+    'orientation:read or set the orientation'
+    'reboot:restart the device'
+    'sysdiagnose:collect a sysdiagnose'
+    'pair:pair the device'
+    'unpair:unpair the device'
+
+    'devicectl:raw devicectl with --device filled in'
+    'raw:raw helper call'
+
+    'services:the device connected HID descriptors'
+    'service-ids:the service ids UniversalHID knows'
+    'service-id:resolve one service id by role'
+    'reset-gesture:clear a stuck gesture state'
+    'uhid-report:one touchscreen report'
+    'uhid-swipe-report:one swipe-contact report'
+    'keyboard-report:one keyboard report'
+    'pointer-report:one pointer report'
+    'scroll-report:one scroll report'
+    'nav-report:one navigation-swipe report'
+    'dock-report:one dock-swipe report'
+    'digitizer-event:one digitizer event'
+    'scroll-event:one HIDScroll event'
+    'vendor-defined:one vendor-defined event'
+  )
+  _describe -t commands 'ipb command' cmds
+}
+
+_ipb() {
+  local curcontext="$curcontext" state line
+  typeset -A opt_args
+
+  _arguments -C \
+    '(-s --device)'{-s,--device}'[device: UUID, unique prefix, or part of a name]:device:_ipb_devices' \
+    '1: :_ipb_commands' \
+    '*::arg:->args'
+
+  case "$state" in
+    args)
+      case "${words[1]}" in
+        screenshot|screenrecord) _files ;;
+        install) _files -g '*.(app|ipa)' ;;
+        push) _arguments '1:local file:_files' '2:remote path:' '--app[app data container]:bundle id:' ;;
+        pull) _arguments '1:remote path:' '2:local file:_files' '--app[app data container]:bundle id:' ;;
+        sysdiagnose) _files -/ ;;
+        service-id) _values 'role' touchscreen gesture keyboard buttons avp ;;
+        help) _values 'topic' hid ;;
+        clipboard) _values 'action' get set ;;
+        location) _values 'action' clear ;;
+        orientation) _values 'orientation' portrait landscapeLeft landscapeRight portraitUpsideDown ;;
+        stream) _values 'option' --dir --count --fps --seconds --stdout ;;
+        mirror) _values 'option' --seconds --csv --service-id --help ;;
+      esac
+      ;;
+  esac
+}
+
+_ipb "$@"

@@ -40,6 +40,9 @@ shot() {
 }
 
 echo "host: $(sw_vers -productVersion) $(sw_vers -buildVersion)  DEVICE_ID=${DEVICE_ID:-auto}" | tee -a "$log"
+# The completion is user documentation the shell executes; a syntax error in it is silent
+# until someone presses Tab. Loading it here is host-only and costs nothing.
+run "zsh completion loads" -- zsh -c "fpath=($ROOT/completions \$fpath); autoload -Uz compinit; compinit -u -d \$(mktemp -t ipbzcd); autoload -Uz _ipb; functions _ipb >/dev/null"
 run "service-ids (host only)" --expect '^mainTouchscreen +0x101' -- "$CTL" service-ids
 run "descriptors" --expect 'connected descriptors count=[1-9]' -- "$CTL" descriptors
 # Capability expectations come from the device OS: iOS 27 exposes five HID services (adds

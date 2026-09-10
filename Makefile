@@ -112,7 +112,7 @@ smoke: all
 	bin/ipb screenshot $(BUILD_DIR)/smoke.png
 
 install: all
-	install -d $(PREFIX)/bin $(PREFIX)/libexec $(PREFIX)/share/ipb
+	install -d $(PREFIX)/bin $(PREFIX)/libexec $(PREFIX)/share/ipb $(PREFIX)/share/zsh/site-functions
 	install -m 755 bin/ipb $(PREFIX)/bin/ipb
 	install -m 755 $(TARGET) $(PREFIX)/libexec/ipb-helper
 	install -m 755 $(VIDEO_TARGET) $(PREFIX)/libexec/ipb-video
@@ -121,6 +121,7 @@ install: all
 	codesign -s - -f $(PREFIX)/libexec/ipb-mirror
 	install -m 644 VERSION $(PREFIX)/share/ipb/VERSION
 	install -m 755 scripts/smoke_matrix.sh $(PREFIX)/share/ipb/smoke_matrix.sh
+	install -m 644 completions/_ipb $(PREFIX)/share/zsh/site-functions/_ipb
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -42,7 +42,33 @@ ipb doctor                   # layered self-check, names the next step on failur
 ipb devices                  # then: ipb screenshot before.png; ipb tap 0.15 0.12; ipb home
 ```
 
-`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`, `libexec/ipb-helper`, `libexec/ipb-video`, `libexec/ipb-mirror`, `share/ipb/VERSION`, `share/ipb/smoke_matrix.sh`.
+### Shell completion
+
+A zsh completion ships with the tool and is installed to `share/zsh/site-functions/_ipb`, which
+Homebrew links automatically — open a new shell and `ipb <Tab>` lists the commands with
+descriptions. `-s <Tab>` completes against the attached devices, offering both the UUIDs and the
+device names, each annotated with model, iOS version, transport and tunnel state:
+
+```
+$ ipb -s <Tab>
+device uuid
+<uuid-a>  -- <name-a> (iPhone 12 mini, iOS 27.0, wired, tunnel connected)
+<uuid-b>  -- <name-b> (iPhone 13 Pro, iOS 27.0, localNetwork, tunnel disconnected)
+device name
+<name-a>  -- iPhone 12 mini, iOS 27.0
+<name-b>  -- iPhone 13 Pro, iOS 27.0
+```
+
+From a source checkout, add it to `fpath` yourself:
+
+```sh
+fpath=(/path/to/ipb/completions $fpath)
+autoload -Uz compinit && compinit
+```
+
+Only zsh is provided; bash has no completion.
+
+`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`, `libexec/ipb-helper`, `libexec/ipb-video`, `libexec/ipb-mirror`, `share/ipb/VERSION`, `share/ipb/smoke_matrix.sh`, `share/zsh/site-functions/_ipb`.
 
 ## Build
 

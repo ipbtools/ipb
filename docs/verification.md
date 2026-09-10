@@ -2120,3 +2120,46 @@ bias as uncompensated — commit `91ece71` crops the padding, so the window aspe
 And it still listed Lock (⌘L) under "not implemented" after the 2026-09-09 record above verified it
 on device. "Verified Scope" was a snapshot of the beta 2 run duplicating this file; it is now a
 pointer to this file plus what the gate covers.
+
+
+## 2026-09-10 — zsh completion, and what `brew upgrade` needs
+
+Host: macOS 26.5.1 25F74, CoreDevice 642.15. Devices attached: iPhone 12 mini (iOS 27.0),
+iPhone 13 Pro (iOS 27.0), iPhone 15 Pro (iOS 26.6.1).
+
+`completions/_ipb` completes the command list with one-line descriptions and, after `-s` /
+`--device`, the attached devices — offered twice, once by UUID and once by name, because `-s`
+accepts either. Descriptions carry model, iOS version, transport and tunnel state, which is what
+makes a list of three UUIDs readable. `make install` puts it in
+`$(PREFIX)/share/zsh/site-functions/_ipb`, the path Homebrew links automatically.
+
+Verified end to end in a real zsh completion run, not just by loading the file: a pty via
+`script -q /dev/null zsh -i` with `fpath` pointing at `completions/`, fed a literal Tab.
+
+```
+$ ipb -s <Tab>
+<uuid-b>  -- <name-b> (iPhone 12 mini, iOS 27.0, localNetwork, tunnel disconnected)
+<uuid-a>  -- <name-a> (iPhone 15 Pro, iOS 26.6.1, localNetwork, tunnel disconnected)
+<uuid-c>  -- <name-c> (iPhone 13 Pro, iOS 27.0, wired, tunnel disconnected)
+<name-a>  -- iPhone 15 Pro, iOS 26.6.1
+<name-b>  -- iPhone 12 mini, iOS 27.0
+<name-c>  -- iPhone 13 Pro, iOS 27.0
+```
+
+Also checked in the same harness: `ipb scr<Tab>` lists screenrecord/screenshot/scroll/scroll-event/
+scroll-gesture/scroll-report with their descriptions; `ipb service-id <Tab>` lists the five roles;
+`ipb help <Tab>` completes to `hid`; and `ipb -s 12\ mini ho<Tab>` completes to `home`, so a
+selector with a space does not break the command position.
+
+A completion is user documentation that the shell executes, and a syntax error in it stays silent
+until someone presses Tab, so the gate now loads it as its first step (host-only, 0 s).
+`DEVICE_ID=<uuid-b> scripts/smoke_matrix.sh . build/smoke-comp` → `SMOKE PASSED`, 19 steps, all
+rc=0.
+
+### Homebrew
+
+Nothing about the tap changed; `brew install --HEAD ipb` tracks this repository's `main`, and
+`ipb update` runs `brew upgrade --fetch-HEAD ipb`. So an update needs the commits pushed to
+GitHub and nothing else — the formula, its caveats and its install layout are unchanged apart from
+the completion file, which `make install` handles. `VERSION` moved 0.1.0 → 0.2.0 because `-s` is a
+new CLI contract and `ipb version` should tell the two apart.
