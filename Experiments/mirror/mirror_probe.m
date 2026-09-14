@@ -70,7 +70,7 @@ extern void xpc_remote_connection_cancel(xrc_t);
 
 enum { Capacity=8192, PendingLimit=64 };
 typedef enum { Down, Move, Up } Kind;
-typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, Interrupted } Result;
+typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, SendTimedOut, Interrupted } Result;
 typedef struct { uint64_t seq, generation, gesture; Kind kind; double x,y,submit; } Event;
 typedef struct { Event event; unsigned depth; Result result; int reportCode,barrierCode;
                  double received,reportReturn,barrierReturn; } Record;
@@ -81,6 +81,33 @@ static Record gRecords[Capacity]; // bounded ring; CLI caps total so no submissi
 static unsigned gPending[PendingLimit],gHead,gCount,gMaxDepth,gSubmitted;
 static BOOL gWorker,gStopping,gCollect;
 static _Atomic uint64_t gGeneration=1;
+// Mirrors the Sources/mirror.m bounded-send contract; this probe is its verification harness.
+#define SendDeadlineSeconds 0.5
+#define SendTimedOutCode (-62)
+static _Atomic unsigned long long gAbandonedSends=0;
+static int sendBounded(int (^call)(void)){
+    __block int result=0;
+    dispatch_semaphore_t done=dispatch_semaphore_create(0);
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
+        result=call(); dispatch_semaphore_signal(done);
+    });
+    if(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,
+            (int64_t)(SendDeadlineSeconds*NSEC_PER_SEC)))){
+        atomic_fetch_add(&gAbandonedSends,1);
+        return SendTimedOutCode;
+    }
+    return result;
+}
+static int sendReportBounded(xrc_t connection,const void *words,size_t length,uint64_t serviceID){
+    void *copy=malloc(length);
+    if(!copy) return SendTimedOutCode;
+    memcpy(copy,words,length);
+    return sendBounded(^{
+        int code=coredevice_send_universalhid_hid_report(connection,copy,serviceID);
+        free(copy); return code;
+    });
+}
+static Result failureFor(int code,Result onFail){ return code==SendTimedOutCode?SendTimedOut:onFail; }
 static _Atomic int gFailure=0;
 static _Atomic bool gFinished=false;
 static NSString *gReason;
@@ -134,7 +161,7 @@ static void finish(int code,NSString *reason){
     static double values[4][Capacity]; unsigned counts[4]={0};
     unsigned executed=0,rejected=0,overload=0,inflight=0;
     const char *kinds[]={"DOWN","MOVE","UP"};
-    const char *results[]={"pending","running","sent","rejected","overload","build_failed","send_failed","barrier_failed","interrupted"};
+    const char *results[]={"pending","running","sent","rejected","overload","build_failed","send_failed","barrier_failed","send_timed_out","interrupted"};
     for(unsigned i=0;i<n;i++){
         Record *r=&records[i];
         if(r->result==Pending){ r->result=Rejected; }
@@ -158,6 +185,8 @@ static void finish(int code,NSString *reason){
         intervalN?[NSString stringWithFormat:@"%.3f",intervals[(unsigned)ceil(intervalN*.50)-1]*1000]:@"NA",
         intervalN?[NSString stringWithFormat:@"%.3f",intervals[(unsigned)ceil(intervalN*.95)-1]*1000]:@"NA",
         (unsigned long long)drops,(unsigned long long)errors,intervalN,(unsigned long long)intervalCount];
+    [s appendFormat:@"abandoned_sends=%llu (deadline %.2fs)\n",
+        (unsigned long long)atomic_load(&gAbandonedSends),(double)SendDeadlineSeconds];
     [s appendString:@"drops=local invalid/non-increasing PTS only; transport/decoder losses unknown. Times=CLOCK_MONOTONIC seconds; blank=not reached.\nseq,type,generation,gesture,result,queue_depth,t_submit,t_received,t_report_return,t_barrier_return,report_code,barrier_code\n"];
     for(unsigned i=0;i<n;i++){
         Record r=records[i];
@@ -318,16 +347,22 @@ static void drainInput(void){
             if(count!=sizeof words){ r.result=BuildFailed; r.reportCode=count; inputError(@"pointer report construction failed"); }
             else if(event.generation!=atomic_load(&gGeneration)) r.result=Rejected;
             else {
-                r.reportCode=coredevice_send_universalhid_hid_report(gInput,words,0x501);
-                r.reportReturn=nowSec(); r.result=r.reportCode?SendFailed:Sent;
+                r.reportCode=sendReportBounded(gInput,words,sizeof words,0x501);
+                r.reportReturn=nowSec();
+                r.result=r.reportCode?failureFor(r.reportCode,SendFailed):Sent;
                 // Publish the third point before a possibly stalled barrier.
                 pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
                 if(r.reportCode) inputError(@"UHID report sender failed (see report_code)");
                 else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
                 else if(event.kind==Up){
-                    r.barrierCode=coredevice_send_universalhid_barrier(gInput);
+                    r.barrierCode=sendBounded(^{ return coredevice_send_universalhid_barrier(gInput); });
                     r.barrierReturn=nowSec();
-                    if(r.barrierCode){ r.result=BarrierFailed; inputError(@"UHID barrier failed (see barrier_code)"); }
+                    if(r.barrierCode){
+                        r.result=failureFor(r.barrierCode,BarrierFailed);
+                        inputError(r.result==SendTimedOut?
+                            @"UHID barrier exceeded the send deadline; input queue released":
+                            @"UHID barrier failed (see barrier_code)");
+                    }
                     else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
                     state=Idle; activeGesture=0;
                 }

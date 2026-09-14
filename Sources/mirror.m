@@ -87,7 +87,7 @@ typedef struct {
     uint32_t phase,momentum,flags;
     BOOL starts,ends;
 } ScrollReport;
-typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, Interrupted, ScrollUnsupported, ScrollStationary, InputConflict, ScrollUnavailable, ScrollOrphan, ScrollOffTarget } Result;
+typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, SendTimedOut, Interrupted, ScrollUnsupported, ScrollStationary, InputConflict, ScrollUnavailable, ScrollOrphan, ScrollOffTarget } Result;
 typedef struct { uint64_t seq, generation, gesture; Kind kind; double x,y,submit;
                  InputMode mode; ScrollReport scroll;
                  // Where the pointer was when a scroll arrived. For scroll events
@@ -108,6 +108,10 @@ static _Atomic uint64_t gGeneration=1;
 static _Atomic int gFailure=0;
 static _Atomic bool gFinished=false;
 static _Atomic uint64_t gScrollRawClamps=0; // number of axes saturated during conversion
+// Deadline for a single synchronous HID send; see the sendBounded comment below.
+#define SendDeadlineSeconds 0.5
+#define SendTimedOutCode (-62)
+static _Atomic unsigned long long gAbandonedSends=0; // calls we stopped waiting for
 static NSString *gReason;
 static uint64_t gFrames,gDrops,gMediaErrors,gIntervals;
 static double gFrameIntervals[Capacity],gLastFrame;
@@ -130,7 +134,7 @@ static BOOL gScrollActive,gScrollPrecise,gScrollMomentum,gScrollMomentumAllowed;
 static BOOL isScroll(Kind kind){ return kind>=ScrollPrecise && kind<=ScrollEnd; }
 static BOOL isEnd(Event event){ return event.kind==Up || (isScroll(event.kind) && event.scroll.ends); }
 static const char *inputResults[]={"pending","running","sent","rejected","overload","build_failed",
-    "send_failed","barrier_failed","interrupted","scroll_unsupported","scroll_stationary",
+    "send_failed","barrier_failed","send_timed_out","interrupted","scroll_unsupported","scroll_stationary",
     "input_conflict","scroll_unavailable","scroll_orphan","scroll_off_target"};
 // Detector and accepted frames are protected by gLock. Display geometry is main-thread-only.
 static struct {
@@ -219,7 +223,9 @@ static void finish(int code,NSString *reason){
     NSMutableString *s=[NSMutableString string];
     [s appendFormat:@"enqueued=%llu display_backpressure_drops=%llu black_bar_rejections=%llu\n",
         (unsigned long long)displayed,(unsigned long long)displayDrops,(unsigned long long)blackBars];
-    [s appendFormat:@"scroll_raw_clamped_axes=%llu\n",(unsigned long long)atomic_load(&gScrollRawClamps)];
+    [s appendFormat:@"scroll_raw_clamped_axes=%llu abandoned_sends=%llu (deadline %.2fs)\n",
+        (unsigned long long)atomic_load(&gScrollRawClamps),
+        (unsigned long long)atomic_load(&gAbandonedSends),(double)SendDeadlineSeconds];
     static double values[4][Capacity]; unsigned counts[4]={0};
     unsigned executed=0,rejected=0,overload=0,inflight=0;
     const char *kinds[]={"DOWN","MOVE","UP","SCROLL_PRECISE","SCROLL_WHEEL","SCROLL_END","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN"};
@@ -605,6 +611,45 @@ static int openInput(const char *dev,const char *feature,xrc_t *remote,int *fd){
     return 0;
 }
 
+// Apple's HID senders are synchronous and cannot be cancelled. On a connection that has gone
+// invalid they block for hundreds of milliseconds to seconds -- measured 744 ms to 2846 ms, against
+// a 3.5-5.3 ms healthy median -- and then return 0, so a caller that waits on one strands every
+// event queued behind it (docs/verification.md, 2026-09-14). Run the call off the input queue and
+// stop waiting at a deadline. The abandoned call still runs to completion in the background; it
+// simply no longer owns the input queue. Expiry is a send failure, never a retry: nothing is re-sent.
+static int sendBounded(int (^call)(void)){
+    __block int result=0;
+    dispatch_semaphore_t done=dispatch_semaphore_create(0);
+    // Global concurrent queue: a stuck call must not hold up the next one behind it.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
+        result=call();
+        dispatch_semaphore_signal(done);
+    });
+    if(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,
+            (int64_t)(SendDeadlineSeconds*NSEC_PER_SEC)))){
+        // Timed out. `result` belongs to the still-running block from here on; never read it.
+        atomic_fetch_add(&gAbandonedSends,1);
+        return SendTimedOutCode;
+    }
+    return result;
+}
+
+// A C array cannot be captured by a block, and the report bytes must outlive an abandoned call,
+// so they are copied to the heap and the block owns the copy.
+static int sendReportBounded(xrc_t connection,const void *words,size_t length,uint64_t serviceID){
+    void *copy=malloc(length);
+    if(!copy) return SendTimedOutCode;
+    memcpy(copy,words,length);
+    return sendBounded(^{
+        int code=coredevice_send_universalhid_hid_report(connection,copy,serviceID);
+        free(copy);
+        return code;
+    });
+}
+
+// Distinguishes "the device refused it" from "we stopped waiting for it" in the CSV.
+static Result failureFor(int code,Result onFail){ return code==SendTimedOutCode?SendTimedOut:onFail; }
+
 // A key owns the drain until its final continuation. Exactly one delayed block
 // exists at a time; gWorker stays YES, and the group includes the entire sequence.
 // Sources/action_sender.m button_click and digitizer_swipe + bin/ipb recents are
@@ -620,8 +665,8 @@ static void keyStep(unsigned index,unsigned step){
         int code;
         if(recents){
             unsigned position=MIN(step,12u);
-            code=coredevice_send_hid_digitizer_cgpoint(gDigitizer,.5,.995+(.74-.995)*position/12.0,
-                                                      0,0,1,step==0?0:step==13?2:1,3,0,0);
+            code=sendBounded(^{ return coredevice_send_hid_digitizer_cgpoint(gDigitizer,.5,
+                .995+(.74-.995)*position/12.0,0,0,1,step==0?0:step==13?2:1,3,0,0); });
             done=step==13;
             delay=step==12?1.05:.03;
         }else{
@@ -629,8 +674,8 @@ static void keyStep(unsigned index,unsigned step){
             // E9 showed a HUD; EA is the paired usage, rc=0 only (HUD unconfirmed).
             uint64_t usage=r.event.kind==KeyHome?0x40:r.event.kind==KeyVolumeUp?0xE9:
                            r.event.kind==KeyVolumeDown?0xEA:0x30;
-            code=step==2?coredevice_send_hid_button_barrier(gButton):
-                coredevice_send_hid_button_custom(gButton,0x0c,usage,(uint8_t)step);
+            code=sendBounded(^{ return step==2?coredevice_send_hid_button_barrier(gButton):
+                coredevice_send_hid_button_custom(gButton,0x0c,usage,(uint8_t)step); });
             done=step==2; delay=step==0?.08:.12;
         }
         double returned=nowSec();
@@ -638,8 +683,10 @@ static void keyStep(unsigned index,unsigned step){
         if(done){ r.barrierCode=code; r.barrierReturn=returned; }
         if(code){
             if(!done) r.reportCode=code;
-            r.result=done?BarrierFailed:SendFailed; done=YES;
-            inputError(@"shortcut sender failed (see CSV codes)");
+            r.result=failureFor(code,done?BarrierFailed:SendFailed); done=YES;
+            inputError(r.result==SendTimedOut?
+                @"shortcut sender exceeded the send deadline; input queue released":
+                @"shortcut sender failed (see CSV codes)");
         }else if(r.event.generation!=atomic_load(&gGeneration)){
             r.result=Interrupted; done=YES;
         }else if(done) r.result=Sent;
@@ -739,9 +786,9 @@ static void drainInput(void){
                             r.result=BuildFailed; r.reportCode=pointerCount;
                             inputError(@"AbsolutePointer report construction failed");
                         }else{
-                            int pointerCode=coredevice_send_universalhid_hid_report(gInput,pointerWords,gScrollServiceID);
+                            int pointerCode=sendReportBounded(gInput,pointerWords,sizeof pointerWords,gScrollServiceID);
                             if(pointerCode){
-                                r.result=SendFailed; r.reportCode=pointerCode;
+                                r.result=failureFor(pointerCode,SendFailed); r.reportCode=pointerCode;
                                 r.reportReturn=nowSec();
                                 inputError(@"AbsolutePointer send failed; not scrolling a stale target");
                             }else{ lastPointerX=event.pointerX; lastPointerY=event.pointerY; }
@@ -750,13 +797,14 @@ static void drainInput(void){
                     // A failed pointer placement ends the event here: sending
                     // the scroll anyway would act on whatever target the device
                     // still holds. r.result and r.reportCode are already set.
-                    BOOL pointerFailed=(r.result==BuildFailed || r.result==SendFailed);
+                    BOOL pointerFailed=(r.result==BuildFailed || r.result==SendFailed || r.result==SendTimedOut);
                     if(!pointerFailed){
                         r.reportCode=activeMode==BottomEdge?
-                            coredevice_send_hid_digitizer_cgpoint(gDigitizer,event.x,event.y,0,0,1,
-                                starts?0:ends?2:1,3,0,0):
-                            coredevice_send_universalhid_hid_report(gInput,words,scrolling?gScrollServiceID:gServiceID);
-                        r.reportReturn=nowSec(); r.result=r.reportCode?SendFailed:Sent;
+                            sendBounded(^{ return coredevice_send_hid_digitizer_cgpoint(gDigitizer,
+                                event.x,event.y,0,0,1,starts?0:ends?2:1,3,0,0); }):
+                            sendReportBounded(gInput,words,sizeof words,scrolling?gScrollServiceID:gServiceID);
+                        r.reportReturn=nowSec();
+                        r.result=r.reportCode?failureFor(r.reportCode,SendFailed):Sent;
                     }
                     pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
                     if(pointerFailed){ /* already reported by the pointer branch */ }
@@ -765,9 +813,15 @@ static void drainInput(void){
                     else if(ends){
                         // No digitizer barrier in the existing oracle. Its END return is
                         // the fourth point, just as for RECENTS; not device acknowledgement.
-                        r.barrierCode=activeMode==BottomEdge?0:coredevice_send_universalhid_barrier(gInput);
+                        r.barrierCode=activeMode==BottomEdge?0:
+                            sendBounded(^{ return coredevice_send_universalhid_barrier(gInput); });
                         r.barrierReturn=nowSec();
-                        if(r.barrierCode){ r.result=BarrierFailed; inputError(@"UHID barrier failed (see barrier_code)"); }
+                        if(r.barrierCode){
+                            r.result=failureFor(r.barrierCode,BarrierFailed);
+                            inputError(r.result==SendTimedOut?
+                                @"UHID barrier exceeded the send deadline; input queue released":
+                                @"UHID barrier failed (see barrier_code)");
+                        }
                         else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
                         state=Idle; activeGesture=0;
                     }

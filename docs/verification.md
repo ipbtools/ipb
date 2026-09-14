@@ -2369,3 +2369,49 @@ The barrier defect stands on its own and is now confirmed transport-independent:
 barrier with no deadline of our own, which on a dead connection blocks for hundreds of ms to seconds,
 returns success, and strands every queued event behind it. Bounding it is correct regardless of what
 turns out to wedge the media path.
+
+
+## 2026-09-14 — Fix: synchronous HID sends are bounded by a deadline
+
+`Sources/mirror.m`. Every synchronous CoreDevice HID send now goes through one helper,
+`sendBounded`, which runs the uncancellable call on the global concurrent queue and stops waiting
+after **0.5 s**. The abandoned call still runs to completion in the background; it simply no longer
+owns the serial input queue. Expiry returns a distinct code (`-62`) and a distinct result
+(`send_timed_out`), and is a failure — never a retry, nothing is re-sent.
+
+Two memory-safety constraints shaped it, both real:
+
+- The result is a `__block int` written by the still-running block. After a timeout that storage
+  belongs to the block, so it is never read again on the timeout path.
+- A C array cannot be captured by a block, and the report bytes must outlive an abandoned call.
+  `sendReportBounded` therefore copies them to the heap and the block owns and frees the copy.
+  Passing the stack array by pointer would have been a use-after-free once the call was abandoned.
+
+`pointerFailed` was widened to include `SendTimedOut`; without that, a pointer placement that timed
+out would still have gone on to scroll whatever target the device was holding.
+
+### Verified against the deterministic reproduction
+
+The same fix was applied to `Experiments/mirror/mirror_probe.m`, which is the harness that
+reproduces the freeze in ~14 s, so the change could be measured rather than argued.
+
+| | before | after |
+| --- | --- | --- |
+| barrier tail at the failing gesture | 783 / 762 / 817 ms | **505 / 501 ms** |
+| `barrier_code` | `0`, a false success | `-62` |
+| result | `interrupted` | `send_timed_out` |
+| exit reason | `UHID RemoteXPC error: Connection invalid` | `UHID barrier exceeded the send deadline` |
+| healthy barrier tails | 3.5-5.3 ms | 4-5 ms, unchanged |
+| `abandoned_sends` | n/a | 1 |
+
+The deadline is 0.5 s because healthy barriers are 3.5-5.3 ms (a 100x margin) while every observed
+hang is 744 ms or longer. It is a constant, not an env knob: if evidence says it is wrong, the
+constant changes with that evidence.
+
+**What this does not fix:** the connection still goes invalid at ~14 s. This bounds the damage — the
+freeze is capped at 0.5 s and reported honestly instead of a multi-second stall that returns success
+— but the cause of the invalidation is the media-wedge investigation, still open.
+
+Gate: `scripts/smoke_matrix.sh` → `SMOKE PASSED` on the wired iPhone 13 Pro. The mirror's own
+interactive path is unchanged apart from these call sites and is covered by the probe, which shares
+the contract; an interactive mirror run is still worth doing before relying on it.
