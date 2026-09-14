@@ -2633,3 +2633,78 @@ already mapped in `docs/protocol.md`), and confirmation via
 `Experiments/tools/rxpc_tap.c` interposer cannot capture `devicectl` (it is signed;
 `DYLD_INSERT_LIBRARIES` will not attach), so the payload has to come from the Swift type layout or
 from watching Device Hub with `Experiments/devicehub-trace/`.
+
+
+## 2026-09-14 — Tunnel assertions: mechanism confirmed by name, request schema mapped, acquire not yet achieved
+
+Work on `TODO(tunnel-keepalive)`. New tool: `Experiments/tools/cd_action.m` sends an arbitrary
+CoreDeviceService action with an arbitrary `CoreDevice.input` and prints the reply. It exists because
+the service decodes the input as a Swift `Codable` and **names the key it wanted**, so a schema can be
+walked out one error at a time. It must call `_coredevice_xpc_add_bundle` /
+`_coredevice_xpc_init_services` first, exactly as `Sources/action_sender.m` does; without that
+registration CoreDeviceService answers `Connection invalid`.
+
+### The mechanism is named in Apple's own binary
+
+`strings` on CoreDevice 642.15:
+
+```
+tunnelGracePeriodWithNoActiveAssertionsADCDevice
+tunnelGracePeriodWithNoActiveAssertionsRemotePairingDevice
+TunnelAssertionGroup / TunnelAssertionRequest / TunnelTeardownAttemptInfo
+```
+
+**"tunnel grace period with no active assertions"** is the ~10 s we measured. This upgrades the root
+cause from inference to a named mechanism: with no usage assertion held, the tunnel gets a grace
+period and is then torn down. `CoreDevice.TunnelAssertionGroup.persistentTunnelAssertionGroup()` and
+`.persistent: Bool` exist, which is what a long-lived session wants.
+
+`AssertableDeviceState` has these members (`nm` + demangle): `coreDeviceServicesLoaded`,
+`developerModeEnabledIfRequired`, `extendedDeviceInfoLoaded`, `powerAssertionTaken`,
+`remoteServiceDiscoveryTrustedConnectivityAvailable`, `secureNetworkingAvailable`. The fifth is the
+state behind `CoreDeviceError 4000: RemoteServiceDiscovery connectivity is not available`.
+
+### `listusageassertions` works and reports zero
+
+Sent through our own path, it returns `CoreDevice.output` as an **empty array** — no assertions held.
+Consistent with the tunnel lapsing. (The helper logs "no CoreDevice.output" for it only because its
+own code expects a dictionary, not an array.)
+
+### The acquire request schema, walked out
+
+Each line below is the key the service asked for next:
+
+```
+{}                                   -> "Expected to find key reason."
+reason                               -> "Expected to find key requirements."
+requirements: {}                     -> "Expected to find key deviceStates."
+requirements.deviceStates: ["str"]   -> "dictionary required here" at deviceStates[0]
+requirements.deviceStates: [{identifier: "<state>"}]
+                                     -> "Expected to find key capabilities."
+requirements.capabilities: {}        -> "array required here"
+requirements.capabilities: []        -> "Expected to find key endpoint."   (top level)
+endpoint: {}                         -> decode SUCCEEDS
+```
+
+So the request is `{reason, requirements:{deviceStates:[{identifier}], capabilities:[]}, endpoint}`.
+
+### Where it stops
+
+With the schema satisfied the error becomes **semantic**, not structural:
+
+> The device is not able to fulfill the requested usage assertion requirements.
+
+All six `AssertableDeviceState` identifiers were swept with the tunnel freshly warmed; all six return
+that same message. So either the identifier strings are not the case names, or `endpoint: {}` means
+"no endpoint" and nothing can be fulfilled. `TunnelAssertionRequest` demangles as an **enum**
+(`...RequestO`), so `endpoint` is likely an enum needing a selected case rather than an empty
+dictionary.
+
+**Not achieved: acquiring an assertion.** The workaround stays and `TODO(tunnel-keepalive)` stays
+open.
+
+**Next step, unchanged from the earlier record but now better targeted:** capture a real acquire off
+Device Hub with `Experiments/devicehub-trace/` and copy the payload, rather than guessing further.
+`listusageassertions` returned empty even while a `devicectl device info details` ran in parallel, so
+that call's assertion is either too brief to catch by polling or not visible to us — a trace is the
+way, not a poll.
