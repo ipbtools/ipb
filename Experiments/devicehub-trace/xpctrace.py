@@ -9,7 +9,9 @@
 #              -o "xpctrace_arm" -o run -o quit -- <devicectl> device info details --device <uuid>
 import lldb
 
-FILTER = ("coredevice.action", "assertion", "Assertion")
+# Widened: the DeviceManagerCheckIn pair is the lead worth chasing and did not match the
+# original filter, so this tracer would have discarded the very message it was pointed at.
+FILTER = ("coredevice.action", "assertion", "Assertion", "CheckIn", "checkIn", "DeviceManager")
 _seen = set()
 
 def _describe(frame, reg):

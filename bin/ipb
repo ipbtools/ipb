@@ -263,27 +263,48 @@ warm_tunnel() {
 # (docs/verification.md, 2026-09-14). A short command never notices, because it warms the tunnel and
 # finishes in about a second. A session that runs for minutes has to keep renewing it.
 #
-# TODO(tunnel-keepalive): this is a WORKAROUND, not the design. Spawning devicectl every few seconds
-# for the life of a session is wasteful and coarse. The lease is almost certainly a CoreDevice usage
-# assertion: the framework exports `com.apple.coredevice.action.acquireusageassertion` and
-# `acquireUsageAssertion(forRequest: CoreDevice.TunnelAssertionRequest)`. The replacement is to send
-# that action once at session start, hold it, and release it at the end -- no subprocess, no polling.
-# That is inference from symbols, not verified. See docs/verification.md 2026-09-14.
+# The lease is bound to the lifetime of a checked-in devicectl client, not to individual calls:
+# one resident `devicectl device notification observe` holds the tunnel for as long as it runs, and
+# renews nothing -- it simply stays checked in. So this is one child, not a spawn loop. Its own
+# --session-timeout bounds it, so even a SIGKILL of this wrapper cannot leave it holding the device
+# indefinitely. The notification name is never posted; observing is just the cheapest way to stay
+# checked in.
+#
+# TODO(tunnel-keepalive): still a workaround -- it holds the lease by proxy instead of by our own
+# process. No in-process path was found: opening a service socket does not renew, sending actions
+# does not renew, and devicectl never calls the assertion API itself (a daemon takes it at
+# DeviceManagerCheckIn). See docs/verification.md 2026-09-14.
 TUNNEL_KEEPALIVE_PID=""
 start_tunnel_keepalive() {
   [[ -n "$DEVICE" ]] || return 0
-  ( while :; do
-      devicectl device info details --device "$DEVICE" --timeout 20 >/dev/null 2>&1 || true
-      sleep 4
-    done ) &
+  local budget="${1:-300}"
+  # Invoke the binary directly, NOT the devicectl() wrapper function: backgrounding a function runs
+  # it in a subshell, so $! would be the subshell and killing it would orphan the real devicectl.
+  DEVELOPER_DIR="$XCODE" ${=DEVICECTL} device notification observe --device "$DEVICE" \
+    --name com.apple.ipb.tunnel.keepalive \
+    --session-timeout "$budget" --timeout "$budget" >/dev/null 2>&1 &
   TUNNEL_KEEPALIVE_PID=$!
 }
 
 stop_tunnel_keepalive() {
   [[ -n "$TUNNEL_KEEPALIVE_PID" ]] || return 0
-  kill "$TUNNEL_KEEPALIVE_PID" 2>/dev/null
-  wait "$TUNNEL_KEEPALIVE_PID" 2>/dev/null
+  # Sweep children too, in case the command ever ends up under an intermediate process.
+  local kid
+  for kid in $(pgrep -P "$TUNNEL_KEEPALIVE_PID" 2>/dev/null); do kill "$kid" 2>/dev/null || true; done
+  kill "$TUNNEL_KEEPALIVE_PID" 2>/dev/null || true
+  wait "$TUNNEL_KEEPALIVE_PID" 2>/dev/null || true
   TUNNEL_KEEPALIVE_PID=""
+  return 0
+}
+
+# Signals must reach the helper. A foreground child would defer our trap until it returned, so
+# `kill <ipb pid>` could not end a session before --seconds elapsed; the helper therefore runs in
+# the background and we wait on it, which a trapped signal interrupts.
+MIRROR_HELPER_PID=""
+shutdown_mirror() {
+  if [[ -n "$MIRROR_HELPER_PID" ]]; then kill "$MIRROR_HELPER_PID" 2>/dev/null || true; fi
+  stop_tunnel_keepalive
+  return 0
 }
 
 # Resolve the CoreDevice tunnel (device IP, host IP, host utun interface) for the media stream.
@@ -804,9 +825,23 @@ case "$cmd" in
     hostip="${tun%% *}"; rest="${tun#* }"; utun="${rest%% *}"; rest="${rest#* }"
     devip="${rest%% *}"; product_type=""
     [[ "$rest" == *" "* ]] && product_type="${rest#* }"
-    start_tunnel_keepalive
-    trap 'stop_tunnel_keepalive' EXIT INT TERM
-    "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$product_type" "$@"
+    # Bound the keepalive to this session: mirror's own default is 300 s and its cap is 3600 s.
+    keepalive_budget=300
+    for ((i = 1; i <= $#; i++)); do
+      if [[ "${(P)i}" == --seconds ]]; then
+        next=$((i + 1)); (( next <= $# )) && keepalive_budget="${(P)next}"
+      fi
+    done
+    [[ "$keepalive_budget" == <-> ]] || keepalive_budget=300
+    keepalive_budget=$(( keepalive_budget + 30 ))
+    (( keepalive_budget > 3630 )) && keepalive_budget=3630
+
+    "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$product_type" "$@" &
+    MIRROR_HELPER_PID=$!
+    start_tunnel_keepalive "$keepalive_budget"
+    trap 'shutdown_mirror' INT TERM
+    trap 'stop_tunnel_keepalive' EXIT
+    wait "$MIRROR_HELPER_PID"
     mirror_rc=$?
     stop_tunnel_keepalive
     exit $mirror_rc

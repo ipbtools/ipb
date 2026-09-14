@@ -2770,3 +2770,123 @@ creation does not renew, actions do not renew, the client does not take the asse
 The remaining lead is the **device-manager check-in** devicectl performs at startup, which is what
 correlates with renewal — not the assertion action and not any device action. That is the next thing
 to trace, and it can be traced in `devicectl` without an operator.
+
+
+## 2026-09-14 — Review response: resident keepalive, a signal regression fixed, and three corrections
+
+An independent review (Fable) of the day's work. It found a regression I shipped, a much cheaper
+mechanism, and errors in two of my own records. All confirmed here.
+
+### 1. One resident client replaces the 60-subprocess loop
+
+The lease is bound to the **lifetime of a checked-in devicectl client**, not to individual calls. A
+single `devicectl device notification observe` holds the tunnel for as long as it runs and renews
+nothing — it just stays checked in. Measured through `bin/ipb mirror`: `tunnelState` sampled every
+3 s read `connected` at **all 7 samples**. The notification name is never posted; observing is merely
+the cheapest way to stay checked in, and `--session-timeout` (bounded to the session length + 30 s,
+capped at 3630 s) means even a SIGKILL of the wrapper cannot leave it holding the device forever.
+
+This also answers the "next thing to trace" from the earlier record: the mechanism is the
+`DeviceManagerCheckInRequest` devicectl performs at startup, and the check-in lives as long as the
+process. No trace needed.
+
+### 2. Regression I shipped: `kill <ipb pid>` stopped working, and the keepalive orphaned
+
+Removing `exec` in 632481d so the keepalive could be reaped had a consequence the commit message
+claimed was covered and was not. zsh defers a trapped signal until the **foreground** child returns,
+so `kill` on the wrapper did nothing for up to `--seconds` (default 300 s). An agent that starts
+`ipb mirror` and later kills the pid — a stated use case — could not stop a session. Fixed by running
+the helper in the **background** and `wait`ing on it, which a trapped signal interrupts.
+
+A second, separate bug: the keepalive was backgrounded through the `devicectl()` **shell function**,
+so `$!` was the subshell, not the real process. Killing it orphaned devicectl. Process ancestry made
+it plain:
+
+```
+40039 wrapper zsh
+  └─ 40071 zsh                 <- $! recorded this
+       └─ 40073 devicectl observe   <- survived, orphaned
+```
+
+Fixed by invoking the binary directly (`${=DEVICECTL} device notification observe ...`), plus a child
+sweep in `stop_tunnel_keepalive` as a backstop. `set -e` also required `|| true` on the kills so a
+non-zero status could not abort the handler before the cleanup.
+
+Verified: SIGTERM and SIGINT both end the session in 1-3 s (the helper's clean drain) with **zero
+orphans of either kind**, and `observe`'s ppid is now the wrapper.
+
+### 3. The gate now tests it, and "SMOKE PASSED" was over-cited before
+
+`grep -i mirror scripts/smoke_matrix.sh` previously matched nothing: the gate exercised neither
+`sendBounded` nor the keepalive, so citing it as evidence for 13d5fd6 and 632481d was wrong. There is
+now a `mirror signal handling + orphan check` step that starts a session, signals the wrapper, and
+asserts prompt exit with no surviving keepalive or helper. Writing it surfaced four bugs in the test
+itself, each worth recording because they are easy to repeat:
+
+- `${DEVICE_ID:+-s "$DEVICE_ID"}` expands to **one word** in zsh, so `bin/ipb` saw a bogus command and
+  the step silently SKIPped. `DEVICE_ID` is honoured from the environment; the flag is unnecessary.
+- A global `pgrep -f 'notification observe'` matched a leftover from an earlier run and reported a
+  false failure. The check now watches only the pids that were children of *this* wrapper.
+- `pgrep -f 'ipb-mirror'` **matched the shell running the gate**, because that command line contains
+  the pattern text. Switched to `pgrep -x 'ipb-mirror'` (exact executable name).
+- The helper drains on SIGTERM, so the orphan assertion needs a bounded grace, not an immediate check.
+
+### 4. Correction: "with zero sends the clock never starts" was wrong
+
+Record 4 today ("Correction: it is HID traffic, not the media path") over-corrected. Its own table
+shows `--no-input` producing **458** frames over 38 s while the with-input runs produced 455/418 over
+14 s. At ~60 fps, 458 frames is ~7.6 s of media — so **media stopped early in the no-input run too**;
+that run simply had no synchronous send to fail on and ran to its scheduled end. The earlier
+"frames land on a constant regardless of duration" observation was seeing the tunnel drop, not noise.
+
+The accurate statement is: **the tunnel lapses ~10 s after the last `devicectl device` call
+regardless of traffic; HID sends are only the detector.** This also dissolves the "38 s alive vs 41 s
+dead" `--no-input` contradiction left open earlier — both had a dead tunnel at ~10 s.
+
+### 5. `TODO(media-lifetime)` does NOT close
+
+The decisive number was already in a log and unread. The two keepalive runs, identical config, tunnel
+held and 1820 HID events in both:
+
+| run | elapsed | HID events | media frames |
+| --- | --- | --- | --- |
+| keepalive #1 | 37 s | 1820 | **1236** |
+| keepalive #2 | 37 s | 1820 | **265** |
+
+1236 is the full duration at ~33 fps; 265 is ~4 s of it. So media *can* survive when the lease is
+held, but sometimes stops anyway. That is a **separate, intermittent media stall**, not the tunnel.
+The TODO stays open, now with a sharper question: why one run in two.
+
+### 6. `TODO(stream-seconds)` diagnosis was wrong
+
+`Sources/video_stream.m:475`: `if((t-lastSave) > 12.0) break;  // hard stall guard`. `--seconds` is
+**not** ignored. On a static screen distinct frames stop, 12 s later the guard breaks, and only an
+unmet `--count` exits non-zero (`:502`), so the run reports 0. That matches the 15-16 s / 54-57 frame
+runs with and without the keepalive, and confirms it is not the tunnel. The remaining defect is
+narrower than recorded: **exit 0 for a 60 s request that ended at 15 s** (Rule 2).
+
+### 7. `sendBounded` caveats the record did not state
+
+The block/ARC lifetimes check out (the `__block` result is heap-promoted when the block is copied;
+the semaphore is retained by the block; the report copy is a real 16-byte `uint64_t[2]`; `gInput` is
+cancelled but never released). Two things were unstated and remain open:
+
+- **Every timeout is fatal.** `mirror.m` turns any `gFailure` into a close, so one 500 ms stall on a
+  healthy connection ends the session with exit 1. The 0.5 s deadline was justified against a
+  3.5-5.3 ms **wired** median; no localNetwork p95/p99 exists, and the user's original captures were
+  localNetwork. Thread growth is therefore bounded (one abandoned thread, then exit), but the
+  false-positive cost is "the session dies" and should be measured on Wi-Fi before 0.5 s is called
+  settled.
+- **Concurrency on one `xrc_t` after a timeout** is unexamined: an END event can be sent on `gInput`
+  while an abandoned call is still inside Apple's sender. Nothing establishes those senders are safe
+  for concurrent calls on one connection.
+
+### 8. Smaller
+
+`Experiments/devicehub-trace/xpctrace.py` filtered on `("coredevice.action", "assertion",
+"Assertion")`, which would have discarded `DeviceManagerCheckInRequest` — the very message the record
+named as the next lead. Filter widened. Still owed, and only the user can do it: **one interactive
+mirror run with >10 s of real input**, since no run to date has exercised the fix with a human
+driving it.
+
+Gate: `SMOKE PASSED` on the wired iPhone 13 Pro, including the new mirror signal/orphan step.

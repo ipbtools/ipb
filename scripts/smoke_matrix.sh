@@ -83,6 +83,56 @@ if (( HAS_GESTURE )); then run "service-id gesture" --expect '^0x501$' -- "$CTL"
 run "service-id keyboard"    --expect '^0x200$' -- "$CTL" service-id keyboard
 run "service-id buttons"     --expect '^0x402$' -- "$CTL" service-id buttons
 run "service-id avp"         --expect '^0x500$' -- "$CTL" service-id avp
+# A mirror session must die when its wrapper is signalled, and must leave nothing behind. This is a
+# regression test: removing `exec` so the tunnel keepalive could be reaped made the wrapper defer its
+# trap until the helper returned, so `kill <ipb pid>` did nothing for up to --seconds; and the
+# keepalive was backgrounded through the devicectl() shell function, so $! was a subshell and killing
+# it orphaned the real devicectl. Both are fixed; this keeps them fixed. Needs a GUI session, so it
+# reports SKIP rather than failing where mirror cannot start.
+mirror_signal_test() {
+  local out="$OUT/mirror_kill.log"
+  # DEVICE_ID is honoured from the environment; do not pass -s here (in zsh an unquoted
+  # ${VAR:+-s "$VAR"} expands to ONE word and bin/ipb would reject it as an unknown command).
+  "$CTL" mirror --seconds 60 >"$out" 2>&1 &
+  local wrapper=$!
+  local i
+  for i in $(seq 1 20); do sleep 0.5; pgrep -x 'ipb-mirror' >/dev/null && break; done
+  if ! kill -0 $wrapper 2>/dev/null || ! pgrep -x 'ipb-mirror' >/dev/null; then
+    echo "SKIP: mirror kill test (mirror did not start): $(head -2 "$out" | tr '\n' ' ')" | tee -a "$log"
+    kill $wrapper 2>/dev/null; return 0
+  fi
+  # Record THIS session's keepalive before signalling. A global pgrep would also match a keepalive
+  # belonging to another session or left over from an earlier run, and report a false failure.
+  local keepalive_pids=$(pgrep -P $wrapper 2>/dev/null | tr '\n' ' ')
+  local start=$(date +%s)
+  kill -TERM $wrapper 2>/dev/null
+  for i in $(seq 1 24); do kill -0 $wrapper 2>/dev/null || break; sleep 0.5; done
+  local elapsed=$(( $(date +%s) - start ))
+  if kill -0 $wrapper 2>/dev/null; then
+    kill -KILL $wrapper 2>/dev/null; fail "mirror kill: wrapper still alive ${elapsed}s after SIGTERM"
+  else
+    echo "mirror kill: wrapper exited ${elapsed}s after SIGTERM" | tee -a "$log"
+  fi
+  # The helper drains on SIGTERM before exiting, so allow a bounded grace rather than asserting
+  # immediately; only a helper that outlives it is an orphan.
+  local i
+  for i in $(seq 1 20); do pgrep -x 'ipb-mirror' >/dev/null || break; sleep 0.5; done
+  local pid survivors=""
+  for pid in ${=keepalive_pids}; do
+    if kill -0 "$pid" 2>/dev/null; then survivors="$survivors $pid"; kill -TERM "$pid" 2>/dev/null; fi
+  done
+  if [[ -n "$survivors" ]]; then
+    fail "mirror kill: tunnel keepalive orphaned after session end (pids:$survivors)"
+  else
+    echo "mirror kill: no keepalive orphan (watched: ${keepalive_pids:-none})" | tee -a "$log"
+  fi
+  if pgrep -x 'ipb-mirror' >/dev/null; then
+    fail "mirror kill: mirror helper still running after session end: $(pgrep -x -l 'ipb-mirror' | head -2 | tr '\n' '; ')"
+  fi
+}
+printf '\n### mirror signal handling + orphan check\n' | tee -a "$log"
+mirror_signal_test
+
 shot 00_before
 run "key-up (empty keyboard report)" -- "$CTL" key-up
 if (( HAS_GESTURE )); then
