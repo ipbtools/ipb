@@ -2302,3 +2302,70 @@ transport is the trigger (vs wired) is still open; this run's transport was not 
 Not yet fixed. The trace is a confirmed reproduction; the fix (bound the synchronous barrier/report
 with our own deadline and treat expiry as a send failure, so the queue is released and the run exits
 with a real error instead of freezing) is pending design approval.
+
+
+## 2026-09-14 — mirror freeze reproduced headless on wired; transport is not the trigger
+
+Host: macOS 26.5.1, CoreDevice 642.15. Device: iPhone 13 Pro, iOS 27.0, **wired, tunnel connected**.
+Tool: the existing `Experiments/mirror/mirror_probe.m` (`build/ipb-mirror-probe`), which synthesises
+its own gestures (`--gestures/--drag-seconds/--hz`) and sends report+barrier on a held `gInput`.
+**No GUI input injection and no mirror window are needed to reproduce this** — the earlier claim that
+it required a human at the keyboard was wrong.
+
+### The signature matches the interactive capture exactly
+
+```
+seq 546  UP  interrupted  barrier_tail=783.3ms  report_code=0  barrier_code=0
+exit=1 reason=UHID RemoteXPC error: Connection invalid; gesture abandoned
+seq 547+ rejected, all t_received == the instant the barrier unblocked
+```
+
+Healthy barrier tails in the same runs are 3.5-5.3 ms. As in the interactive capture, the barrier
+returns **code 0 — false success — on a connection that has already gone invalid**; the record is only
+marked `interrupted` because the async error handler bumped `gGeneration` while the call was blocked.
+
+### Wired reproduces it, deterministically
+
+| run | rc | elapsed | died on barrier | seq | barrier tail |
+| --- | --- | --- | --- | --- | --- |
+| 3 s drag @ 60 Hz | 1 | 14 s | #3 | 546 | 783.3 ms |
+| 3 s drag @ 60 Hz | 1 | 14 s | #3 | 546 | 762.1 ms |
+| 3 s drag @ 60 Hz | 1 | 13 s | #3 | 546 | 817.3 ms |
+| 3 s drag @ 30 Hz | 1 | 14 s | #3 | 276 | 744 ms |
+| 1 s drag @ 60 Hz | 1 | 14 s | **#7** | 372 | 2240 ms |
+| 6 s drag @ 60 Hz | 1 | 13 s | mid-drag | — | — |
+
+**localNetwork is not required.** The open transport question from the previous record is answered:
+a wired device reproduces the same failure, so the fix needs no transport caveat. Hang duration
+varies (744-2240 ms here, 2846 ms on localNetwork) but the structure is identical.
+
+### The trigger is elapsed time, not load
+
+Event count (276 / 372 / 546 / 618) and barrier count (3 / 7 / mid-drag) both vary across configs;
+what stays constant is **~13-14 s of session**. At 3 s drags that is 3 gestures, at 1 s drags 7 —
+both exactly 10.5 s of input. So this is a lifetime, not a quota and not wear from traffic.
+
+### It is not HID-specific: the media stream wedges at the same point
+
+Media frames delivered, every run: **266, 267, 267, 322, 266, 266, 267** — essentially constant and
+independent of whether any HID traffic was sent. With `--no-input` (media only, zero HID events) the
+probe still died, but the connection that reported invalid was the **media** one:
+
+```
+noinput  rc=6  elapsed=41s  exit=6 reason=media RemoteXPC: Connection invalid  media frames=267
+```
+
+So the invalidation is not a property of the UniversalHID connection. Something wedges at ~266
+frames and the failure then surfaces on whichever connection is next used. This lines up with the
+already-recorded media wedge ("Narrow the media wedge: cumulative, host-side, and not caused by us").
+
+**Not yet isolated:** the probe always runs media and HID together, as the mirror does, so this does
+not prove the HID connection would survive without media. HID-without-media is the next experiment
+and is not claimed here.
+
+### Consequence for the fix
+
+The barrier defect stands on its own and is now confirmed transport-independent: a synchronous
+barrier with no deadline of our own, which on a dead connection blocks for hundreds of ms to seconds,
+returns success, and strands every queued event behind it. Bounding it is correct regardless of what
+turns out to wedge the media path.
