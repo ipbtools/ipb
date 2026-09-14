@@ -2532,3 +2532,45 @@ is no concept of holding a tunnel open across a long-lived session. That is the 
 role in renewal is unresolved and is not claimed here. And the renewal mechanism Device Hub itself
 uses is unknown — we know only that a `devicectl device` call works, not what it does underneath.
 A periodic subprocess is a workaround, not the design.
+
+
+## 2026-09-14 — Workaround shipped: tunnel keepalive for `ipb mirror` (with TODOs)
+
+`bin/ipb` now renews the CoreDevice tunnel for the life of a `mirror` session: a background loop
+running `devicectl device info details --device <uuid> --timeout 20` followed by `sleep 4`, started
+before the helper and reaped after it. The `mirror` branch no longer `exec`s the helper, because the
+keepalive is our child and has to be killed when the session ends; `trap ... EXIT INT TERM` covers
+the interrupted cases.
+
+### Verified
+
+- Probe, 10 gestures with the keepalive: rc=0, 37 s, **1820 events executed**, `abandoned_sends=0`,
+  tunnel `connected` as the only state observed. Without it: rc=1, 14 s, 546 events. n=2 each.
+- Through `bin/ipb mirror` itself: tunnel sampled every 2 s read `connected` for the entire session
+  (the one `disconnected` sample is the first, taken before the keepalive had run), and no orphan
+  `devicectl` or mirror process survived the exit.
+- That mirror run ended `exit=7 no media frames for 12s` with 348 frames at p50 16.7 ms. That is the
+  **idle-screen watchdog**, not a defect: with no input nobody is touching the phone, the screen is
+  static, and no new distinct frames arrive. It is not evidence about the keepalive either way.
+
+### Scope: `mirror` only
+
+`ipb stream` was tested with and without the keepalive and behaved **identically** (15 s / 54 frames
+vs 16 s / 57 frames), so its early finish is not the tunnel and it does not get the keepalive.
+
+## Known, not fixed — TODO
+
+1. **TODO(tunnel-keepalive): replace the workaround.** Spawning `devicectl` every few seconds for the
+   life of a session is coarse and wasteful — a 300 s mirror session costs ~60 subprocesses. The
+   real fix is to find what a `devicectl device <action>` call does underneath to renew the lease
+   and do that in process. The `Experiments/devicehub-trace/` methodology can watch Device Hub
+   itself renew. Marked `TODO(tunnel-keepalive)` in `bin/ipb`.
+2. **TODO(stream-seconds): `ipb stream --seconds 60` stops after ~10 s of collection and exits 0.**
+   `--seconds` *is* parsed (`Sources/video_stream.m:339`) and the default is 10, so the value looks
+   ignored somewhere downstream. Reporting rc=0 for a session that ended early is the worse half:
+   "failure is an exit code, not a log line" (Rule 2). Not the tunnel — the keepalive changes
+   nothing. Unrelated to the mirror freeze; needs its own reproduction.
+3. **TODO(media-lifetime): does the media path have its own ~10 s limit?** Both stream and mirror
+   stop producing frames in that neighbourhood. The idle-screen explanation covers the mirror run
+   above, but it has not been separated from a genuine media-side limit under a *changing* screen.
+   Needs a run with continuous screen motion.

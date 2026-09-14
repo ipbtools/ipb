@@ -256,6 +256,34 @@ warm_tunnel() {
   return 0
 }
 
+# The CoreDevice tunnel is a lease, not a link: it drops roughly 10 s after the last
+# `devicectl device ...` call, and traffic on a service socket does NOT renew it. When it drops,
+# every RemoteXPC connection riding it goes invalid at once, and an in-flight synchronous sender
+# blocks for hundreds of ms to seconds before returning a misleading success
+# (docs/verification.md, 2026-09-14). A short command never notices, because it warms the tunnel and
+# finishes in about a second. A session that runs for minutes has to keep renewing it.
+#
+# TODO(tunnel-keepalive): this is a WORKAROUND, not the design. Spawning devicectl every few seconds
+# for the life of a session is wasteful and coarse. The real fix is to find what a
+# `devicectl device <action>` call does underneath to renew the lease and do that in process. Until
+# then this stays. See docs/verification.md 2026-09-14 and the TODO in docs/video-stream.md.
+TUNNEL_KEEPALIVE_PID=""
+start_tunnel_keepalive() {
+  [[ -n "$DEVICE" ]] || return 0
+  ( while :; do
+      devicectl device info details --device "$DEVICE" --timeout 20 >/dev/null 2>&1 || true
+      sleep 4
+    done ) &
+  TUNNEL_KEEPALIVE_PID=$!
+}
+
+stop_tunnel_keepalive() {
+  [[ -n "$TUNNEL_KEEPALIVE_PID" ]] || return 0
+  kill "$TUNNEL_KEEPALIVE_PID" 2>/dev/null
+  wait "$TUNNEL_KEEPALIVE_PID" 2>/dev/null
+  TUNNEL_KEEPALIVE_PID=""
+}
+
 # Resolve the CoreDevice tunnel (device IP, host IP, host utun interface) for the media stream.
 # The device address is connectionProperties.tunnelIPAddress; the host address is the utun
 # interface on this Mac that carries the same /64 (its ::2). Prints "hostIP utun deviceIP".
@@ -774,7 +802,12 @@ case "$cmd" in
     hostip="${tun%% *}"; rest="${tun#* }"; utun="${rest%% *}"; rest="${rest#* }"
     devip="${rest%% *}"; product_type=""
     [[ "$rest" == *" "* ]] && product_type="${rest#* }"
-    exec "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$product_type" "$@"
+    start_tunnel_keepalive
+    trap 'stop_tunnel_keepalive' EXIT INT TERM
+    "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$product_type" "$@"
+    mirror_rc=$?
+    stop_tunnel_keepalive
+    exit $mirror_rc
     ;;
   screenshot)
     [[ $# -eq 1 ]] || { usage; exit 2; }

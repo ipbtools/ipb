@@ -229,6 +229,12 @@ Key repeat is ignored, so holding a shortcut sends one press.
 **Requires a GUI login session**, just like `ipb stream`: in-process decoding needs
 `CVDisplayLink`. It works with SIP enabled and needs no entitlement; plain ssh is unsupported.
 
+While a mirror session runs, `ipb` renews the CoreDevice tunnel in the background (a `devicectl`
+call every few seconds). The tunnel is a lease, not a link: it drops about 10 seconds after the last
+`devicectl device ...` call, and HID traffic does not renew it, which used to freeze the mirror
+about 10 seconds into use. See `docs/verification.md` (2026-09-14) — the keepalive is a workaround
+and is marked `TODO(tunnel-keepalive)` in `bin/ipb`.
+
 The default run lasts 300 seconds; `--seconds` accepts values greater than 0 and at most 3600.
 The existing 8192-input-event cap also ends the run. Statistics retain their existing fields and
 go to **stderr**. No CSV is produced by default; `--csv PATH` writes the event header and rows to
