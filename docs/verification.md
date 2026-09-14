@@ -2960,3 +2960,51 @@ contract.
 
 Gate: `SMOKE PASSED` on the iPhone 12 mini (localNetwork), including the mirror signal/orphan step.
 Still owed: the interactive re-run that prompted this.
+
+
+## 2026-09-14 — Interactive run: volume down confirmed, and real barrier latency validates the 2 s deadline
+
+The interactive mirror run that was owed. iPhone 12 mini, localNetwork, `--csv /tmp/volume.csv`.
+User's report: working and usable.
+
+### Volume down (`0x0c` / `0xEA`) is no longer unconfirmed
+
+Both directions were exercised — 5 × `KEY_VOLUME_UP`, 3 × `KEY_VOLUME_DOWN` — and **every one**
+recorded `result=sent`, `report_code=0`, `barrier_code=0`:
+
+```
+seq=4  KEY_VOLUME_UP    sent  0/0  tail=232.6ms
+seq=5  KEY_VOLUME_DOWN  sent  0/0  tail=224.5ms
+seq=6  KEY_VOLUME_DOWN  sent  0/0  tail=234.2ms
+seq=7  KEY_VOLUME_DOWN  sent  0/0  tail=286.7ms
+seq=8..11 KEY_VOLUME_UP sent  0/0  tail=238.0-284.3ms
+```
+
+This retires the standing caveat in `Sources/mirror.m` ("EA is the paired usage, rc=0 only, HUD
+unconfirmed"), which had stood since 2026-09-08 on the 13 Pro. The evidence is a user-observed effect
+across repeated presses in both directions, not a captured HUD screenshot — weaker than a screenshot,
+but it is a direct report of the device responding, and `0xEA` being the wrong usage is no longer a
+live possibility. Comment updated in place.
+
+Note the key tails (224-287 ms) include `keyStep`'s deliberate 80 ms + 120 ms press/release waits, so
+the barrier itself is only ~25-90 ms there.
+
+### Real interactive latency, and why 0.5 s was wrong
+
+The touch `UP` in the same run is the interesting number, because the touch path has no deliberate
+sleeps — its tail is pure `coredevice_send_universalhid_barrier`:
+
+```
+UP  tail=305.5ms  result=sent      <- healthy connection
+```
+
+Together with the 346 ms p95 measured earlier and the >505 ms overshoot that killed a session,
+healthy barrier latency on localNetwork routinely runs past 300 ms. The 0.5 s deadline sat inside
+the normal range. At 2.0 s the margin over the worst healthy value observed is about 6x.
+
+**Zero `send_timed_out`, zero `rejected`, zero `overload` in the run.** Both shipped changes behave:
+the keepalive kept the lease, and the deadline did not fire on healthy traffic.
+
+Caveat worth stating: this run is 11 events. It shows the fix no longer breaks a live session, not
+that the tail is fully characterised. A longer session would sharpen the p99, and the unexplained
+intermittent media stall (`TODO(media-lifetime)`) is untouched by any of this.

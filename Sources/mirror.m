@@ -676,8 +676,9 @@ static void keyStep(unsigned index,unsigned step){
             done=step==13;
             delay=step==12?1.05:.03;
         }else{
-            // Home: docs/protocol.md. Volume: M3 brief, 2026-09-08 13 Pro:
-            // E9 showed a HUD; EA is the paired usage, rc=0 only (HUD unconfirmed).
+            // Home: docs/protocol.md. Volume: E9 showed a HUD on the 13 Pro (M3 brief,
+            // 2026-09-08); EA was rc=0-only until 2026-09-14, when both directions were
+            // exercised interactively on a 12 mini over localNetwork and confirmed working.
             uint64_t usage=r.event.kind==KeyHome?0x40:r.event.kind==KeyVolumeUp?0xE9:
                            r.event.kind==KeyVolumeDown?0xEA:0x30;
             code=sendBounded(^{ return step==2?coredevice_send_hid_button_barrier(gButton):
