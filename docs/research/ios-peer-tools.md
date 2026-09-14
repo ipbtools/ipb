@@ -60,6 +60,78 @@ iOS 没有 BACK 键，scrcpy 的 `MOD+b`／右键没有直接等价物。
 - **iPhone Mirroring 官方无自动化 API**（Apple DTS 明确答复无此 API）；社区方案（如 midscene-ios、"iPhone Mirroir" MCP）本质是**截图 + 坐标映射到 Mac 屏幕再模拟鼠标点击**，即操作的是 macOS 侧的镜像窗口而非设备本身的注入通道。
 - Sauce Labs / BrowserStack / AWS Device Farm 真机云的输入注入路径统一：**Appium → XCUITest driver → WebDriverAgent → XCTest**，或直接跑开发者自己的 XCTest UI bundle；AWS Device Farm 用 Amazon 托管的 macOS host 动态连接真机跑这套链路，没有绕开 XCTest 的旁路方案。（[AWS 文档](https://docs.aws.amazon.com/devicefarm/latest/developerguide/test-types-ios-xctest-ui.html)、[BrowserStack](https://www.browserstack.com/guide/appium-ios-tutorial)）
 
+## 8. `Git-Agni/prod-FARM-IOS-Core`：一个 2026 年的真机农场，仍然只能走 WDA（2026-09-14 阅读）
+
+[仓库](https://github.com/Git-Agni/prod-FARM-IOS-Core)。Apache-2.0，`@git-agni/phone-farm-core` 0.1.0-review.0，Node ≥22。
+**本节依据 README + `docs/architecture.md` + `docs/coordinates.md` + `package.json`，未读源码**；凡涉及实现细节的判断都以这四份文档的原文为准。
+
+开源的 iOS 真机农场，用途是在 9 台 iPhone 上跑 TikTok 自动化（README 引用的工程说明：
+"TikTok on 9 real iPhones reverse engineered from the screen up…pixel-level UI detection,
+OCR account switching, never posting twice"）。TypeScript/Node + PostgreSQL + Drizzle ORM。
+
+四个常驻进程围绕 PostgreSQL：`web`（Fastify + HTMX 面板、JSON API、代理视频流）、
+`worker`（消费 pg-boss 队列，每台设备一条 `ios-device-<hash(udid)>`，5 秒物化一次到期任务）、
+`wda-service`（常驻 supervisor，每设备一个 WDA 实例，USB 转发控制口 8100+、视频口 9100+）、
+`appium`（Appium 3 + XCUITest driver，只绑 loopback）。任务抽象成
+`pluginId` / `taskType` / `taskVersion` + JSON payload 以保证向后兼容。
+
+### 为什么它对本文档有价值
+
+它是本文结论的一个**当前、真实、生产规模**的佐证样本：一个认真做农场的人，在 2026 年仍然
+只能把控制权交给 Xcode 工具链。其架构文档写得很直接：
+
+> "The farm never talks to a device directly at the USB level for *control*" —— 委托 Xcode 是强制的
+
+具体链路：设备物理配对 + Developer Mode（iOS 16+），Xcode 首次配对时挂载 DDI，
+`xcodebuild build-for-testing` 自动签名（UDID 烧进 provisioning profile），
+再对每台设备 `xcodebuild test-without-building` 把 WebDriverAgentRunner 作为 UI test 装上并拉起。
+
+由此带来的运维约束，都写在它自己的 "Key Constraints" 里：
+**Apple ID 的免费 provisioning 有 100 个 UDID 上限**；**登录钥匙串必须在图形会话里解锁**才能签名；
+非 loopback 绑定必须配 auth provider；任务有 30 分钟 run-window，过期即放弃。
+
+### 与 ipb 的对照
+
+| | prod-FARM-IOS-Core | ipb |
+|---|---|---|
+| 控制通道 | WDA（XCTest UI test）经 HTTP | CoreDevice/RemoteXPC → DDI 的 `dtuhidd` |
+| 设备端进程 | 要装 WebDriverAgentRunner | 不装任何东西 |
+| 签名 / Apple ID / provisioning | 全部需要，受 100 UDID 上限 | 全部不需要 |
+| 每加一台设备的成本 | 烧 profile + `xcodebuild` 起一次 WDA | 开一个 service socket |
+| 坐标模型 | 每种屏幕几何一套**编译进源码**的 points 常量表 | CLI 边界归一化 0..1 |
+| 输入原语 | tap / swipe | tap/swipe/long/scroll(含完整 phase 序列)/key/button/digitizer |
+| 画面 | MJPEG，浏览器可看（跨机器） | 本机 AppKit 窗口（`ipb mirror`），跨机器看不了 |
+| 编排层 | 调度、插件、面板、多设备并发 | 无 |
+
+### 坐标：它的做法比我们差，反过来印证了 Rule 2
+
+> "A profile is a full set of tap targets for one screen geometry, in **points** (not pixels)"
+> …… "not at runtime. A coordinate profile is a compiled constant in the source."
+
+每种屏幕几何一套编译期常量表，靠人肉从截图读中心点、再发测试 tap 校验；**目前只 ship 了
+iPhone 8（375×667）**，加 iPhone 13/14 要改两处源码再重新部署；另给 15 个单点 tap 目标留了
+运行时覆盖入口（设备页 → Touch points）。
+
+AGENTS.md Rule 2 的 "Coordinates are normalised (0..1) at the CLI boundary; nothing downstream
+sees pixels" 在这个对照下是明显更优的选择：换机型不需要改代码。
+
+### 值得借鉴的三点
+
+1. **注册向导**：`src/devices/registration.ts` 逐步探测每个环节并针对失败给出具体修复动作 ——
+   与 `ipb doctor` 同构，但它做进了产品流程。
+2. **插件/任务版本化**：`pluginId` / `taskType` / `taskVersion` + JSON payload，是 agent 时代
+   编排层的一个可抄的形状（见 `agent-frameworks.md`）。
+3. **面板远程控制绕过 Appium**：`POST …/remote/action` 直接打 WDA 的 HTTP，说明作者自己也嫌
+   Appium 那层慢 —— 交互路径和批量自动化路径分开，是个合理的结构决定。
+
+其调度、账号切换、OCR 等领域逻辑与本项目目标无关，不具复用价值。
+
+### 共同的空洞：都没有 UI 层级
+
+它用"编译坐标表 + 像素级检测 + OCR"应付"按钮在哪"；ipb 的能力矩阵里 UI hierarchy 直接是 no。
+它的答案很脆（只覆盖一种机型），但至少是个答案。**这条路线不能照抄**，然而 ipb 若要往 agent
+方向走，这个问题躲不掉。
+
 ## 对比表
 
 | 工具 | 真机支持 | 需要设备端 App/Server | 需要 XCTest | 需要 Mac | 输入注入方式 | 截图方式 | License | 活跃度(截至2026-09) |
@@ -74,8 +146,14 @@ iOS 没有 BACK 键，scrcpy 的 `MOD+b`／右键没有直接等价物。
 | Xcode 27 Device Hub | 是(iOS27+镜像) | 否 | 否 | 是 | 官方黑盒(未逆向) | 屏幕镜像 | Apple专有 | 2026新功能 |
 | iPhone Mirroring+社区自动化 | 是 | 否(系统内建) | 否 | 是 | 截图+坐标映射点击Mac窗口 | 系统镜像 | Apple专有+MIT封装 | 活跃(社区MCP) |
 | Sauce/BrowserStack/AWS Device Farm | 是 | 是(WDA/XCTest bundle) | 是 | 云端Mac host | XCTest/WDA | 支持 | 商业 | 活跃 |
+| prod-FARM-IOS-Core (农场) | 是 | 是(WDA) | 是 | 是(签名+xcodebuild) | WDA HTTP → XCTest | WDA 截图 / MJPEG 流 | Apache2.0 | 2026-09 公开，0.1.0-review.0 |
 
 ## 结论：真机上没有任何开源工具能在不装设备端 server 的前提下提供的能力
 截至目前公开资料，**在物理 iOS 设备、且不预先安装/签名任何设备端进程（无 XCTest bundle、无 WDA、无镜像 App）的前提下，没有开源工具能提供系统级任意坐标的触控/按键注入**（等价于 adb 的 `input tap`）。原因是 Apple 把 `IOHIDEvent` 合成注入能力锁定在经开发者证书签名并挂载 `XCTest.framework`/`testmanagerd` 的进程里；pymobiledevice3、go-ios 提供的都是隧道/协议层（RSD、DDI、devicectl 通道），真正落地的触控注入最终都要绕回 WebDriverAgent/XCTest 这条唯一公开路径。同样，Device Hub 背后的 `UniversalHID`/`dtuhidd` 协议目前仍是 Apple 内部黑盒，没有公开逆向实现可用；iPhone Mirroring 的自动化方案本质是"操作 Mac 窗口"而非"注入设备"。因此，"不依赖设备端 server 的真机 adb 等价物"在当前生态里**不存在**。
+
+2026-09-14 补充佐证：`prod-FARM-IOS-Core`（第 8 节）是一个 2026 年公开的生产级真机农场，仍然
+走 WDA/XCTest，并为此付出签名、provisioning、100 UDID 上限、钥匙串解锁这一整套代价。它没有
+推翻上面的结论，而是再次确认了它 —— 同时也说明 ipb 走的 `dtuhidd` 路线到目前为止仍无第二个
+公开实现。
 
 （因搜索工具限制，`mjtsai.com` 原文被 403 拒绝，仅取到标题与搜索摘要；如需更深入的 Device Hub 技术细节，需要访问 Apple 官方 Xcode 27 release notes 或后续逆向文章。）
