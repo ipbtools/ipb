@@ -1400,7 +1400,9 @@ int main(int argc, const char *argv[]) {
                     } else if (strcmp(kind, "cd_siri_button") == 0) {
                         send_coredevice_button_click(remote, 0x0c, 0xcf, 850000);
                     } else if (strcmp(kind, "cd_recents_button") == 0) {
-                        send_coredevice_button_click(remote, 0xff01, 0x100, 80000);
+                        // 0x100 was never verified and does nothing; 0x10 opens the App
+                        // Switcher (screenshot-verified 4/4, 12 mini iOS 27.0, 2026-09-14).
+                        send_coredevice_button_click(remote, 0xff01, 0x10, 80000);
                     } else if (strcmp(kind, "cd_home_double_button") == 0) {
                         send_coredevice_button_double_click(remote, 0x0c, 0x40);
                     } else if (strcmp(kind, "cd_scroll_event") == 0) {

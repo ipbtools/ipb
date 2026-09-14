@@ -327,7 +327,7 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 - `key`: UniversalHID keyboard report to the `keyboard` service
 - `long`: CoreDevice HID digitizer with repeated hold pulses
 - `home`: CoreDevice HID button service
-- `recents`: CoreDevice HID digitizer bottom-edge gesture
+- `recents`: CoreDevice HID button, AppleVendorKeyboard page `0xff01` usage `0x10` (was a 1.66 s digitizer swipe until 2026-09-14)
 - `scroll-gesture` and `abs-pointer`: UniversalHID AbsolutePointer and Scroll wire reports to the `gesture`/trackpad service, in DeviceHub's captured phase sequence
 - `power` / `lock` / `wake`: CoreDevice HID button service, consumer usage `0x0c`/`0x30` held 0.5 s
 - `screenshot`: `devicectl device capture screenshot`, using the copy shipped in the CoreDevice package

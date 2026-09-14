@@ -670,26 +670,27 @@ static Result failureFor(int code,Result onFail){ return code==SendTimedOutCode?
 static void drainInput(void);
 static void keyStep(unsigned index,unsigned step){
     pthread_mutex_lock(&gLock); Record r=gRecords[index]; pthread_mutex_unlock(&gLock);
-    BOOL recents=r.event.kind==KeyRecents,done=NO;
+    BOOL done=NO;
     double delay=0;
     if(r.event.generation!=atomic_load(&gGeneration)){
         r.result=Interrupted; done=YES;
     }else{
         int code;
-        if(recents){
-            unsigned position=MIN(step,12u);
-            code=sendBounded(^{ return coredevice_send_hid_digitizer_cgpoint(gDigitizer,.5,
-                .995+(.74-.995)*position/12.0,0,0,1,step==0?0:step==13?2:1,3,0,0); });
-            done=step==13;
-            delay=step==12?1.05:.03;
-        }else{
+        {
+            // Every shortcut is a button click now, App Switcher included. It used to be a
+            // 14-step digitizer swipe costing 1.66 s (12 x 30 ms of motion, then a 1.05 s dwell,
+            // then a 0.25 s settle), which is why it felt like a slowly mocked drag.
+            // AppleVendorKeyboard page 0xff01 usage 0x10 opens the switcher directly, verified
+            // 4/4 by screenshot on a 12 mini (iOS 27.0). See docs/verification.md 2026-09-14.
+            //
             // Home: docs/protocol.md. Volume: E9 showed a HUD on the 13 Pro (M3 brief,
             // 2026-09-08); EA was rc=0-only until 2026-09-14, when both directions were
             // exercised interactively on a 12 mini over localNetwork and confirmed working.
-            uint64_t usage=r.event.kind==KeyHome?0x40:r.event.kind==KeyVolumeUp?0xE9:
-                           r.event.kind==KeyVolumeDown?0xEA:0x30;
+            uint64_t page=r.event.kind==KeyRecents?0xff01:0x0c;
+            uint64_t usage=r.event.kind==KeyHome?0x40:r.event.kind==KeyRecents?0x10:
+                           r.event.kind==KeyVolumeUp?0xE9:r.event.kind==KeyVolumeDown?0xEA:0x30;
             code=sendBounded(^{ return step==2?coredevice_send_hid_button_barrier(gButton):
-                coredevice_send_hid_button_custom(gButton,0x0c,usage,(uint8_t)step); });
+                coredevice_send_hid_button_custom(gButton,page,usage,(uint8_t)step); });
             done=step==2; delay=step==0?.08:.12;
         }
         double returned=nowSec();
@@ -714,8 +715,8 @@ static void keyStep(unsigned index,unsigned step){
     }
     pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
     if(done){
-        // Preserve the oracle's post-END settling interval before the next input.
-        double settle=recents && r.result==Sent?.25:0;
+        // The digitizer swipe needed a post-END settle; a button click does not.
+        double settle=0;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(settle*NSEC_PER_SEC)),gInputQueue,^{
             drainInput(); dispatch_group_leave(gInputGroup);
         });

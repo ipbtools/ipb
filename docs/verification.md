@@ -3076,3 +3076,60 @@ never been swept. That fully explains "像 mock 慢慢滑动" — 33 Hz of motio
 holding still. Device Hub's own gesture is not reproduced here, only approximated. Candidate work:
 sweep the dwell (0.5 / 0.7 / 0.85 / 1.05) and the step interval (30 ms → 16 ms) against whether the
 switcher still opens reliably. Not changed yet, because "still opens" needs a human watching.
+
+
+## 2026-09-14 — App Switcher is a real button, not a gesture: `0xff01` / `0x10`
+
+The user's objection was the right one: Home and Lock are direct usages, so App Switcher should not
+have to mock a swipe. It does not.
+
+### The existing "button" implementation never worked
+
+`Sources/action_sender.m` already had `cd_recents_button` sending AppleVendorKeyboard page `0xff01`
+usage **`0x100`**, unreferenced by any `bin/ipb` command and with no verification record. Tested by
+screenshot: it returns **rc=0 and does nothing** — the device stays on the home screen. rc=0 on a
+button that has no effect is why this sat undetected.
+
+### `0x10` is the usage
+
+Swept the plausible task-switcher usages from a known home-screen state, screenshotting after each
+and comparing against the home frame:
+
+| page / usage | result |
+| --- | --- |
+| `0x0c` / `0x29F` (AC Desktop Show All Applications) | no change |
+| `0x0c` / `0x2A2` (AC Desktop Show All Windows) | no change |
+| `0x0c` / `0x1A2` (AL Task Manager) | no change |
+| `0x0c` / `0x36` | no change |
+| `0xff01` / `0x04` | no change |
+| **`0xff01` / `0x10`** | **App Switcher** |
+| `0x01` / `0x82` | no change |
+
+Verified by looking at the frames, not by file size alone: the result is the same card view the
+digitizer swipe produces. **4/4 on the iPhone 12 mini (iOS 27.0, localNetwork), 2/2 on the iPhone
+13 Pro (iOS 27.0, wired)**, plus the interactive smoke gate's `05_after_recents` frame.
+
+### What it replaces, and the cost it removes
+
+The mirror's `keyStep` had a dedicated 14-step digitizer branch for recents: 12 × 30 ms of motion
+(~33 Hz), a **1.05 s dwell**, then a 0.25 s post-END settle — **1.66 s** before the next input, with
+the dwell alone 74% of the gesture. That is exactly the "像 mock 慢慢滑动" the user described. The
+button is a normal click: 80 ms press, 120 ms release, barrier — about **0.2 s**.
+
+The whole swipe branch is **deleted** rather than kept behind a flag, so every shortcut now takes one
+path (`coredevice_send_hid_button_custom` with a per-shortcut page/usage); the usage page had to
+become a variable because recents is the only one not on consumer page `0x0c`. `bin/ipb recents` and
+the helper's `cd_recents_button` both point at `0x10` now. End-to-end CLI time went 2.89 s → ~1.2 s,
+most of which is process start and connection setup.
+
+### Gap, stated rather than glossed
+
+**iOS 26 is untested.** The supported matrix is iOS 27 *or iOS 26.6+*, both confirmations above are
+iOS 27.0, and the iPhone 15 Pro (iOS 26.6.2) reads `tunnelState unavailable` — not connectable right
+now. Since a button with no effect returns **rc=0**, a usage absent on iOS 26 would fail *silently*,
+exactly as `0x100` did. This needs one screenshot check on an iOS 26 device before the matrix claim
+is honest.
+
+Gate: `SMOKE PASSED` on the 12 mini, interactive, 1 WARN. The single duplicate frame pair is
+`00_before` vs `01_after_nondestructive`, which is expected — every step between them is a
+deliberate zero-movement no-op.
