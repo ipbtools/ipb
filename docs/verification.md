@@ -2240,3 +2240,65 @@ honest from then on.
 
 `DEVICE_ID=<uuid-b> scripts/smoke_matrix.sh . build/smoke-upd` → `SMOKE PASSED` on the iPhone
 12 mini, 19 steps, all rc=0.
+
+
+## 2026-09-14 — mirror freeze: a UniversalHID barrier hung 2.85 s with no timeout
+
+Reproduced by the user with `--csv`. Raw trace kept locally at
+`<scratchpad>/mirror-home-freeze.csv` (193 rows, not committed per the evidence rule); the decisive
+rows are condensed below. Device/transport for this run not captured in the CSV.
+
+### What the trace shows
+
+The Home shortcut is **not** where the wire path failed. `seq 141 KEY_HOME` sent cleanly:
+
+```
+seq  type      result       report_return - received   barrier_return - report_return   codes
+141  KEY_HOME  sent         0.6 ms                      207.3 ms                         report=0 barrier=0
+```
+
+That is the normal button click+barrier timing (press, +80 ms, +120 ms, barrier on `gButton`), so
+`gButton` was healthy and Home reached the daemon. If Home had no visible effect on the device, the
+cause is not in this trace and needs a screenshot to confirm.
+
+The freeze is `seq 166`, a touch **UP** (end of a swipe, `mode=TOUCH`), five seconds after Home. Its
+report — the finger lift — returned in 0.6 ms, so the gesture completed on-device. The **barrier**
+that follows it (`mirror.m:767`, `coredevice_send_universalhid_barrier(gInput)`) then hung:
+
+```
+seq  type  result       report_return - received   barrier_return - report_return   codes
+166  UP    interrupted  0.6 ms                      2846.2 ms                        report=0 barrier=0
+```
+
+`barrier_code=0` — the barrier eventually returned *success* on a connection that had already gone
+invalid: during the 2.85 s block the connection's async error handler fired `inputError`, which bumped
+`gGeneration` and marked this record `interrupted`. The return code is not trustworthy on a dropped
+connection, exactly as in the button case.
+
+Everything submitted during the hang piled up behind it on the serial input queue and drained as
+rejects the instant the barrier unblocked:
+
+```
+seq 167..193  (27 events, gestures 12 and 13)  result=rejected  report_return=blank
+  all t_received == 491706.56995x  (== seq 166 barrier_return; the queue moved only when it unblocked)
+  submit span 491704.373 .. 491705.590  → ~1.2 s of real dragging lost
+```
+
+### Root cause (same as the 2026-09-… button-connection freeze)
+
+The per-send barrier and report calls are synchronous with **no timeout of our own**. The only
+watchdog is the whole-session one (`mirror.m:1422`, `runSeconds+10`). When a HID connection goes
+invalid, the synchronous call blocks on the framework's internal timeout — measured at **2.846 s**
+here, **2.988 s** and **3.188 s** in the button case — before returning (misleadingly with code 0),
+and the serial input worker is dead for that whole window. This is the "no unbounded waits" clause of
+AGENTS.md Rule 2 not being met at the per-send layer.
+
+New this time: `gInput` (the touchscreen connection, the most heavily used one) dropped after 138
+scroll reports plus taps and swipes — **under continuous load, not idle**. So the drop is not an
+idle-reaping artifact, and a fix that adds our own timeout/cancellation to the synchronous send is
+warranted independently of the earlier "idle vs never-healthy" question. Whether localNetwork
+transport is the trigger (vs wired) is still open; this run's transport was not recorded.
+
+Not yet fixed. The trace is a confirmed reproduction; the fix (bound the synchronous barrier/report
+with our own deadline and treat expiry as a send failure, so the queue is released and the run exits
+with a real error instead of freezing) is pending design approval.
