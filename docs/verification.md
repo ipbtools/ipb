@@ -2708,3 +2708,65 @@ Device Hub with `Experiments/devicehub-trace/` and copy the payload, rather than
 `listusageassertions` returned empty even while a `devicectl device info details` ran in parallel, so
 that call's assertion is either too brief to catch by polling or not visible to us — a trace is the
 way, not a poll.
+
+
+## 2026-09-14 — Tracing devicectl: no client-side renewal path found; the workaround is justified
+
+Continued work on `TODO(tunnel-keepalive)`. No operator was needed for this round.
+
+### `devicectl` can be debugged
+
+It is signed with `flags=0x2000(library-validation)`, which blocks loading unsigned libraries — so
+`Experiments/tools/rxpc_tap.c` (a `DYLD_INSERT_LIBRARIES` interposer) cannot attach — but it does
+**not** block debugging. `lldb` attaches and breakpoints hit normally. New tool:
+`Experiments/devicehub-trace/xpctrace.py` dumps every XPC message a process sends whose description
+mentions a CoreDevice action, by calling `xpc_copy_description` on the message at the send site.
+
+### devicectl does not acquire an assertion in its own process
+
+Two negative results from tracing `devicectl device info details`, the call that demonstrably renews
+the tunnel:
+
+- It sends **no** `com.apple.coredevice.action.*` XPC message at all through
+  `xpc_connection_send_message{,_with_reply,_with_reply_sync}`.
+- `breakpoint set -r 'acquireUsageAssertion|acquireDeviceUsageAssertion|TunnelAssertionGroup'` armed
+  **16 locations and took zero hits**.
+
+So the tunnel assertion is not taken by the client. It is taken by a daemon on the client's behalf,
+which fits the `DeviceManagerCheckInRequest` / `DeviceManagerCheckInCompleteEvent` pair in
+devicectl's own log output.
+
+### Our action path can use the tunnel but cannot establish or renew it
+
+Sending `com.apple.coredevice.action.lockstate` in process via `cd_action` every 4 s:
+
+```
+round 1 (t+4s)  sent_ok=1  tunnel=connected
+round 2 (t+8s)  sent_ok=1  tunnel=connected
+round 3 (t+12s) sent_ok=0  tunnel=disconnected     <- dropped anyway
+round 4..7      sent_ok=0  tunnel=disconnected     <- never recovers
+```
+
+Two things at once: actions do **not** renew the lease (calls at t+4 s and t+8 s did not prevent the
+~t+12 s drop), and once the tunnel is down a CoreDeviceService action cannot bring it back — it just
+returns `CoreDeviceError 4000` forever. Only a `devicectl device ...` call re-establishes it.
+
+### A wrong inference, corrected before it was acted on
+
+The trace shows the device advertising
+`Acquire Usage Assertion (com.apple.coredevice.feature.acquireusageassertion): []` — an empty
+capability-implementation list — which looked like "the device cannot do this" and would have
+explained the semantic refusal. **It does not mean that.** `getdeviceinfo` and `launchapplication`
+are also `[]`, and both demonstrably work (`ipb info`, `ipb launch`). An empty implementation list
+says the capability is not provided by a plugin, not that it is unsupported. The refusal is still
+unexplained.
+
+### Where this leaves the TODO
+
+**No in-process renewal path was found.** The `devicectl` subprocess workaround is not laziness; it is
+currently the only mechanism known to work, and that is now backed by three negatives (socket
+creation does not renew, actions do not renew, the client does not take the assertion). It stays.
+
+The remaining lead is the **device-manager check-in** devicectl performs at startup, which is what
+correlates with renewal — not the assertion action and not any device action. That is the next thing
+to trace, and it can be traced in `devicectl` without an operator.
