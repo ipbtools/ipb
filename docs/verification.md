@@ -2415,3 +2415,54 @@ freeze is capped at 0.5 s and reported honestly instead of a multi-second stall 
 Gate: `scripts/smoke_matrix.sh` → `SMOKE PASSED` on the wired iPhone 13 Pro. The mirror's own
 interactive path is unchanged apart from these call sites and is covered by the probe, which shares
 the contract; an interactive mirror run is still worth doing before relying on it.
+
+
+## 2026-09-14 — Correction: it is HID traffic, not the media path
+
+This retracts the "It is not HID-specific: the media stream wedges at the same point" section of the
+earlier record today. That section rested on media frame counts landing on 266/267/267/322/266/266/267
+across runs and on a single `--no-input` run dying at 41 s. Both were host-state artefacts.
+
+### The controlled comparison
+
+Re-run back to back in one host state, wired 13 Pro, with the deadline fix in place:
+
+| config | rc | elapsed | media frames | outcome |
+| --- | --- | --- | --- | --- |
+| `--no-input` — media running, all three HID connections **open**, zero HID sends | 0 | **38 s** | 458 | completed cleanly |
+| with input | 1 | **14 s** | 455 | died at executed=546 |
+| with input | 1 | **14 s** | 418 | died at executed=546 |
+
+Media frames are now 418-458, not ~266, so **the "~266 constant" was noise from the host state at
+the time, not an invariant**. And media plus open HID connections, with no HID traffic, survives
+nearly three times as long as the failing case. `ipb stream` — media with no HID connections at all —
+also runs without the invalidation.
+
+So the earlier inference ("something wedges at ~266 frames and the failure surfaces on whichever
+connection is next used") is **wrong**. Holding HID connections open is not enough either; it takes
+HID traffic. The single earlier `--no-input` death was n=1 and did not reproduce.
+
+This is also **not** the media wedge recorded on 2026-09-08/09. That one is cumulative over ~30
+sessions, makes the stream **fail to start** (`VideoReceiver startVideo failed`,
+GKVoiceChatServiceErrorDomain 32017), and clears only on reboot. This one starts fine, delivers
+hundreds of frames, and dies mid-session. Conflating them was a mistake.
+
+### What the threshold actually tracks
+
+Elapsed time after HID traffic begins, ~10.5 s — not event count and not gesture count:
+
+| config | events executed | gestures completed | input-phase wall time | died |
+| --- | --- | --- | --- | --- |
+| 3 s drag @ 60 Hz | 546 | 3 | 10.5 s | yes |
+| 3 s drag @ 30 Hz | 276 | 3 | 10.5 s | yes |
+| 1 s drag @ 60 Hz | 372 | 7 | 10.5 s | yes |
+| 6 s drag @ 60 Hz | 618 | mid-drag | ~10.5 s | yes |
+| no input | 0 | 0 | n/a | **no**, survived 38 s |
+
+Event count spans 276-618 and gesture count 3-7 while the wall time is constant, and the clock only
+starts once sending starts. This is consistent with the user's interactive captures, both of which
+died roughly 10 s into input.
+
+**Open:** why ~10.5 s. A lifetime that begins at the first send, versus a lease that the barrier
+fails to renew, are not yet distinguished; the discriminating test is sparse traffic — one gesture,
+a long idle, then another — which the probe cannot currently express. Not claimed either way.
