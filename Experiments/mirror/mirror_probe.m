@@ -82,7 +82,7 @@ static unsigned gPending[PendingLimit],gHead,gCount,gMaxDepth,gSubmitted;
 static BOOL gWorker,gStopping,gCollect;
 static _Atomic uint64_t gGeneration=1;
 // Mirrors the Sources/mirror.m bounded-send contract; this probe is its verification harness.
-#define SendDeadlineSeconds 0.5
+#define SendDeadlineSeconds 2.0   // keep in step with Sources/mirror.m
 #define SendTimedOutCode (-62)
 static _Atomic unsigned long long gAbandonedSends=0;
 static int sendBounded(int (^call)(void)){

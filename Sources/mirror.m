@@ -109,7 +109,13 @@ static _Atomic int gFailure=0;
 static _Atomic bool gFinished=false;
 static _Atomic uint64_t gScrollRawClamps=0; // number of axes saturated during conversion
 // Deadline for a single synchronous HID send; see the sendBounded comment below.
-#define SendDeadlineSeconds 0.5
+// 2.0 s, not 0.5 s: 0.5 s was justified against a synthetic probe's 3.5-5.3 ms median, but real
+// interactive use on localNetwork reaches a 346 ms p95 gesture tail and was measured overshooting
+// 505 ms, so 0.5 s killed live sessions on latency alone. Legitimate latency and a dead connection
+// overlap (744 ms has been seen from a dead one), so a deadline cannot be the thing that decides a
+// connection is dead -- it only stops one stuck call from owning the input queue. The async error
+// handler is what reports a dead connection.
+#define SendDeadlineSeconds 2.0
 #define SendTimedOutCode (-62)
 static _Atomic unsigned long long gAbandonedSends=0; // calls we stopped waiting for
 static NSString *gReason;
@@ -683,8 +689,15 @@ static void keyStep(unsigned index,unsigned step){
         if(done){ r.barrierCode=code; r.barrierReturn=returned; }
         if(code){
             if(!done) r.reportCode=code;
-            r.result=failureFor(code,done?BarrierFailed:SendFailed); done=YES;
-            inputError(r.result==SendTimedOut?
+            // Capture this BEFORE done is forced: only the barrier step (done already YES here)
+            // is a flush whose deadline expiry is safe to survive. A press/release that timed out
+            // may have left the button held, so that stays fatal.
+            BOOL wasBarrier=done;
+            r.result=failureFor(code,wasBarrier?BarrierFailed:SendFailed); done=YES;
+            if(r.result==SendTimedOut && wasBarrier)
+                LOGE("shortcut barrier exceeded the %.1fs send deadline; session continues",
+                     (double)SendDeadlineSeconds);
+            else inputError(r.result==SendTimedOut?
                 @"shortcut sender exceeded the send deadline; input queue released":
                 @"shortcut sender failed (see CSV codes)");
         }else if(r.event.generation!=atomic_load(&gGeneration)){
@@ -818,9 +831,13 @@ static void drainInput(void){
                         r.barrierReturn=nowSec();
                         if(r.barrierCode){
                             r.result=failureFor(r.barrierCode,BarrierFailed);
-                            inputError(r.result==SendTimedOut?
-                                @"UHID barrier exceeded the send deadline; input queue released":
-                                @"UHID barrier failed (see barrier_code)");
+                            if(r.result==SendTimedOut)
+                                // Not fatal: the barrier only flushes, so a slow one strands no
+                                // contact. If the connection is actually dead the error handler
+                                // says so and ends the run; a deadline must not end it on latency.
+                                LOGE("UHID barrier exceeded the %.1fs send deadline; input queue released, session continues",
+                                     (double)SendDeadlineSeconds);
+                            else inputError(@"UHID barrier failed (see barrier_code)");
                         }
                         else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
                         state=Idle; activeGesture=0;

@@ -2911,3 +2911,52 @@ is what makes B more than a coincidence: removing the intervention restores the 
 
 `--session-timeout`, which `bin/ipb` bounds to the session length + 30 s, therefore needs no
 transport-specific value. The fix is transport-independent, as the barrier deadline already was.
+
+
+## 2026-09-14 — The 0.5 s deadline was killing live sessions; raised to 2 s and made non-fatal
+
+A real interactive run by the user failed immediately:
+
+```
+exit=1 reason=UHID barrier exceeded the send deadline
+abandoned_sends=1 (deadline 0.50s)
+gesture tail p50=505.025 p95=505.025 p99=505.025 n=1 (ms)
+submitted=42 executed=11 rejected=31
+```
+
+**The fix was the bug.** The review had flagged this ("every timeout is fatal… the 0.5 s figure was
+justified against a 3.5-5.3 ms wired median; no localNetwork p95/p99 is cited") and it was
+under-weighted. Two runs side by side settle it:
+
+| | synthetic probe | real interactive session |
+| --- | --- | --- |
+| gesture tail p50 | 3.5-5.3 ms | **30.6 ms** |
+| gesture tail p95 | — | **346 ms** |
+| observed overshoot | — | **>505 ms** (timed out) |
+
+So the "100x margin" claimed for 0.5 s was a margin over a **synthetic** median. Against real
+interactive latency on localNetwork it is about **1.4x**, and it terminated a healthy session on
+latency alone.
+
+### Two changes
+
+1. **Deadline 0.5 s → 2.0 s.** Roughly 4-6x the observed p95, still below the ~3 s the framework
+   takes on a genuinely dead connection.
+2. **A barrier deadline expiry is no longer fatal.** This is the more important half. A barrier is a
+   flush/sync point — a slow one strands no contact on the device — so exceeding the deadline now
+   logs and the session continues. A *report* timeout stays fatal, because a lost report can leave a
+   contact or a button held. In `keyStep` the barrier/report distinction has to be captured **before**
+   `done=YES` is assigned on the same line, or a shortcut press timeout would wrongly become
+   non-fatal; that bug was written and caught before testing.
+
+The deeper point, now stated in the code: **legitimate latency and a dead connection overlap** —
+744 ms has been measured from a dead connection and >505 ms from a healthy one — so a deadline
+cannot be what decides a connection is dead. It exists only to stop one stuck call from owning the
+serial input queue. The async error handler is what reports a dead connection, and the tunnel
+keepalive is what prevents the death in the first place. The deadline is a backstop, not the fix.
+
+`Experiments/mirror/mirror_probe.m` was moved to 2.0 s in step, so the harness matches the shipped
+contract.
+
+Gate: `SMOKE PASSED` on the iPhone 12 mini (localNetwork), including the mirror signal/orphan step.
+Still owed: the interactive re-run that prompted this.
