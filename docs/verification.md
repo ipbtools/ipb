@@ -2574,3 +2574,62 @@ vs 16 s / 57 frames), so its early finish is not the tunnel and it does not get 
    stop producing frames in that neighbourhood. The idle-screen explanation covers the mirror run
    above, but it has not been separated from a genuine media-side limit under a *changing* screen.
    Needs a run with continuous screen motion.
+
+
+## 2026-09-14 — The lease mechanism, identified from symbols (not yet verified)
+
+Follow-up to the root cause above, narrowing what should replace the keepalive workaround.
+
+### Falsified first: creating a service socket does not renew the lease
+
+Running a trivial HID command (`ipb key-up`, which opens a fresh service socket via
+`com.apple.coredevice.action.createservicesocket`, sends, and closes) every 4 s for 8 rounds. Rounds
+3, 5 and 7 printed the wrapper's "device tunnel not connected, warming it" line, i.e. the tunnel had
+already lapsed and `ipb` re-warmed it:
+
+```
+round 1 rc=0 warmed=0     round 5 rc=0 warmed=1
+round 2 rc=0 warmed=0     round 6 rc=0 warmed=0
+round 3 rc=0 warmed=1     round 7 rc=0 warmed=1
+round 4 rc=0 warmed=0     round 8 rc=0 warmed=0
+```
+
+Alternating on a ~10 s period measured from each `devicectl` warm. So **opening a service socket does
+not renew the lease**, and neither does traffic on one. Only a `devicectl device <action>` call does.
+
+### What does: usage assertions
+
+`strings` and `nm` on
+`/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice` (CoreDevice
+642.15):
+
+```
+com.apple.coredevice.action.acquireusageassertion
+com.apple.coredevice.action.listusageassertions
+
+CoreDevice.UseAssertionProvidingDeviceRepresentation.acquireUsageAssertion(forRequest: CoreDevice.TunnelAssertionRequest) -> ()
+CoreDevice.UseAssertionProvidingDeviceRepresentation.releaseAssertion(identifiedBy: Foundation.UUID) -> ()
+CoreDevice.UseAssertionProvidingDeviceRepresentation.listAllAssertions() -> [CoreDevice.UsageAssertionInformation]
+CoreDevice.UseAssertionProvidingDeviceRepresentation.releaseAllAssertions() -> ()
+_TtC10CoreDevice20DeviceUsageAssertion, UsageAssertionOptions, UsageAssertionRequirements
+```
+
+The request type is named **`TunnelAssertionRequest`**: a client holds a *tunnel* assertion for as
+long as it needs the tunnel, and with no holder the tunnel lapses. That matches every measurement —
+the ~10 s period, a `devicectl device` call renewing it (it takes an assertion for the duration of
+its work), and neither socket creation nor service traffic renewing it.
+
+**This is inference from symbol evidence (Rule 1, source 3). It is NOT verified behaviour.**
+`devicectl` exposes no assertion subcommand, so it could not be confirmed from the CLI.
+
+### Concrete plan for TODO(tunnel-keepalive)
+
+The helper already builds and sends CoreDeviceService action dictionaries (it sends
+`createservicesocket`). The replacement is to send `com.apple.coredevice.action.acquireusageassertion`
+once at session start, hold it, and release it at the end — no subprocess and no polling. Two
+unknowns to settle first: the payload shape of `TunnelAssertionRequest` (CodableValue encoding is
+already mapped in `docs/protocol.md`), and confirmation via
+`com.apple.coredevice.action.listusageassertions` that the assertion is actually held. The
+`Experiments/tools/rxpc_tap.c` interposer cannot capture `devicectl` (it is signed;
+`DYLD_INSERT_LIBRARIES` will not attach), so the payload has to come from the Swift type layout or
+from watching Device Hub with `Experiments/devicehub-trace/`.

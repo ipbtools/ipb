@@ -264,9 +264,11 @@ warm_tunnel() {
 # finishes in about a second. A session that runs for minutes has to keep renewing it.
 #
 # TODO(tunnel-keepalive): this is a WORKAROUND, not the design. Spawning devicectl every few seconds
-# for the life of a session is wasteful and coarse. The real fix is to find what a
-# `devicectl device <action>` call does underneath to renew the lease and do that in process. Until
-# then this stays. See docs/verification.md 2026-09-14 and the TODO in docs/video-stream.md.
+# for the life of a session is wasteful and coarse. The lease is almost certainly a CoreDevice usage
+# assertion: the framework exports `com.apple.coredevice.action.acquireusageassertion` and
+# `acquireUsageAssertion(forRequest: CoreDevice.TunnelAssertionRequest)`. The replacement is to send
+# that action once at session start, hold it, and release it at the end -- no subprocess, no polling.
+# That is inference from symbols, not verified. See docs/verification.md 2026-09-14.
 TUNNEL_KEEPALIVE_PID=""
 start_tunnel_keepalive() {
   [[ -n "$DEVICE" ]] || return 0
