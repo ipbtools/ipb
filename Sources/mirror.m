@@ -234,7 +234,14 @@ static void finish(int code,NSString *reason){
         (unsigned long long)atomic_load(&gAbandonedSends),(double)SendDeadlineSeconds];
     static double values[4][Capacity]; unsigned counts[4]={0};
     unsigned executed=0,rejected=0,overload=0,inflight=0;
-    const char *kinds[]={"DOWN","MOVE","UP","SCROLL_PRECISE","SCROLL_WHEEL","SCROLL_END","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN"};
+    const char *kinds[]={"DOWN","MOVE","UP","SCROLL_PRECISE","SCROLL_WHEEL","SCROLL_END","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN","KEY_LOCK"};
+    // KEY_LOCK was added to Kind without a string here, so kinds[KeyLock] read past the end and
+    // %s ran strlen on whatever followed: any session using Cmd-L with --csv crashed in finish.
+    // These asserts make the next such omission a build error instead of a SIGSEGV at exit.
+    _Static_assert(sizeof kinds / sizeof *kinds == KeyLock + 1,
+                   "kinds[] must have one string per Kind");
+    _Static_assert(sizeof inputResults / sizeof *inputResults == ScrollOffTarget + 1,
+                   "inputResults[] must have one string per Result");
     unsigned skipCounts[ScrollOffTarget+1]={0};
     for(unsigned i=0;i<n;i++){
         Record *r=&records[i];

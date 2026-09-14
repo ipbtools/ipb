@@ -3008,3 +3008,71 @@ the keepalive kept the lease, and the deadline did not fire on healthy traffic.
 Caveat worth stating: this run is 11 events. It shows the fix no longer breaks a live session, not
 that the tail is fully characterised. A longer session would sharpen the p99, and the unexplained
 intermittent media stall (`TODO(media-lifetime)`) is untouched by any of this.
+
+
+## 2026-09-14 — Crash: `kinds[KeyLock]` read out of bounds, destroying the CSV with it
+
+A user session crashed with `SIGSEGV`:
+
+```
+Thread 0 Crashed:: com.apple.main-thread
+0  libsystem_platform.dylib  _platform_strlen + 4
+1  CoreFoundation            __CFStringAppendFormatCore + 10128
+3  CoreFoundation            -[__NSCFString appendFormat:] + 124
+4  ipb-mirror                finish + 3316
+```
+
+`Kind` has **11** members (`Down … KeyVolumeDown, KeyLock`) but `kinds[]` at `Sources/mirror.m:237`
+held **10** strings. `KeyLock` was added to the enum for the ⌘L binding without a matching entry, so
+`kinds[KeyLock]` read one past the end and `%s` ran `strlen` on whatever followed.
+
+**Reachability: any session that uses ⌘L with `--csv`.** It is not an edge case — it is every use of
+the lock shortcut while recording, and it fires in `finish`, i.e. at exit.
+
+Second consequence, worth stating because it cost the investigation: the CSV is opened truncating, so
+the crash left `/tmp/volume.csv` at **0 lines** and took the previous run's data with it. The session
+the user was reporting on produced no diagnostic record at all.
+
+Fixed by adding `"KEY_LOCK"`, and by making the next such omission a **build error** rather than a
+crash at exit:
+
+```c
+_Static_assert(sizeof kinds / sizeof *kinds == KeyLock + 1, "kinds[] must have one string per Kind");
+_Static_assert(sizeof inputResults / sizeof *inputResults == ScrollOffTarget + 1,
+               "inputResults[] must have one string per Result");
+```
+
+The second assert covers the parallel array that `SendTimedOut` was recently inserted into; it
+happened to be correct, but nothing had been enforcing it.
+
+Gate: `SMOKE PASSED` on the 12 mini.
+
+### Still open from the same report, no data yet
+
+Two of the user's three complaints cannot be diagnosed until a session records successfully:
+
+- **Home-screen icons stop responding after a manual bottom-edge swipe, while taps inside other apps
+  still work.** Suspicion, untested: a bottom-edge gesture that did not cleanly end leaves the
+  drain's state machine at `Pressed`, after which `drainInput` rejects further gestures on an
+  "invalid input state transition" and rejects every shortcut with "shortcut reached active touch".
+  `ipb reset-gesture` exists for exactly this and is the first thing to try.
+- **The lock shortcut stopped working.** Consistent with the same stuck state (shortcuts are rejected
+  when `state != Idle`), but equally consistent with the user simply having hit the crash above.
+  Not diagnosable without the CSV.
+
+### App Switcher is slow by construction, not by accident
+
+Measured from `keyStep` rather than guessed:
+
+| phase | cost |
+| --- | --- |
+| steps 0-11, 12 × 30 ms | 0.36 s (13 position samples, ~33 Hz) |
+| step 12 dwell | **1.05 s** |
+| post-END settle | 0.25 s |
+| **total before the next input is accepted** | **1.66 s** |
+
+The dwell alone is **74%** of the gesture. The 1.05 s came from the `bin/ipb recents` oracle and has
+never been swept. That fully explains "像 mock 慢慢滑动" — 33 Hz of motion followed by a second of
+holding still. Device Hub's own gesture is not reproduced here, only approximated. Candidate work:
+sweep the dwell (0.5 / 0.7 / 0.85 / 1.05) and the step interval (30 ms → 16 ms) against whether the
+switcher still opens reliably. Not changed yet, because "still opens" needs a human watching.
