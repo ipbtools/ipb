@@ -2466,3 +2466,69 @@ died roughly 10 s into input.
 **Open:** why ~10.5 s. A lifetime that begins at the first send, versus a lease that the barrier
 fails to renew, are not yet distinguished; the discriminating test is sparse traffic — one gesture,
 a long idle, then another — which the probe cannot currently express. Not claimed either way.
+
+
+## 2026-09-14 — Root cause: the CoreDevice tunnel is not kept alive by HID traffic
+
+The earlier records today characterised the symptom ("~10.5 s after the first HID send") without
+naming a cause. This names it.
+
+### The tunnel drops mid-session, before anything fails
+
+Sampling `tunnelState` once a second across a failing run on the wired 13 Pro:
+
+```
+18:11:39  probe start
+18:11:40..48  tunnel=connected   utun9=up
+18:11:49      tunnel=disconnected  utun9=up      <- ~10 s in, process still running
+18:11:52  probe dies: UHID RemoteXPC error: Connection invalid
+```
+
+`utun9` stays **up** throughout — the network interface is fine. CoreDevice tears down the *logical*
+tunnel, and it does so **three seconds before** our failure surfaces, so it is the cause and not a
+teardown artefact of our process exiting.
+
+### Keeping the tunnel warm removes the failure completely
+
+`devicectl device info details` every 4 s for the duration of the run, same probe, same config:
+
+| | no keepalive | with keepalive |
+| --- | --- | --- |
+| rc | 1 | **0** |
+| elapsed | 14 s | **37 s** (ran to completion) |
+| events executed | 546 | **1820** — all 10 gestures |
+| `abandoned_sends` | 1 | **0** |
+| exit reason | `UHID barrier exceeded the send deadline` | **`complete`** |
+| tunnel during run | `connected` -> `disconnected` at ~10 s | **`connected` throughout, only state observed** |
+
+n=2, both clean.
+
+### What renews the lease, and what does not
+
+- **`devicectl device <action>`renews it.** This is exactly what `bin/ipb`'s `warm_tunnel` does.
+- **`devicectl list devices` does not.** The failing run above had a `list devices` poller running
+  once a second throughout and the tunnel dropped anyway.
+- **HID traffic on the service socket does not.** 546 reports in 10 s did not hold it open.
+
+### Why this produces the mirror freeze
+
+1. The tunnel drops ~10 s after the last `devicectl device` call.
+2. Every RemoteXPC connection riding it goes invalid at once.
+3. The in-flight synchronous barrier blocks on the framework's internal timeout (744-2846 ms
+   measured) and then returns **0**, a false success.
+4. The serial input worker is stranded for that whole window and every queued event behind it is
+   rejected.
+
+It also explains the shape of everything seen so far. Short CLI commands never notice, because each
+one warms the tunnel and finishes in about a second — `ipb home` was 3/3. `ipb mirror` holds a
+session for minutes and **never renews**, so it dies about 10 s into use. It looked probabilistic
+because what matters is how long since the last warm, not what the user did. And it is
+transport-independent because a lease is not a link.
+
+`warm_tunnel` (`bin/ipb`) warms **once, reactively, on exit code 4, before anything is sent**. There
+is no concept of holding a tunnel open across a long-lived session. That is the gap.
+
+**Open:** one `--no-input` run survived 38 s with no keepalive while another died at 41 s, so media's
+role in renewal is unresolved and is not claimed here. And the renewal mechanism Device Hub itself
+uses is unknown — we know only that a `devicectl device` call works, not what it does underneath.
+A periodic subprocess is a workaround, not the design.
