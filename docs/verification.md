@@ -2890,3 +2890,24 @@ mirror run with >10 s of real input**, since no run to date has exercised the fi
 driving it.
 
 Gate: `SMOKE PASSED` on the wired iPhone 13 Pro, including the new mirror signal/orphan step.
+
+
+## 2026-09-14 — localNetwork closes the last review caveat: same grace, same fix
+
+The review's one open caveat was that everything had been measured on the **wired** 13 Pro while the
+user's original failures were on the **localNetwork** iPhone 12 mini, and CoreDevice carries two
+separate grace constants (`tunnelGracePeriodWithNoActiveAssertionsADCDevice` vs
+`...RemotePairingDevice`). Measured on the 12 mini, three phases:
+
+| phase | procedure | result |
+| --- | --- | --- |
+| A — grace | warm once, then sample `tunnelState` every second | **dropped at t+11 s** |
+| B — hold | one resident `devicectl device notification observe` | **12/12 samples `connected` over 38 s, 0 failures** |
+| C — release | kill the keepalive, keep sampling | **dropped 11 s later** |
+
+So the localNetwork grace is **11 s**, materially identical to wired (~10-11 s) — the two constants
+do not diverge for this device pair — and the resident keepalive holds the tunnel there too. Phase C
+is what makes B more than a coincidence: removing the intervention restores the failure.
+
+`--session-timeout`, which `bin/ipb` bounds to the session length + 30 s, therefore needs no
+transport-specific value. The fix is transport-independent, as the barrier deadline already was.
