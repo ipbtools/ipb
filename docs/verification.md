@@ -3188,3 +3188,67 @@ Testing lock necessarily locked the phone, and it cannot be unlocked from here �
 `screenshot` both return `CoreDeviceError 10003` / `RemotePairingError 1016 "The device has not been
 unlocked recently"`. A passcode unlock by hand is required. **The smoke gate therefore has not been
 run for this change** and is owed.
+
+
+## 2026-09-15 — Black edge on the 12 mini: the crop allowance was fixed-pixel, not proportional
+
+User report: the mirror's black edge is back. It is **not a regression** from today's work — the same
+`fallback=yes ... source=full-frame` lines appear in the user's runs from before the App Switcher and
+crash changes. It is 12-mini-specific and had been there all along; the 13 Pro, where the edge was
+originally fixed, happens to fall inside the old limit.
+
+### Geometry, measured rather than assumed
+
+A frame captured with `ipb stream` and analysed for its non-black bounding box (small CoreGraphics
+tool, threshold 12/255):
+
+```
+frame 1136x2464
+content x=0 y=27 w=1125 h=2433      padding left=0 right=11 top=27 bottom=4
+```
+
+So the 12 mini's **stream is not native**: the panel is 1080x2340 but the encoded content is
+~1125x2433, about a 4% upscale, plus a little padding.
+
+### Why it fell back
+
+`freezeContentRect` rejected detection when the detected rect was more than a **fixed 64 px** smaller
+than the frame in either axis:
+
+| case | removes | vs 64 |
+| --- | --- | --- |
+| 13 Pro (works) | 14 x 44 | accepted |
+| 12 mini, user's run | 12 x **92** | **rejected** |
+| 12 mini, this measurement | 11 x 31 | accepted |
+
+Detection is content-dependent (it unions the lit region over ~30 frames), so on the 12 mini it lands
+either side of 64 depending on what is on screen — which is exactly why the edge came and went. A
+fixed pixel budget is also the wrong shape: it does not scale with frame size.
+
+Now proportional, `ContentDetectMaxShrink = 0.08`: every padding measured so far passes (13 Pro
+14x44, 12 mini 11x31 and 12x92) while a detection that only found the lit part of a dark screen is
+still rejected. Verified on the 12 mini:
+
+```
+content: frame=1136x2464 rect=(0,4 1124x2432) source=detected
+content detection: ... fallback=no (frozen)
+```
+
+**The other guard was deliberately left alone.** `mirror.m:425` rejects *table/lookup* candidates
+outside `[0,64]` per axis, and it is the reason the builtin entry 1080x2340 is refused here. That
+refusal is correct: the stream's content is 1124x2432, not 1080x2340, so accepting the table would
+crop to the wrong rectangle. Making that guard proportional too would let 1080x2340 through (56x124,
+inside an 8% budget) and break the mapping. Two guards, two jobs; only the detection one should
+scale.
+
+Gate: `SMOKE PASSED` on the 12 mini, including the mirror signal/orphan step.
+
+### Lock: still not reliable, and the ceiling is real
+
+With the hold at 0.5 s the user reports ⌘L works but is "not sensitive enough". The ceiling is not
+negotiable: **the hold must not grow much**, because a long press opens Siri (0.7 s did, once). So
+there is a narrow band between "does nothing" (0.08 s, measured) and "Siri" (0.7 s, observed n=1),
+and 0.5 s sits inside it but apparently not comfortably. Unchanged for now — picking a number between
+0.5 s and 0.7 s without measuring would just be swapping one guess for another. What is needed is a
+sweep of 0.5 / 0.55 / 0.6 / 0.65 with a screenshot after each, on a lit screen, recording both
+"locked" and "Siri appeared".

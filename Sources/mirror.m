@@ -456,16 +456,23 @@ static BOOL nonBlack(const uint8_t *base,size_t stride,size_t x,size_t y,OSType 
         value>16 && (value-16)*255u>10u*219u : value>10;
 }
 // Caller holds gLock; this is the sole decision/logging path for detection fallback.
+// A fixed 64 px allowance does not scale with frame size and is tighter than the padding some
+// devices actually carry. The 12 mini streams 1136x2464 and detection there removed 12 x 92 px,
+// which the fixed limit rejected -- dropping the mirror to full-frame and putting the black edge
+// back. Proportional instead: every padding measured so far passes (13 Pro 14x44, 12 mini 11x31 and
+// 12x92) while a detection that only found the lit part of a dark screen is still rejected.
+#define ContentDetectMaxShrink 0.08
 static void freezeContentRect(const char *reason){
     CGRect r=gCrop.seen;
     BOOL fallback=reason || CGRectIsEmpty(r) || CGRectIsNull(r) ||
-        r.size.width<gCrop.size.width-64 || r.size.height<gCrop.size.height-64;
+        r.size.width<gCrop.size.width*(1-ContentDetectMaxShrink) ||
+        r.size.height<gCrop.size.height*(1-ContentDetectMaxShrink);
     selectContentRect(fallback?(CGRect){CGPointZero,gCrop.size}:r,fallback?"full-frame":"detected");
     LOGE("content detection: frame=%.0fx%.0f detected=(%.0f,%.0f %.0fx%.0f) content=(%.0f,%.0f %.0fx%.0f) fallback=%s (%s)",
          gCrop.size.width,gCrop.size.height,
          CGRectIsNull(r)?0:r.origin.x,CGRectIsNull(r)?0:r.origin.y,r.size.width,r.size.height,
          gCrop.rect.origin.x,gCrop.rect.origin.y,gCrop.rect.size.width,gCrop.rect.size.height,
-         fallback?"yes":"no",reason?:fallback?"empty or more than 64 pixels removed in a dimension":"frozen");
+         fallback?"yes":"no",reason?:fallback?"empty or more than 8% removed in a dimension":"frozen");
 }
 static void detectContentRect(CVPixelBufferRef frame,double t){
     CGSize size=CGSizeMake(CVPixelBufferGetWidth(frame),CVPixelBufferGetHeight(frame));
