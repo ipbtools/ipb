@@ -3438,3 +3438,71 @@ experiment is: attach to `remotepairingd` with auto-continue breakpoints on the 
 compare whether the path fires for a Device Hub action but not for an `ipb` one. A backtrace at the
 hit names the gate. Not yet run — it briefly pauses a system daemon that both attached iPhones
 depend on, so it should be done when the devices are not in use.
+
+
+## 2026-09-15 — Gap 2 hypothesis: our digitizer reports carry `remoteTimestamp = 0`
+
+Static investigation, no device touched. Claims below re-verified independently before recording.
+
+### Verified
+
+- `makeDigitizerReportData` (`Sources/universalhid_glue.swift`) builds every touch report purely
+  through the ABI shims and **never writes `remoteTimestamp`** — 0 occurrences in the function.
+- The field exists: `UniversalHID.DigitizerReport.remoteTimestamp: Swift.UInt64?`
+  (getter/setter/modify present in `nm -gU`).
+- Only **two** builders stamp it, both hand-assembled from captures:
+  `makeAbsolutePointerHIDReport` at byte offset 11 and `makeScrollWireHIDReport` at byte offset 13,
+  both via `reportTimestamp()` (`mach_absolute_time()` ticks). **No wire builder exists for
+  `DigitizerReport`.**
+- So **every synthetic touch ipb has ever sent carries `remoteTimestamp = 0`** — `bin/ipb tap`,
+  `swipe`, and every click in `ipb mirror`.
+
+`mirror.m`'s own comment already says this out loud, two lines above the code that still uses the
+zero-timestamp shim for touches: the wire builder "stamps remoteTimestamp, which Device Hub sets on
+every report and the shim path leaves zero".
+
+### The inference, and its limit
+
+Ordinary app UI accepts a zero timestamp; system-presented alerts plausibly check event recency and
+drop it silently — which matches the symptom exactly (taps work in apps, do nothing on permission
+prompts, no error surfaced).
+
+**This is inferred causality, not device-tested**, and one correction to the investigation's framing:
+it described the scroll case as already "root-caused", but `docs/protocol.md:790` labels that
+reasoning **"Hypothesis, not …"**. What *is* established is empirical: scroll only started working
+once the wire builder (which stamps the timestamp) **and** an AbsolutePointer companion were both in
+place. So the timestamp may well be **necessary but not sufficient** here too, and the digitizer may
+likewise need framing we do not send.
+
+### Two rival hypotheses checked and deprioritised, with evidence
+
+- **`DigitizerTarget`** is a *physical display selector* — `mainScreen`, `display1…display10`
+  (CoreDeviceUtilities symbols) — not a window/process/trust router. `target=0` is correct for a
+  phone. Ruled out.
+- **`Authenticated=true`** on the `mainScreenButtons` (0x402) descriptor is the only such flag, is
+  unused by any ipb command, and its usage page/usage looks like a physical hardware-button proxy
+  rather than a generic trusted-input gate. Deprioritised, not refuted.
+
+### Why this one is worth doing
+
+Unlike Gap 1, this needs **no entitlement**: it is a data field on an already-open, unentitled
+service. If the hypothesis holds, the fix is to build a `makeDigitizerWireHIDReport` mirroring the
+two existing wire builders.
+
+**The offset must be captured, not guessed** (Rule 1). The digitizer report is 464 bits / 58 bytes,
+and a naive "last 8 bytes" guess collides with the swipe-flag setter bits `mirror.m` records at
+424/429/434 (bytes 53-54). No digitizer wire capture exists in this repo — only Scroll and Keyboard
+were ever captured.
+
+### Experiment, for when the devices are free
+
+1. Run `Experiments/tools/rxpc_tap.c` (the interposer used for the 2026-09-09 scroll capture) while
+   an operator uses **Device Hub** to tap (a) ordinary app UI and (b) a button on a real system
+   permission prompt.
+2. Decode the captured `DigitizerReport` bytes and locate `remoteTimestamp`'s real offset, as was
+   done for Scroll (13) and AbsolutePointer (11).
+3. Record whether (a) and (b) differ in report **sequence**, not just content — scroll needed a
+   companion report, so do not assume a single-field fix.
+4. Add the wire builder behind a **new low-level command**, not the default `tap`, and re-run the
+   alert-tap scenario. Confirms if the same coordinates now dismiss the prompt; kills it if not, in
+   which case sequence/framing or a genuine trust gate is next.
