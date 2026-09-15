@@ -294,7 +294,7 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Scroll | `input swipe` | `ipb scroll` (drag) and `ipb scroll-gesture` (trackpad phases, iOS 27; own) | no | no |
 | Key / text | `input keyevent/text` | `ipb key` (HID usages, own); Unicode via `ipb clipboard set` + paste | no | no |
 | Home / App Switcher | `keyevent HOME/APP_SWITCH` | `ipb home` / `ipb recents` (own) | no | no |
-| Lock / wake screen | `input keyevent POWER` | `ipb power` (aliases `lock`, `wake`; own) | no | no |
+| Lock / wake screen | `input keyevent POWER` | `ipb power` (aliases `lock`, `wake`; own, 0.4 s hold) | no | no |
 | Screenshot | `screencap` | `ipb screenshot` (devicectl) | yes | `capture screenshot` |
 | Screen recording | `screenrecord` | `ipb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
 | Live screen stream | scrcpy (an on-device server) | `ipb stream` (own, JPEG frames) | no | no |

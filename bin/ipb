@@ -775,20 +775,22 @@ case "$cmd" in
     # off and locks, a screen that is off wakes to the lock screen. `lock` and
     # `wake` are the same press under the two names people reach for.
     #
-    # The hold is not cosmetic, and the default is deliberately 0.5 s. Two CLI
-    # sweeps of this usage disagree with each other: the first called 0.40 and
-    # 0.45 s inert and 0.60 s a lock, the second called 0.35 s a lock and 0.60 s
-    # and above an overshoot onto the passcode screen. 0.50-0.55 s is the only
-    # band both sweeps call a clean lock, so that is where the default sits.
-    # The earlier 0.7 s default was in the overshoot band.
+    # The hold is not cosmetic. The side button is duration-gated and the boundary is sharp:
+    # 0.28 s does nothing, 0.29 s locks (measured 2026-09-15), and it is the SAME on wired and
+    # localNetwork, so this is not a transport parameter. A 0.08 s press does nothing at all.
     #
-    # That the two sweeps disagree at all means the hold-to-outcome mapping is
-    # less stable than either sweep alone suggests; treat this value as measured
-    # but not settled.
+    # Default 0.4 s: ~1.38x the boundary, which buys margin because press and release are two
+    # separate sends with the network between them and jitter shortens the interval the device
+    # actually sees. 0.7 s once opened Siri, so the usable band is roughly 0.3-0.6 s.
+    #
+    # This supersedes an earlier sweep recorded here that called 0.40 and 0.45 s inert and only
+    # 0.60 s a lock. That sweep is contradicted by three later measurements -- a screenshot-verified
+    # 0.40 s lock, a 0.35 s lock on two devices, and the 0.28/0.29 boundary above -- and its own
+    # comment already warned the mapping was "measured but not settled". The likely error is the one
+    # this repo hit again on 2026-09-15: a screenshot that failed to write being read as "no change".
     #
     # Waking stops at the lock screen; the passcode is still the user's to enter.
-    [[ $# -le 1 ]] || { usage; exit 2; }
-    run_button cd_button_click 0x0c 0x30 "${1:-0.5}"
+    run_button cd_button_click 0x0c 0x30 "${1:-0.4}"
     ;;
   recents|app-switcher|switcher)
     [[ $# -eq 0 ]] || { usage; exit 2; }

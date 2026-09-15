@@ -698,13 +698,17 @@ static void keyStep(unsigned index,unsigned step){
                            r.event.kind==KeyVolumeUp?0xE9:r.event.kind==KeyVolumeDown?0xEA:0x30;
             code=sendBounded(^{ return step==2?coredevice_send_hid_button_barrier(gButton):
                 coredevice_send_hid_button_custom(gButton,page,usage,(uint8_t)step); });
-            // Hold is per-shortcut, not shared. A 0.08 s side-button press does NOT lock: measured
-            // on a 12 mini (iOS 27.0), `ipb button 0x0c 0x30` at that hold left the screen
-            // unchanged (delta 514 bytes) while `ipb power` at 0.5 s locked it (6.3 MB -> 36 KB).
-            // The old comment here asserted the side button "locks on a short press"; that premise
-            // was wrong and is why Cmd-L did nothing. 0.5 s is the value bin/ipb power already
-            // uses and is the only one both sweeps agree on -- 0.7 s once opened Siri.
-            done=step==2; delay=step==0?(r.event.kind==KeyLock?.5:.08):.12;
+            // Hold is per-shortcut, not shared. The side button is duration-gated: the boundary is
+            // 0.29 s (0.28 fails, 0.29 works -- user measurement 2026-09-15), identical on wired and
+            // localNetwork, so this is not a transport parameter. A 0.08 s press does nothing at
+            // all, which is why Cmd-L was a no-op; the old comment here claimed the button "locks
+            // on a short press" and that premise was simply wrong.
+            //
+            // 0.4 s, not 0.29 s: press and release are two separate sends with the network between
+            // them, and jitter shortens the interval the device actually observes (barrier tails of
+            // 346 ms have been measured on localNetwork). ~1.38x the boundary buys that margin
+            // while staying far below the 0.7 s that once opened Siri.
+            done=step==2; delay=step==0?(r.event.kind==KeyLock?.4:.08):.12;
         }
         double returned=nowSec();
         if(step==0){ r.reportCode=code; r.reportReturn=returned; }
@@ -1162,9 +1166,8 @@ static void saveScreenshot(void){
     // (only the Command modifier does; see docs/protocol.md), so this sends the
     // Consumer Power usage ipb established instead.
     //
-    // Held 0.5 s, unlike the other shortcuts. A 0.08 s press does nothing at all (measured
-    // 2026-09-15); 0.7 s once opened Siri. 0.5 s is what bin/ipb power uses and is verified to
-    // lock a lit screen.
+    // Held 0.4 s, unlike the other shortcuts: the side button's duration gate is 0.29 s and a
+    // 0.08 s press does nothing at all. 0.7 s once opened Siri.
     //
     // Why the same nominal hold behaves differently through `ipb lock` (0.7 s,
     // which never reached Siri in a CLI sweep) is NOT established. An earlier

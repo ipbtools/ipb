@@ -3506,3 +3506,34 @@ were ever captured.
 4. Add the wire builder behind a **new low-level command**, not the default `tap`, and re-run the
    alert-tap scenario. Confirms if the same coordinates now dismiss the prompt; kills it if not, in
    which case sequence/framing or a genuine trust gate is next.
+
+
+## 2026-09-15 — Lock hold settled at 0.4 s; an older sweep is superseded
+
+The user measured the side button's duration gate precisely: **0.28 s does nothing, 0.29 s locks.**
+That is a sharp boundary and it refines — without contradicting — the coarse bracket measured earlier
+the same day (0.25 inert / 0.35 locks, on both the localNetwork 12 mini and the wired 13 Pro).
+
+### The conflict, and how it was resolved
+
+`bin/ipb`'s own comment recorded an earlier CLI sweep calling **0.40 s and 0.45 s inert**, with only
+0.60 s locking — which is incompatible with a 0.29 s boundary. Adjudicated by direct test rather than
+by preferring the newer number:
+
+```
+hold=0.40  base=6 344 871 B  after=36 071 B  => LOCKED (black frame)
+```
+
+0.40 s locks. Three independent measurements now agree (0.29 boundary, 0.35 on two devices, 0.40
+here) against that one sweep, whose own comment already warned the mapping was "measured but not
+settled". The probable error is the failure mode this repo hit again today: **a screenshot that fails
+to write being read as "no change"** — which silently converts "locked" into "inert", exactly the
+direction of that sweep's disagreement.
+
+### Value chosen: 0.4 s, in both the mirror and `ipb power`
+
+Not 0.29 s, because press and release are two separate sends with the network between them and jitter
+shortens the interval the device observes — barrier tails of 346 ms have been measured on
+localNetwork. 0.4 s is ~1.38× the boundary. Not 0.5 s, because the extra 100 ms is latency the user
+feels on every lock and the margin is not needed. 0.7 s once opened Siri, so the usable band is
+roughly 0.3–0.6 s and 0.4 sits comfortably inside it.
