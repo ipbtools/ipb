@@ -3400,3 +3400,41 @@ A read-only probe against `com.apple.remotepairingdevice.tunnelmanagement` askin
 `peerDeviceSupportsRemoteUnlock` for an already-paired device. A *permission/entitlement* refusal
 would confirm the boundary above; a schema error would mean the gate is at the payload layer instead.
 Zero device interaction. Low priority given the boundary conclusion.
+
+### Addendum: the call site is `remotepairingd`, and it is a control-channel message
+
+Follow-up to the above, resolving what the investigation left inferred. `remotepairingd`
+(`/Library/Apple/System/Library/PrivateFrameworks/RemotePairing.framework/.../remotepairingd`, running
+as pid 19048 on this host) contains the remote-unlock strings directly:
+
+```
+Error encountered saving updated paired peer object after adding remote unlock key: %@
+Failed to request new remote unlock key: %@
+Received remote unlock key response in invalid state: %@
+Exchanging remote unlock keys is unsupported over Bluetooth.
+```
+
+It does not import the RemotePairingDevice symbols (`nm -u` count 0), so it carries its own copy, but
+the strings put the logic there rather than in DeviceHub — which matches neither DeviceHub nor
+CoreDevice referencing `RemoteUnlock`.
+
+The transport is a **control-channel message**, not a CoreDeviceService action:
+`ControlChannelMessage.Request.remoteUnlock(Foundation.Data)` and `.Response.remoteUnlock` are enum
+cases in `RemotePairingDevice`. The Bluetooth string implies it is expected to work over USB and
+network.
+
+**What this sharpens.** The unlock is performed by a *system daemon we do not control*, and on this
+host it demonstrably works (Device Hub survives a lock here), so the escrowed key **is** provisioned
+and `remotepairingd` **is** willing. The difference between Device Hub and `ipb` is therefore
+client-side gating, not a missing capability on the machine — consistent with
+`com.apple.private.coredevice.client` being the discriminator. That is a narrower and more testable
+claim than "not reachable", though it does not change the conclusion for an unsigned helper.
+
+**Dynamic confirmation is available and cheap.** SIP is disabled on this host and `lldb` already
+attached to a signed Apple binary earlier in this work (`devicectl`, where `library-validation` did
+not block debugging). DeviceHub is running with only `library-validation` too. So the decisive
+experiment is: attach to `remotepairingd` with auto-continue breakpoints on the remote-unlock path
+(the `Experiments/devicehub-trace/` governor pattern exists precisely for this), lock the device, and
+compare whether the path fires for a Device Hub action but not for an `ipb` one. A backtrace at the
+hit names the gate. Not yet run — it briefly pauses a system daemon that both attached iPhones
+depend on, so it should be done when the devices are not in use.
