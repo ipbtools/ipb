@@ -3133,3 +3133,58 @@ is honest.
 Gate: `SMOKE PASSED` on the 12 mini, interactive, 1 WARN. The single duplicate frame pair is
 `00_before` vs `01_after_nondestructive`, which is expected — every step between them is a
 deliberate zero-movement no-op.
+
+
+## 2026-09-15 — ⌘L did nothing because 0.08 s does not lock; three separate causes untangled
+
+User report after the crash fix: scroll, Home and App Switcher work; ⌘L, volume and tap/swipe do
+not. The recorded CSV (`/tmp/crash-fix.csv`, 517 events over 71.4 s) shows these are **three
+different problems**, not one.
+
+### 1. ⌘L: the hold was too short — fixed
+
+Direct comparison on the 12 mini (iOS 27.0), screenshot-verified:
+
+| sent | hold | screenshot after | verdict |
+| --- | --- | --- | --- |
+| `ipb button 0x0c 0x30` | ~0.08 s (what mirror's ⌘L used) | 6 313 383 B, delta **514 B** from before | **did not lock** |
+| `ipb power` | 0.5 s | **36 071 B** (black) | **locked** |
+
+The comment in `mirror.m` asserted "the side button locks on a short press". **That premise was
+wrong**, and it is why ⌘L sent cleanly (`KEY_LOCK` ×2, `result=sent`, both codes 0) while nothing
+happened. The hold is now per-shortcut: `KeyLock` gets 0.5 s, everything else keeps 0.08 s. 0.5 s is
+the value `bin/ipb power` already uses and the only one both earlier sweeps agreed on (0.7 s once
+opened Siri).
+
+Evidence strength: **n=1 per arm**, with real before/after screenshots. Two follow-up runs that
+appeared to show 3/3 were **harness false positives** and are void — the screenshots were never
+written (the device had locked, and `capture screenshot` fails on a locked device), and an empty
+string in zsh arithmetic compares as `0 < 200000`. Recorded because the mistake is easy to repeat:
+a missing artefact must be an explicit failure branch, never a silently-passing comparison.
+
+### 2. Volume: the keystrokes never reached the mirror
+
+**Zero `KEY_VOLUME_UP` / `KEY_VOLUME_DOWN` rows in 71.4 s.** Not rejected — absent. And it is not a
+failure state swallowing them: `KEY_HOME` at t+53.9 s and `KEY_RECENTS` at t+55.3 s were sent
+normally *after* the two locks, and no event in the whole file is `rejected`.
+
+`git diff a362d12..HEAD -- Sources/mirror.m` confirms `performKeyEquivalent` was **not touched**
+since the run where volume was confirmed working, so this is not a regression from the App Switcher
+or crash changes. The binding requires `flags == command` exactly, plus
+`charactersIgnoringModifiers` being the arrow function key. Cause unknown; the open question is what
+the user actually pressed (⌘ + arrow keys, versus the Mac's own volume keys, which macOS consumes and
+never delivers to an application).
+
+### 3. Tap/swipe: sent, and the CLI path works
+
+53 × DOWN and 53 × UP, every one `result=sent` with both codes 0. Independently, `ipb tap 0.15 0.12`
+from the CLI **launched an app** (6 313 755 B → 437 746 B). So the touchscreen service is not dead.
+Not diagnosed. `ipb home` was also measured at only ~2/3 reliability in the same window, which
+suggests something flakier in the device's current state rather than a specific tap defect.
+
+### Device left locked
+
+Testing lock necessarily locked the phone, and it cannot be unlocked from here — `lock-state` and
+`screenshot` both return `CoreDeviceError 10003` / `RemotePairingError 1016 "The device has not been
+unlocked recently"`. A passcode unlock by hand is required. **The smoke gate therefore has not been
+run for this change** and is owed.
