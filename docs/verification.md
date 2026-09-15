@@ -3321,3 +3321,82 @@ are not established); or a trust/entitlement distinction on a "secure" input pat
 
 Both gaps are **open**, both are user-visible, and both should be weighed against the roadmap rather
 than patched ad hoc.
+
+
+## 2026-09-15 — Gap 1 mechanism found: remote unlock, and it is not reachable
+
+Static investigation (no device interaction) of CoreDevice 642.15, `RemotePairingDevice.framework`
+and DeviceHub.app.
+
+### Correction first: the usage-assertion link I recorded was wrong
+
+The Gap 1 entry above guessed that the CoreDevice usage-assertion work "may be the same mechanism".
+**It is not.** `nm` + `swift-demangle` shows `AssertableDeviceState` has exactly six members
+(`coreDeviceServicesLoaded`, `developerModeEnabledIfRequired`, `extendedDeviceInfoLoaded`,
+`powerAssertionTaken`, `remoteServiceDiscoveryTrustedConnectivityAvailable`,
+`secureNetworkingAvailable`) and `DevicePreparedness` four plus `.all` — **neither has any
+lock/unlock case**, and CoreDevice contains zero references to `RemoteUnlock`. The tunnel-assertion
+work is real but orthogonal. `TODO(tunnel-keepalive)` and this gap are separate problems and must not
+be merged.
+
+### The actual mechanism: an escrowed remote-unlock keypair
+
+One layer below CoreDevice, in
+`/System/Library/PrivateFrameworks/RemotePairingDevice.framework/Versions/A/RemotePairingDevice`:
+
+```
+RemotePairingDevice.RemoteUnlockKeypair                        (hostKey, deviceKey, keybagProvider)
+ControlChannelConnection.requestCreateRemoteUnlockKey(onComplete:)
+ControlChannelConnection.requestRemoteUnlock(hostKey:onComplete:)
+ControlChannelConnection.peerDeviceSupportsRemoteUnlock
+KeybagProvider.unlock(hostKey:deviceKey:) throws
+(extension __C.CUPairedPeer).remoteUnlockKey : Data?          // escrowed ON the pairing record
+RemoteUnlockDeviceKeyForTunnelRequest / …Response
+```
+
+with strings `"Pairing record already has a remote unlock key."`, `"The device must be unlocked to
+complete the operation"`, `"The device does not support remote unlock."`, `"A failure occurred
+remotely unlocking the device."`.
+
+And our exact error is a first-class case in that enum: `RemotePairingError.unlockRequired` is case
+16 → **error 1016**, sitting directly beside `remoteUnlockFailure` and `remoteUnlockKeysUnsupported`.
+Apple modelled "not unlocked recently" as a gate **with a named escape hatch**, not as a wall.
+
+So: a trusted host's pairing record can carry a keypair provisioned once while the device was
+unlocked; a client holding it calls `requestRemoteUnlock(hostKey:)` and the gate is satisfied without
+a passcode.
+
+**Nuance that changes how this should be described.** This is not "operate a locked device" — it is a
+real, silent **unlock** (`KeybagProvider.unlock` unwraps the keybag). It mutates device state; it
+just skips the passcode prompt. Any future feature here must be described that way to users.
+
+### Not reachable from ipb, and the blocker is structural
+
+- The feature is **not exposed** as any `com.apple.coredevice.action.*` identifier, so
+  `Experiments/tools/cd_action.m` cannot reach it with any payload. It lives behind a different XPC
+  surface (`com.apple.remotepairingdevice.tunnelmanagement`).
+- DeviceHub's real entitlements (from the app binary, not the `DevicesTrampoline` launcher):
+  `com.apple.private.coredevice.client`, `com.apple.private.hid.client.event-{filter,monitor}`,
+  `com.apple.projectsetdeviced.client`, and **`keychain-access-groups: com.apple.dt.Devices`**,
+  Apple-signed (TeamIdentifier `59GAB85EFG`) with library-validation.
+- The escrowed key lives on the pairing record and is guarded by that keychain access group, enforced
+  by securityd regardless of the caller's own signing status.
+
+**Conclusion: honest "not reachable".** Not a missing flag or an unmapped payload — an unsigned
+helper can never join `com.apple.dt.Devices` or hold `com.apple.private.coredevice.client`. Protocol
+knowledge would not help. This should be treated as a **permanent capability boundary** for the
+no-entitlement design, and recorded as such in the roadmap rather than kept as an open TODO.
+
+### Inferred, not verified
+
+That **DeviceHub itself** invokes `requestRemoteUnlock` is *not* established: neither CoreDevice nor
+DeviceHub's binary references the RemoteUnlock symbols, so the call site is presumably a daemon
+(`remotepairingd.xpc` was located but not inspected). Whether our two attached iPhones have ever had
+a remote-unlock key provisioned is also untested.
+
+### Safe follow-up, if it is ever worth the time
+
+A read-only probe against `com.apple.remotepairingdevice.tunnelmanagement` asking
+`peerDeviceSupportsRemoteUnlock` for an already-paired device. A *permission/entitlement* refusal
+would confirm the boundary above; a schema error would mean the gate is at the payload layer instead.
+Zero device interaction. Low priority given the boundary conclusion.
