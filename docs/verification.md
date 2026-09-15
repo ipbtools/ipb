@@ -3252,3 +3252,72 @@ and 0.5 s sits inside it but apparently not comfortably. Unchanged for now — p
 0.5 s and 0.7 s without measuring would just be swapping one guess for another. What is needed is a
 sweep of 0.5 / 0.55 / 0.6 / 0.65 with a screenshot after each, on a lit screen, recording both
 "locked" and "Siri appeared".
+
+
+## 2026-09-15 — Lock hold: transport hypothesis falsified; ~0.35 s is the side button's own floor
+
+The hypothesis under test (user's): the lock failure is a **send-path / transport** problem, because
+wired devices seemed fine and the 12 mini is a remote wireless device needing its own parameters.
+
+Swept the hold shortest-first on both transports, stopping at the first lock, screenshot-verified
+each step with an explicit "screenshot missing" branch:
+
+| hold | iPhone 12 mini (localNetwork) | iPhone 13 Pro (**wired**) |
+| --- | --- | --- |
+| 0.08 s | no effect | **no effect** |
+| 0.15 s | no effect | **no effect** |
+| 0.25 s | no effect | **no effect** |
+| 0.35 s | **locked** (6 191 446 → 36 071 B) | **locked** (8 946 698 → 38 988 B) |
+
+**Identical on both.** The transport hypothesis is falsified: this is not wired-vs-wireless and needs
+no per-transport tuning. The side button simply requires roughly **0.35 s** minimum hold, everywhere.
+Corroborating detail already in hand: `KEY_HOME` at 0.08 s works reliably on the *same* localNetwork
+link, so the link is not swallowing short presses — the side button is duration-gated and Home is not.
+
+The 0.5 s now used by both `bin/ipb power` and the mirror's ⌘L sits ~1.4× above the measured floor
+and below the 0.7 s that once opened Siri. Left unchanged.
+
+### Retraction
+
+The 2026-09-09 record stating "`⌘L` at 0.08 s is **verified on device**: it locks a lit screen and
+wakes a dark one from a live mirror session" **cannot be correct**. Two devices, two transports,
+three sub-threshold holds each, all no-ops. Whatever locked the screen in that session, it was not a
+0.08 s side-button press — most likely the device's own auto-lock coinciding with the test. That
+record is retracted; the stale premise it seeded ("the side button locks on a short press") is what
+made ⌘L a no-op for everyone until today.
+
+## 2026-09-15 — Two capability gaps vs Device Hub, recorded for follow-up
+
+Both reported by the user from direct side-by-side use. Neither is diagnosed yet; subagent
+investigations dispatched.
+
+### Gap 1: Device Hub works on a locked device, ipb does not
+
+Device Hub keeps operating with the iPhone physically locked. Every `ipb` CoreDevice operation fails
+once the device locks:
+
+```
+CoreDeviceError 10003 "The operation failed because the device was still locked."
+  RemotePairingError 1016 "The device has not been unlocked recently"
+```
+
+`screenshot`, `lock-state` and the mirror all stop. This is not cosmetic: testing the lock shortcut
+locks the phone, and nothing works again until a human types the passcode — it cost two separate
+investigation sessions today. Plausible and untested link: the CoreDevice **usage assertion** work
+already recorded (`acquireusageassertion`, `TunnelAssertionRequest`, `AssertableDeviceState` includes
+`remoteServiceDiscoveryTrustedConnectivityAvailable`) may be the same mechanism, since an assertion
+holder could plausibly retain service access across a lock.
+
+### Gap 2: Device Hub can tap system dialogs, ipb cannot
+
+Device Hub can dismiss iOS system-presented UI — permission prompts and similar alerts. `ipb` taps
+have no effect on them, while taps on ordinary app UI work. For an automation tool this is severe:
+the first permission prompt strands the session.
+
+Hypotheses to separate: synthesized HID from this path reaching only the foreground application
+while system alerts are presented by another process; a different service or report used by Device
+Hub for system UI (the descriptor set has `mainScreenButtons` 0x402 and `avpCustom` 0x500 whose roles
+are not established); or a trust/entitlement distinction on a "secure" input path.
+
+Both gaps are **open**, both are user-visible, and both should be weighed against the roadmap rather
+than patched ad hoc.
