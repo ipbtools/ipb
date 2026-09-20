@@ -3564,3 +3564,96 @@ The loop now records **why** it ended. If the stall guard fired before the reque
 the run exits **7** — already documented as "no frames within the watchdog window", which is exactly
 this condition — and logs `stopped early: no new frame for 12s, before the requested --seconds
 elapsed`. A run that genuinely completes its budget is unaffected, and `--count` keeps its own exit 8.
+
+
+## 2026-09-20 — Protocol alignment audit: Device Hub's tap was never captured
+
+Independent audit (Fable) of how well this project actually understands the Device Hub protocol,
+prompted by the user's assessment that several defects traced to fragmentary captures with the gaps
+filled by guessing. Static analysis only. Seed: host `UniversalHID` 90.1, CoreDevice 642.15,
+DeviceKit 255.2.3.
+
+### The headline, and it is worse than "fragmentary"
+
+**Device Hub's tap has never been captured.** Every byte of Device Hub traffic in this repo is
+Scroll, AbsolutePointer, or the Command modifier of ⌘L. The 58-byte Digitizer reports in the first
+capture were *counted but never decoded*; the second capture contained none.
+
+So the report type behind every `ipb tap`, `swipe` and mirror click was built from Swift setter shims
+with invented timings, validated only by "the app opened". Worse, the bytes at `docs/protocol.md:64`
+presented as the digitizer wire reference were captured **from ipb's own helper**, not from Device
+Hub — we have been checking our output against itself.
+
+### The wire format does not have to be reverse-engineered
+
+Every UniversalHID report type carries a real **USB-HID report descriptor**
+(`static <T>.descriptor.getter`, 22 exported) and Apple's encoder sizes reports from the same
+descriptor via `HIDReportDescriptor.reportBitCount(for:)`. Dumping and parsing them reproduces
+**every** offset this repo obtained by capture — Scroll 168 bits, AbsolutePointer 152, Keyboard 312,
+Digitizer 464 — so the method is self-validating and is the allocation authority on both sides.
+
+Derived `DigitizerReport` layout (bits): `0-8` id 9; `8-16` contactCount; `16-24` contactCountMax;
+contacts *i*=0..4 at `24+40i` (+0 identifier 5b, +5 resting, +6 Touch, +7 InRange, +8 X u16, +24 Y
+u16); `224-320` embedded ScrollCollection; `320-360` per-contact identity; **`360-424`
+remoteTimestamp**; `424-459` swipe flags (pending 424, locked 429, up 434); `459-464` pad.
+
+### The remoteTimestamp hypothesis is weakened, not confirmed
+
+The earlier Gap 2 investigation proposed that `remoteTimestamp = 0` is why system dialogs ignore our
+taps. The audit puts the field at bit 360 (byte 45) — but two findings cut against the hypothesis:
+
+- **Zero and nil are wire-identical.** The setter uses `csel x0,xzr,x0` on the Optional tag, so a
+  zero *is* Apple's own nil encoding, not a malformed value.
+- On the decode side `addRemoteTimestamp` begins `cbz x0` — zero simply attaches nothing, and a
+  non-zero value becomes a *vendor-defined child event*, not a parent timestamp.
+- A **timestamp-less KeyboardReport dismissed a system alert** (`verification.md:261`), though that
+  was a "cannot verify app" alert rather than a TCC prompt.
+
+Not refuted, but it is no longer the leading explanation and must not be implemented as though it
+were established.
+
+### The stronger candidate: our lifts are never announced
+
+Ranked first by the audit, and **verified in code here**: `makeDigitizerReportData` sets
+`contactCount = touching ? 1 : 0`, so a lift reports **zero contacts** while still writing contact 0
+with Touch cleared. A decoder iterating `0..<contactCount` therefore never sees contact 0 lift — the
+finger is announced down and never announced up. Standard HID practice is the opposite: the lift
+report still *describes* one contact, with the tip switch clear, so the count should be 1.
+
+This would plausibly explain both the system-dialog symptom and the user's earlier report that home
+screen icons stopped responding after a bottom-edge swipe (a device believing a contact is still
+down). **Untested** — see below.
+
+### Other gaps recorded, ranked
+
+1. Tap framing vs Device Hub — release framing (above), contact identity never set, remoteTimestamp
+   never set, pointer buttons byte on click unknown.
+2. **Silent no-ops are structural**: rc=0 on ineffective usages (the `0xff01/0x100` case) and on
+   ignored reports. "Works" in the gate, nothing on the device.
+3. Service targets `0x101`/`0x501`/`0x200` were **assumed and never read from Device Hub**; the
+   capture never dereferenced `x2` (the HIDServiceID argument).
+4. `KeyboardReport` is 31 B against a 312-bit (39 B) descriptor, and the timestamp setter *no-ops*
+   below 39 B — adding a timestamp later would silently do nothing.
+5. Scroll `accelX = dx/40` and the momentum decay are invented.
+6. `nav-report`/`dock-report` rest on a **retracted premise**; `pointer-report`, `scroll-report`,
+   `scroll-event`, `vendor-defined`, `uhid-swipe-report` have no device effect ever demonstrated,
+   yet `docs/protocol.md` labels some "verified".
+
+### The capture methodology itself is the root cause
+
+`taps.tsv` only taps `UniversalHIDService.send` and never the Indigo button/digitizer sockets — so
+the recorded conclusion "Device Hub locks via a non-UniversalHID channel" is an **artifact of not
+tapping the right thing**. No action script ever contained a click. The 60/s governor sheds mid
+tap-and-drag. And `rxpc_tap.c` cannot see shared-cache callers. The universal choke point is
+`xpc_remote_connection_send_message*` under lldb — which also yields the service ID — and lldb is
+known to work on signed Apple binaries on this host.
+
+### Test attempt, and why it proved nothing
+
+The `contactCount = 1` change was built and run, then reverted. **Both the change and its baseline
+measured 0/3**, which looked like a clean negative until a screenshot showed the 13 Pro sitting on
+the **passcode entry screen** the whole time — taps at (0.15, 0.12) land on empty space there. Both
+rounds are void. This is the third time today a measurement was taken without first confirming
+device state; the standing lesson from the earlier screenshot-missing false positives applies here
+too, and should be enforced by checking a known-state screenshot *before* any input experiment,
+not after.
