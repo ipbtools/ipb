@@ -240,7 +240,11 @@ func makeDigitizerReportData(x: Double, y: Double, touching: Bool, inRange: Bool
     uhidDigitizerContactSetYABI(&contact, y)
 
     uhidDigitizerReportSetContactABI(&report, &contact, 0)
-    uhidDigitizerReportSetContactCountABI(&report, touching ? 1 : 0)
+    // Contact Count is "how many contacts this report describes", not "how many are still down"
+    // (HID spec, and the report descriptor: bits 8-16, logical max 5). A lift still describes
+    // contact 0, with Touch cleared, so it must be 1. Sending 0 meant a decoder iterating
+    // 0..<contactCount never saw contact 0 lift: the finger was announced down and never up.
+    uhidDigitizerReportSetContactCountABI(&report, 1)
     uhidDigitizerReportSetContactCountMaximumABI(&report, 1)
 
     return uhidHIDReportData(uhidDigitizerReportGetReport(report))

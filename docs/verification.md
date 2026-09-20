@@ -3657,3 +3657,45 @@ rounds are void. This is the third time today a measurement was taken without fi
 device state; the standing lesson from the earlier screenshot-missing false positives applies here
 too, and should be enforced by checking a known-state screenshot *before* any input experiment,
 not after.
+
+
+## 2026-09-20 — Lift framing corrected: a lift now describes one contact, not zero
+
+### The defect
+
+`makeDigitizerReportData` sent `contactCount = touching ? 1 : 0`. Per the HID specification **and**
+the report descriptor now in `docs/protocol.md` (DigitizerReport bits 8–16, logical max 5), Contact
+Count is *the number of contacts described by this report*, not the number still touching. A lift
+still describes contact 0 — with `Touch` cleared — so the correct value is **1**.
+
+Sending 0 meant a decoder iterating `0..<contactCount` never saw contact 0 lift: **every synthetic
+finger ipb has ever put down was never announced as lifted.**
+
+### Tested properly this time
+
+The three void measurements earlier today were all taken without confirming device state first. This
+run confirmed state before touching anything: `passcodeRequired: false`, and a screenshot **looked at**
+to verify the home screen (8 859 330 B) rather than inferred from a byte count.
+
+| | tap launches an app |
+| --- | --- |
+| baseline (`touching ? 1 : 0`) | **3/3** |
+| `contactCount = 1` | **3/3** |
+
+No regression. Each trial re-verified the home screen and aborted rather than scoring if any
+screenshot was missing or the pre-state was wrong.
+
+### What this does and does not establish
+
+**Established:** the change is spec-correct and safe. Ordinary app UI is unaffected — taps continue
+to launch apps, and multi-step in-app navigation (three TestFlight screens, then the app's own UI)
+worked throughout.
+
+**Not established:** that it fixes system dialogs. No system-presented prompt could be produced on
+this device to test against. The two developer apps that might prompt were tried: the BLE tool
+reached its scan screen with **no Bluetooth prompt**, i.e. permission had already been granted.
+Getting a real prompt needs either an app whose permission has never been granted, or the specific
+app the user originally hit.
+
+The change is committed on its own merits — it makes the report match the descriptor and the
+specification — and **not** as a claimed fix for Gap 2. Gap 2 stays open.
