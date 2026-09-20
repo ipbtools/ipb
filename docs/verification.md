@@ -3539,3 +3539,28 @@ shortens the interval the device observes — barrier tails of 346 ms have been 
 localNetwork. 0.4 s is ~1.38× the boundary. Not 0.5 s, because the extra 100 ms is latency the user
 feels on every lock and the margin is not needed. 0.7 s once opened Siri, so the usable band is
 roughly 0.3–0.6 s and 0.4 sits comfortably inside it.
+
+
+## 2026-09-20 — Supported matrix narrowed to iOS 27+; stream no longer reports success on an early stop
+
+### iOS 26 dropped from the supported matrix
+
+Decision by the user. iOS 27 and macOS 27 have shipped broadly, and **no iOS 26 device remains
+available** to verify against — the iPhone 15 Pro (26.6.2) is no longer connectable. Continuing to
+claim iOS 26.6+ support would be an unverifiable claim, which Rule 1 does not allow.
+
+This also resolves the open caveat on the App Switcher usage (`0xff01`/`0x10`): it was verified on
+two iOS 27.0 devices and the iOS 26 gap that was recorded as owed no longer applies.
+
+### `TODO(stream-seconds)` fixed
+
+`ipb stream --seconds 60` ended at ~15 s and exited **0**. The cause, established earlier, is the 12 s
+hard stall guard at `Sources/video_stream.m`: on a static screen distinct frames stop, the guard
+breaks the collection loop, and only an unmet `--count` exited non-zero — so a run that did not do
+what was asked reported success. That is the inverse of Rule 2's "failure is an exit code, not a log
+line".
+
+The loop now records **why** it ended. If the stall guard fired before the requested budget elapsed,
+the run exits **7** — already documented as "no frames within the watchdog window", which is exactly
+this condition — and logs `stopped early: no new frame for 12s, before the requested --seconds
+elapsed`. A run that genuinely completes its budget is unaffected, and `--count` keeps its own exit 8.

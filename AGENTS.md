@@ -6,7 +6,7 @@ Guidance for any AI agent (Claude, Codex, others) working in this repository. Re
 
 ipb (iOS Physical-device Bridge; GitHub home `ipbtools/ipb`, Homebrew tap `ipbtools/homebrew-ipb`) drives a physical iPhone from a Mac the way `adb` drives an Android phone: tap, swipe, long press, keys, Home, App Switcher, screenshot, a live screen stream, and an interactive mirror window. It does this **without XCTest and without any third-party server on the phone**, by speaking to the HID daemon (`dtuhidd`) that Apple ships inside the Xcode 27 developer disk image, over the same CoreDevice / RemoteXPC path Xcode 27's Device Hub uses. The long-term goal is an adb-class tool for the agent era; see the roadmap below.
 
-**Current release scope (v1, "simple validation build"): macOS 27 + Xcode 27 beta host, iOS 27 or iOS 26.6+ device.** Nothing else is a supported target. Do not add compatibility shims for other combinations without a matrix entry in `docs/verification.md` proving they work.
+**Current release scope (v1, "simple validation build"): macOS 27 + Xcode 27 beta host, iOS 27+ device.** iOS 26 was dropped on 2026-09-20: iOS 27 and macOS 27 have shipped broadly and no iOS 26 device remains available to verify against, so claiming support for it would be unverifiable. Nothing else is a supported target. Do not add compatibility shims for other combinations without a matrix entry in `docs/verification.md` proving they work.
 
 ## Documents and what each one is for
 

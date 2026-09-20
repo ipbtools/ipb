@@ -16,7 +16,7 @@ to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
 
 - A host whose installed CoreDevice package is 636.x or newer. This ships with Xcode 27 beta (`XcodeSystemResources.pkg`); it is what puts `UniversalHIDService`, the `HIDServiceID` helpers, and the embedded `UniversalHID.framework` into `/Library/Developer/PrivateFrameworks`.
 - Xcode 27 beta on the host. Its minimum macOS is 26.4, so macOS 26.4+ hosts qualify as well as macOS 27 beta hosts. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
-- A connected iOS 27 or iOS 26.6+ device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted. On iOS 26 the `touchscreenGesture` service (`0x501`) is absent, so everything that rides it is iOS 27 only: `pointer`, `abs-pointer`, `scroll-report`, `scroll-gesture`, and the mirror's scroll wheel. See `docs/verification.md`.
+- A connected iOS 27+ device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted. iOS 26 is no longer a supported target (dropped 2026-09-20, no device available to verify against). On iOS 26 the `touchscreenGesture` service (`0x501`) was absent, so `pointer`, `abs-pointer`, `scroll-report`, `scroll-gesture` and the mirror's scroll wheel never worked there. See `docs/verification.md`.
 - GitHub-hosted code should be treated as beta/private-ABI research, because Apple may change these interfaces between seeds.
 
 Xcode 26.x hosts cannot run this tool as-is: CoreDevice 518.x lacks the UniversalHID service protocol, and the Xcode 26 DDI ships no HID daemon, so every `feature.remote.hid.*` / `universalhidservice` socket request is refused with "Create Service Socket is not supported by this device".

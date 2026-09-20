@@ -449,6 +449,7 @@ int main(int argc,char**argv){
     [vs start];
 
     // warm up, then collect frames; in-process frames arrive by push, daemon frames by pull.
+    int stalledOut=0;
     for(int w=0; w<50; w++) [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];  // ~2.5s
     pthread_mutex_lock(&gFrameLock);
     BOOL active=!gStopping;
@@ -472,8 +473,10 @@ int main(int argc,char**argv){
         if(stopped) break;
         if((t-start) >= runSeconds) break;
         if(rearm) [vs requestLastDecodedFrame];  // daemon: re-arm on stall
-        if((t-lastSave) > 12.0) break;  // hard stall guard (no frames at all)
+        if((t-lastSave) > 12.0){ stalledOut=1; break; }  // hard stall guard (no frames at all)
     }
+    // stalledOut distinguishes "ran the full budget" from "gave up early because frames stopped";
+    // without it a --seconds 60 run that ended at 15 s reported success (Rule 2).
     // Fresh complete shutdown budget, independent of time left in collection:
     // existing 5s writer grace + 5s framework stop policy + 5s scheduling headroom.
     armWatchdog(watchdog,watchdogQueue,writerGrace+stopGrace+watchdogMargin,
@@ -500,5 +503,12 @@ int main(int argc,char**argv){
     if(failure) _Exit(failure);
     if(!saved) _Exit(7);
     if(gMaxFrames>0 && saved<gMaxFrames) _Exit(8);
+    // The 12 s stall guard fired before the requested budget elapsed: the run did not do what was
+    // asked, so it must not exit 0. 7 is already documented as "no frames within the watchdog
+    // window", which is exactly this.
+    if(stalledOut){
+        LOGE("stopped early: no new frame for 12s, before the requested --seconds elapsed");
+        _Exit(7);
+    }
     _Exit(0); // all output was flushed by the writer; do not wait for framework teardown
 }
