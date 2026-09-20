@@ -20,9 +20,16 @@ OBJS := \
 
 PREFIX ?= /usr/local
 
-.PHONY: all clean smoke install
+.PHONY: all clean smoke install check-reports
 
-all: $(TARGET) $(VIDEO_TARGET) $(MIRROR_TARGET) $(MIRROR_PROBE_TARGET)
+all: check-reports $(TARGET) $(VIDEO_TARGET) $(MIRROR_TARGET) $(MIRROR_PROBE_TARGET)
+
+# Every hardcoded report allocation must cover its own HID descriptor. This is
+# a build step, not a test, because the failure it catches is invisible at
+# runtime: a short report is accepted, returns rc=0, and silently drops the
+# fields that fell off the end.
+check-reports:
+	@python3 scripts/check_report_sizes.py
 
 $(BUILD_DIR):
 	mkdir -p $@

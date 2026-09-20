@@ -443,7 +443,25 @@ func makeKeyboardHIDReport(usage: UInt32, pressed: Bool) -> UHIDHIDReport? {
         return nil
     }
 
-    var report = uhidHIDReportInit(0xf8, 0x01)
+    // 312 bits (39 bytes), not the 248 this used to allocate. Decoded from
+    // KeyboardReport's own USB-HID report descriptor (Experiments/hid-descriptors,
+    // docs/protocol.md "Report descriptors"):
+    //
+    //     85 01                 report ID 1                            8 bits
+    //     05 07 19 01 29 e7     keyboard usages 1..0xE7
+    //     96 e8 00 75 01 81 02  count 232, size 1                    232 bits
+    //     a1 02 06 1a ff ...    vendor 0xFF1A/0xE0F1 constant byte      8 bits
+    //     06 00 ff 0a 02 01
+    //     75 08 95 08 81 02     vendor 0xFF00/0x0102, 8 bytes          64 bits
+    //                                                          total = 312 bits
+    //
+    // 248 stopped immediately before that last field, which is remoteTimestamp
+    // -- the same bytes 31-38 seen in Device Hub's captured Cmd-L reports, which
+    // are 39 bytes on the wire. The timestamp setter no-ops on a report shorter
+    // than 39 bytes, so with 248 any future attempt to set it would have
+    // silently done nothing. The keyboard usage offset is unaffected: the
+    // descriptor puts usages at bit usage+8, which is what is written below.
+    var report = uhidHIDReportInit(0x138, 0x01)
     if usage > 0 && pressed {
         uhidHIDReportSetBitABI(&report, Int(usage) + 8, 1)
     }

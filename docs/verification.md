@@ -21,7 +21,7 @@ user's to decide.
 
 | Item | Root-cause status | Next step |
 | --- | --- | --- |
-| **`KeyboardReport` is 31 B against a 312-bit (39 B) descriptor** | **Root-caused.** `makeKeyboardHIDReport` calls `uhidHIDReportInit(0xf8, 0x01)` = 248 bits; the descriptor and Device Hub's captured ⌘L reports are both 39 B. The timestamp setter silently no-ops below 39 B, so adding a timestamp later would do nothing. `protocol.md` "Report descriptors". | **Authorised by the user ("先修复"), not yet implemented.** Fix the size, and add the build-time check that each builder's bitCount and offsets match the descriptor — that check is what would have caught this. |
+| ~~**`KeyboardReport` is 31 B against a 312-bit (39 B) descriptor**~~ | **Fixed 2026-09-21.** `makeKeyboardHIDReport` now allocates `0x138` = 312 bits; verified on the wire at 39 B with the usage bit still at `usage + 8`. `scripts/check_report_sizes.py` runs on every `make` and fails the build on any hardcoded allocation short of its descriptor — it was confirmed to fail on the old `0xf8`. | Done. |
 | **Report-send timeouts are fatal, and an abandoned send is not serialised** | **Partly root-caused.** A timed-out `sendBounded` returns while the real call "still runs to completion in the background" (record of 2026-09-14), so a later send can race it on the same `xrc_t`. Barrier timeouts were made non-fatal; report timeouts were not. | Make a report timeout drop the gesture and force an UP so the contact is released, rather than killing the session; serialise per-connection sends so an abandoned call cannot race the next one. |
 | **The smoke gate treats identical consecutive frames as advisory** | N/A — a gate defect, not a device defect. `scripts/smoke_matrix.sh:171` prints `WARN` and continues, while Rule 4 says an identical frame "is a warning that must be explained ... not ignored". | Require an explanation (an allow-list of expected-identical steps) or fail. |
 | **Raw probe verbs have never shown a device effect** | **Known.** `nav-report`, `dock-report`, `pointer-report`, `scroll-report`, `scroll-event`, `vendor-defined`, `uhid-swipe-report` are accepted by the service and do nothing observable; `nav-report`/`dock-report` additionally rest on a retracted premise. They are now marked as probes in `README.md` and `docs/protocol.md`. | Whether to quarantine them out of the main help (Fable's recommendation) is a CLI surface decision, not a doc fix. Marked, not moved. |
@@ -3741,3 +3741,62 @@ app the user originally hit.
 
 The change is committed on its own merits — it makes the report match the descriptor and the
 specification — and **not** as a claimed fix for Gap 2. Gap 2 stays open.
+
+
+## 2026-09-21 — KeyboardReport raised to its descriptor size, and the gap is now a build failure
+
+Host macOS 27 beta / Xcode 27.0 Beta 6, CoreDevice 636.3, device iPhone 13 Pro on iOS 27.0, wired.
+
+### The fix
+
+`makeKeyboardHIDReport` allocated `uhidHIDReportInit(0xf8, 0x01)` — 248 bits, 31 bytes. The report
+descriptor specifies 312. Decoded from the descriptor bytes themselves
+(`Experiments/hid-descriptors/descriptors.txt`):
+
+| descriptor item | bits |
+| --- | ---: |
+| `85 01` report ID 1 | 8 |
+| `05 07 19 01 29 e7 96 e8 00 75 01 81 02` keyboard usages 1..0xE7, 232 × 1 bit | 232 |
+| `a1 02 06 1a ff 0a f1 e0 … 75 08 95 01 81 01` vendor 0xFF1A/0xE0F1 constant byte | 8 |
+| `06 00 ff 0a 02 01 75 08 95 08 81 02` vendor 0xFF00/0x0102, 8 bytes | 64 |
+| **total** | **312** |
+
+248 stopped exactly at the end of the constant byte, i.e. immediately before the last field — which
+is `remoteTimestamp`, the same bytes 31-38 carried by Device Hub's captured ⌘L reports.
+
+### Verified on the wire, not by rc=0
+
+Traced `UniversalHIDService.send(report:to:)` in ipb's own helper while sending usage 41 (escape):
+
+```
+len=39 B   bytes: 010000000000020000000000000000000000000000000000000000000000000000000000000000
+```
+
+39 bytes, report ID `01`, and the usage bit still lands correctly — usage 41 at bit 41+8 = 49 is
+byte 6 bit 1, which is the `02`. The keyboard offset mapping is unchanged by the resize.
+
+### The reason it survived so long, and the check that now catches it
+
+This defect was invisible from both ends: a short report is accepted by the service and returns
+`rc=0`, and the field that fell off the end has a setter that **no-ops on an undersized report**.
+So neither the gate nor a future "add remoteTimestamp" change would have reported anything.
+
+`scripts/check_report_sizes.py` parses each report's own descriptor, sums the Input items, and
+compares against what the builder allocates. It runs from `make` as the `check-reports` target, so
+this class of bug now fails the build. It was confirmed to actually catch the original defect —
+reverting to `0xf8` produces:
+
+```
+makeKeyboardHIDReport allocates 248 bits but KeyboardReport specifies 312 -- 8 bytes short.
+Fields above the allocation are silently dropped.
+exit=1
+```
+
+The parser independently reproduces every size already in `docs/protocol.md` — Digitizer 464,
+Keyboard 312, Scroll 168, AbsolutePointer 152, AppleVendorKeyboard 88 — which is the same
+self-validating property that made the descriptors worth trusting in the first place.
+
+### Not claimed
+
+This does **not** set `remoteTimestamp`; it only makes the field exist, so that setting it later
+will do something instead of silently nothing. No claim is made about Gap 2.

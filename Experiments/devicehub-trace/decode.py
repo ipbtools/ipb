@@ -64,9 +64,39 @@ def iter_reports(rec):
                 yield sub
 
 
+def load_actions(path):
+    """Read the operator's action log and turn it into marker records.
+
+    dhtrace.sh injected markers into the trace itself, because the operator and
+    the tracer shared one terminal. With an agent operator they are separate
+    processes, so the only thing they share is the clock: the operator logs
+    {"ts", "action"} immediately before acting, and those timestamps become the
+    grouping markers here. A marker whose timestamp is outside the trace's own
+    range means the two halves did not overlap and is reported rather than
+    silently producing empty groups.
+    """
+    out = []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "ts" in rec:
+                out.append({"kind": "mark", "ts": float(rec["ts"]),
+                            "text": rec.get("action") or rec.get("text") or "?"})
+    return out
+
+
 def main():
     path = sys.argv[1]
     show_bytes = "--bytes" in sys.argv
+    actions = None
+    if "--actions" in sys.argv:
+        actions = load_actions(sys.argv[sys.argv.index("--actions") + 1])
 
     records = []
     with open(path) as fh:
@@ -77,6 +107,18 @@ def main():
                     records.append(json.loads(line))
                 except json.JSONDecodeError:
                     pass
+    if actions:
+        lo = min((r["ts"] for r in records if r.get("ts")), default=None)
+        hi = max((r["ts"] for r in records if r.get("ts")), default=None)
+        if lo is not None:
+            inside = [a for a in actions if lo <= a["ts"] <= hi]
+            print("actions: %d of %d fall inside the trace window "
+                  "(%.1f s wide)" % (len(inside), len(actions), hi - lo))
+            if not inside:
+                print("!! no action overlaps the trace: the two halves did not "
+                      "run at the same time; nothing below is attributable.")
+        records.extend(actions)
+
     records.sort(key=lambda r: r.get("ts", 0))
 
     action = "(before first marker)"
@@ -118,7 +160,11 @@ def main():
                             for k, v in alt.items():
                                 print("      %-26s %s=%s" % (name, k, v))
             if rec.get("words"):
-                print("      words %s" % rec["words"])
+                print("      words   %s" % rec["words"])
+            if rec.get("doubles"):
+                # The Indigo digitizer and scroll entry points carry their
+                # coordinates here, not in the x registers.
+                print("      doubles %s" % rec["doubles"])
         if kinds:
             print("    reports: %s" % dict(kinds))
 

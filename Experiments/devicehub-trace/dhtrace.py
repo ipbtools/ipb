@@ -179,6 +179,32 @@ def _regs(frame, names):
     return out
 
 
+def _doubles(frame, names):
+    """Read floating-point argument registers as Doubles.
+
+    The Indigo digitizer and scroll entry points take their coordinates as
+    Swift Doubles, which the arm64 ABI passes in d0..d7, not in the x
+    registers. Reading only x registers -- which is all this tracer did before
+    2026-09-21 -- records a digitizer call with no coordinates at all, i.e. it
+    cannot answer the one question the Indigo tap exists to answer.
+    """
+    out = {}
+    for n in names:
+        v = frame.FindRegister(n)
+        if not v.IsValid():
+            out[n] = None
+            continue
+        try:
+            out[n] = float(v.GetValue())
+        except (TypeError, ValueError):
+            d = v.GetChildMemberWithName("double")
+            try:
+                out[n] = float(d.GetValue()) if d.IsValid() else None
+            except (TypeError, ValueError):
+                out[n] = None
+    return out
+
+
 def _governed(bp, label):
     """Return True if this hit is within budget; disable the tap when it is not."""
     now = time.monotonic()
@@ -242,7 +268,8 @@ def on_hit(frame, bp_loc, extra, internal_dict):
         _seq += 1
         thread = frame.GetThread()
         proc = thread.GetProcess()
-        regs = _regs(frame, ("x0", "x1", "x2", "x3", "x8", "lr"))
+        regs = _regs(frame, ("x0", "x1", "x2", "x3", "x4", "x5",
+                             "x6", "x7", "x8", "lr"))
         rec = {
             "kind": "call",
             "n": _seq,
@@ -259,6 +286,8 @@ def on_hit(frame, bp_loc, extra, internal_dict):
             rec["report"] = decode_report_words(proc, regs.get(arg) or 0, w1)
         if spec.get("args_are_words"):
             rec["words"] = {k: regs.get(k) for k in spec["args_are_words"]}
+        if spec.get("doubles"):
+            rec["doubles"] = _doubles(frame, spec["doubles"])
         if spec.get("returns"):
             lr = regs.get("lr") or 0
             if lr:

@@ -73,7 +73,8 @@ Both of those sizes are ipb's, and both are below what the report descriptors sp
 captured ⌘L `KeyboardReport` is **39 bytes**, not 31 (see "Lock: Device Hub does not send it over
 UniversalHID"), and the descriptor gives `DigitizerReport` 464 bits / 58 bytes once contact-0 swipe
 bits are written (see "Report descriptors: the authoritative field map"). The 31-byte keyboard
-allocation is a live defect.
+allocation was a live defect; it was fixed on 2026-09-21 and ipb now allocates the full 312 bits,
+so the bytes quoted above are the pre-fix output.
 
 Indigo features (`hid.button`, `hid.digitizer`, `hid.scroll`; `hid.vendordefined` follows the same shape):
 
@@ -380,7 +381,7 @@ Currently generated via `UniversalHID.framework` private Swift symbols:
 | Report | Report ID / size | Fields currently set |
 | --- | --- | --- |
 | `UniversalHID.DigitizerReport` | `reportID = 0x09`, `bitCount = 0x140` initial, grown to `0x1d0` (464) when contact-0 swipe bits are set | contact index, touch, range, resting, x, y, contact count, max count |
-| `UniversalHID.KeyboardReport` | `reportID = 0x01`, `bitCount = 0xf8` — **8 bytes short of the 312-bit descriptor; live defect**, see "Report descriptors" below | keyboard usage bit at `usage + 8` |
+| `UniversalHID.KeyboardReport` | `reportID = 0x01`, `bitCount = 0x138` (312, the descriptor size; was `0xf8` = 248 until 2026-09-21) | keyboard usage bit at `usage + 8` |
 | `UniversalHID.PointerReport` | queried from framework | x, y, button mask, accel x, accel y, raw UInt32 flags |
 | `UniversalHID.ScrollReport` + `ScrollCollection` | queried from framework | collection flags, phase, momentum, x, y, accel x, accel y |
 | `UniversalHID.NavigationSwipeReport` | queried from framework | phase, swipe mask, gesture motion, flavor, progress, x, y |
@@ -586,7 +587,7 @@ UniversalHID.KeyboardReport.update(with:) -> HIDReport[rawUsage + 8] = 1
 UniversalHID.KeyboardReport.keyboardState -> HIDReport byte/bit region at index 0xf0
 ```
 
-The CLI constructs `UniversalHID.HIDReport(bitCount: 0xf8, id: 0x01)`, sets the usage bit through `HIDReport`'s Swift subscript setter, and sends it to `CoreDevice keyboard` service `0x200`.
+The CLI constructs `UniversalHID.HIDReport(bitCount: 0x138, id: 0x01)` — `initialReportBitCount` is `0xf8`, but the descriptor specifies 312 bits and Apple's own reports are 39 bytes on the wire, so the builder allocates the descriptor size —, sets the usage bit through `HIDReport`'s Swift subscript setter, and sends it to `CoreDevice keyboard` service `0x200`.
 
 Verified sequences:
 
@@ -1083,10 +1084,11 @@ The method is self-validating — parsing reproduces every offset previously obt
 | DigitizerReport (ID 9) | 464 bits / 58 B | 464 (`digitizerReportBitCount`) | yes |
 | ScrollReport (ID 7) | 168 bits / 21 B | 168 (`scrollReportBitCount`) | yes |
 | AbsolutePointerReport (ID 19) | 152 bits / 19 B | 152 | yes |
-| **KeyboardReport (ID 1)** | **312 bits / 39 B** | **248 bits / 31 B** (`uhidHIDReportInit(0xf8, …)`) | **NO — 8 bytes short** |
+| **KeyboardReport (ID 1)** | **312 bits / 39 B** | **312 bits / 39 B** (`uhidHIDReportInit(0x138, …)`, fixed 2026-09-21; was `0xf8` = 248) | **yes** |
 | AppleVendorKeyboardReport | 88 bits / 11 B | n/a | — |
 
-**The KeyboardReport gap is a live defect.** The missing 8 bytes are the trailing
+**The KeyboardReport gap was a live defect, fixed on 2026-09-21** (verified on the wire: the report
+is now 39 bytes, with the usage bit still at `usage + 8`). The missing 8 bytes were the trailing
 `remoteTimestamp` field, and the timestamp setter *no-ops* on a report shorter than 39 B — so adding
 a timestamp later without fixing the allocation would silently do nothing.
 
