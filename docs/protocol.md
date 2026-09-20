@@ -1030,3 +1030,56 @@ block `ipb`: `ipb lock` locks the device by a different and independently verifi
 
 Note also that `KeyboardReport` on the wire is 39 bytes, where `ipb`'s builder allocates
 `0xf8` = 248 bits = 31 bytes and writes no timestamp.
+
+
+## Report descriptors: the authoritative field map (2026-09-20)
+
+Source: `static <T>.descriptor.getter` in host `UniversalHID` 90.1 (CoreDevice 642.15), dumped and
+parsed by `Experiments/hid-descriptors/`. This is **Rule 1 source 3** (shipped metadata), and it is
+stronger than the captures below it: Apple's encoder sizes reports from the same descriptor via
+`HIDReportDescriptor.reportBitCount(for:)`, so it is the allocation authority on both sides.
+
+The method is self-validating — parsing reproduces every offset previously obtained by capture:
+
+| report | descriptor | ipb allocates | agrees? |
+| --- | --- | --- | --- |
+| DigitizerReport (ID 9) | 464 bits / 58 B | 464 (`digitizerReportBitCount`) | yes |
+| ScrollReport (ID 7) | 168 bits / 21 B | 168 (`scrollReportBitCount`) | yes |
+| AbsolutePointerReport (ID 19) | 152 bits / 19 B | 152 | yes |
+| **KeyboardReport (ID 1)** | **312 bits / 39 B** | **248 bits / 31 B** (`uhidHIDReportInit(0xf8, …)`) | **NO — 8 bytes short** |
+| AppleVendorKeyboardReport | 88 bits / 11 B | n/a | — |
+
+**The KeyboardReport gap is a live defect.** The missing 8 bytes are the trailing
+`remoteTimestamp` field, and the timestamp setter *no-ops* on a report shorter than 39 B — so adding
+a timestamp later without fixing the allocation would silently do nothing.
+
+### DigitizerReport (ID 9), 464 bits
+
+| bits | field | notes |
+| --- | --- | --- |
+| 0–8 | report ID = 9 | |
+| 8–16 | `Digitizer/ContactCount` | **number of contacts described by THIS report**, logical max 5 |
+| 16–24 | `Digitizer/ContactCountMaximum` | |
+| 24–224 | five finger collections, 40 bits each at `24 + 40i` | |
+| … +0 | `Digitizer/ContactIdentifier` (5b) | what ipb sets via `SetIndex` |
+| … +5 | `0xff1a/0xe0f2` (1b) | resting |
+| … +6 | `Digitizer/Touch` (1b) | |
+| … +7 | `Digitizer/InRange` (1b) | |
+| … +8 | `GenericDesktop/X` (16b) | |
+| … +24 | `GenericDesktop/Y` (16b) | |
+| 224–320 | embedded ScrollCollection | flags 224, momentum 232, X i8 240, Y i8 248, accelX 256, accelY 288 |
+| 320–360 | `0xff1a/0xe0f4` × 5 (8b each) | per-contact identity — **ipb never sets this** |
+| 360–424 | `AppleVendor/0x102` × 8 (8b each) | **`remoteTimestamp`** — ipb never sets this |
+| 424–459 | `0xff1a/0xe062…0xe068`, seven × 5b | swipe flags: pending 424, locked 429, up 434; the rest by order (inferred) |
+| 459–464 | padding | |
+
+### What this says about `ContactCount`
+
+Per the HID specification, Contact Count is the number of contacts **reported in the current
+report**, not the number of fingers still touching. `makeDigitizerReportData` currently sends
+`contactCount = touching ? 1 : 0`, so a lift reports **zero** contacts while still populating contact
+0 with `Touch` clear. A decoder iterating `0..<contactCount` never sees that lift.
+
+This is a **hypothesis about a defect**, not yet a device-verified fix — an attempt to test it on
+2026-09-20 was void because the device was on the passcode screen throughout. Recorded here because
+the descriptor and the specification agree on what the field means.
