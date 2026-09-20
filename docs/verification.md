@@ -2565,9 +2565,11 @@ vs 16 s / 57 frames), so its early finish is not the tunnel and it does not get 
    real fix is to find what a `devicectl device <action>` call does underneath to renew the lease
    and do that in process. The `Experiments/devicehub-trace/` methodology can watch Device Hub
    itself renew. Marked `TODO(tunnel-keepalive)` in `bin/ipb`.
-2. **TODO(stream-seconds): `ipb stream --seconds 60` stops after ~10 s of collection and exits 0.**
-   `--seconds` *is* parsed (`Sources/video_stream.m:339`) and the default is 10, so the value looks
-   ignored somewhere downstream. Reporting rc=0 for a session that ended early is the worse half:
+2. **TODO(stream-seconds): `ipb stream --seconds 60` stops early and still exits 0.**
+   *(Diagnosis below was corrected later the same day — `--seconds` is NOT ignored. The cause is the
+   12 s hard stall guard at `Sources/video_stream.m:475`: on a static screen distinct frames stop,
+   the guard breaks, and only an unmet `--count` exits non-zero. The remaining defect is narrower
+   than written here: **exit 0 for a run that ended early**.)* Reporting rc=0 for a session that ended early is the worse half:
    "failure is an exit code, not a log line" (Rule 2). Not the tunnel — the keepalive changes
    nothing. Unrelated to the mirror freeze; needs its own reproduction.
 3. **TODO(media-lifetime): does the media path have its own ~10 s limit?** Both stream and mirror
