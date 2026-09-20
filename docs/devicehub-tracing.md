@@ -154,14 +154,26 @@ These are the specific ways the earlier rounds produced wrong answers.
 
 ## Open questions this harness exists to close
 
-- **Lock / unlock.** Cmd-L reaches `KeyboardFilter.filterEvent` and produces a
-  `KeyboardReport` (ID 1), but only the all-zero release reports were ever
-  captured. `KeyboardFilter.updateCopyMask(oldValue:newValue:) -> [HIDReport]`
-  (UniversalHID `0x5b0bc`) takes two `HIDEventMask` values — an `OptionSet` over
-  `UInt`, so plain integers in `x0`/`x1` — and returns the reports directly. It
-  is the tap most likely to show the press.
-- **Scroll.** Reports are accepted at every layer and the device does not
-  scroll. `boundaryScroll` exists as a distinct `HIDEventType` (`0x1c`) beside
-  `scroll` (`0x6`), and Device Hub sends `AbsolutePointer` (ID 19) continuously
-  while we never send it at all. The capture is meant to show which of those
-  Device Hub actually emits during a trackpad scroll.
+**Both of the original questions are now closed; they are kept here with their answers so the
+harness's purpose is not misread.**
+
+- **Lock — closed, and the proposed tap was wrong.**
+  `KeyboardFilter.updateCopyMask(oldValue:newValue:) -> [HIDReport]` (UniversalHID `0x5b0bc`) was
+  nominated as the tap most likely to show the key press. It was bound and took **zero hits**. The
+  capture that did land showed ⌘L putting only the Command modifier on the wire: Device Hub does
+  not lock over UniversalHID at all. See `docs/protocol.md`, "Lock: Device Hub does not send it
+  over UniversalHID".
+- **Scroll — closed.** Device Hub emits `AbsolutePointer` (ID 19) continuously to keep the pointer
+  position current, then a full phase sequence (`0x80` may-begin, `0x01` began, `0x02` changed ×N,
+  `0x04` ended, then a momentum tail) — and it emits no scroll report at all unless the pointer is
+  over the view. `ipb` sends a single bare movement report, which is why it is accepted and
+  ignored. See `docs/protocol.md`, "Scroll: the full sequence Device Hub sends".
+
+### The question this harness has not answered
+
+**Device Hub's tap has never been captured.** `taps.tsv` only taps `UniversalHIDService.send` and
+never the Indigo button/digitizer sockets, and no action script in this repo has ever contained a
+click — so every digitizer byte here is ipb's own output. The recorded conclusion that Device Hub
+locks "through a non-UniversalHID channel" is therefore partly an artefact of not tapping the right
+thing. The universal choke point is `xpc_remote_connection_send_message*` under lldb, which also
+yields the `HIDServiceID` argument that the existing captures dropped.

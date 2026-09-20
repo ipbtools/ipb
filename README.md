@@ -121,8 +121,8 @@ bin/ipb pointer 0 0
 bin/ipb scroll-report 0x501 0 0
 bin/ipb scroll-gesture 0.5 0.5 0 -25       # trackpad-style scroll (pointer + phase sequence)
 bin/ipb abs-pointer 0.5 0.5                # place the cursor
-bin/ipb scroll-event 0 0 0
-bin/ipb vendor-defined 0 0 0
+bin/ipb scroll-event 0 0 0                 # raw probe: accepted, no device effect demonstrated
+bin/ipb vendor-defined 0 0 0               # raw probe: accepted, no device effect demonstrated
 bin/ipb key escape
 bin/ipb button 0x0c 0x40
 bin/ipb raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
@@ -320,16 +320,19 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 
 - `tap` and `swipe`: UniversalHID service
 - `scroll`: UniversalHID service
-- `pointer`: UniversalHID pointer report to the `gesture`/trackpad service
-- `scroll-report`: UniversalHID scroll report to the `gesture`/trackpad service
-- `scroll-event`: CoreDevice HIDScroll event to the standalone scroll feature
-- `vendor-defined`: CoreDevice HIDVendorDefined event to the standalone vendor-defined feature
+- `pointer` *(probe)*: UniversalHID pointer report to the `gesture`/trackpad service
+- `scroll-report` *(probe)*: UniversalHID scroll report to the `gesture`/trackpad service
+- `scroll-event` *(probe)*: CoreDevice HIDScroll event to the standalone scroll feature
+- `vendor-defined` *(probe)*: CoreDevice HIDVendorDefined event to the standalone vendor-defined feature
+
+  *(probe)* means the service accepts the report and returns 0, but no effect on the device has ever
+  been demonstrated. The same applies to `nav-report`, `dock-report` and `uhid-swipe-report`.
 - `key`: UniversalHID keyboard report to the `keyboard` service
 - `long`: CoreDevice HID digitizer with repeated hold pulses
 - `home`: CoreDevice HID button service
 - `recents`: CoreDevice HID button, AppleVendorKeyboard page `0xff01` usage `0x10` (was a 1.66 s digitizer swipe until 2026-09-14)
 - `scroll-gesture` and `abs-pointer`: UniversalHID AbsolutePointer and Scroll wire reports to the `gesture`/trackpad service, in DeviceHub's captured phase sequence
-- `power` / `lock` / `wake`: CoreDevice HID button service, consumer usage `0x0c`/`0x30` held 0.5 s
+- `power` / `lock` / `wake`: CoreDevice HID button service, consumer usage `0x0c`/`0x30` held 0.4 s (the side button's own duration gate is 0.29 s; 0.7 s opens Siri)
 - `screenshot`: `devicectl device capture screenshot`, using the copy shipped in the CoreDevice package
 - `stream` and `mirror`: the device's own AVConference media path over the CoreDevice tunnel, decoded in process; `mirror` sends input over the same UniversalHID services as the commands above
 
@@ -345,6 +348,28 @@ compatibility matrix at the top of that file is the current state.
 The smoke gate is what keeps this honest: `scripts/smoke_matrix.sh` exercises service discovery,
 device selection, one report per HID feature, and — with `SMOKE_INTERACTIVE=1` — home, tap,
 recents, swipe, scroll, long press and a key, with a screenshot before and after each step.
+
+## Known limitations
+
+These are boundaries a user hits in normal use, not theoretical ones. Each links to a dated record;
+the living open-items list is at the head of [docs/verification.md](docs/verification.md).
+
+- **The device must be unlocked.** A locked device refuses the HID path with `RemotePairingError`
+  1016 (`unlockRequired`). Xcode's own Device Hub gets past this with an escrowed remote-unlock
+  keypair held in `remotepairingd` and gated by Apple-private entitlements, so it is a structural
+  boundary for any third-party tool, not something ipb can fix.
+- **System-presented dialogs do not respond to taps.** Permission prompts and similar
+  system UI ignore our digitizer reports, while ordinary app UI works normally. Not root-caused.
+- **The long-running paths hold the CoreDevice tunnel by proxy.** `ipb mirror` and `ipb stream`
+  keep a resident `devicectl` subscription alive because the tunnel is a ~10 s lease and taking a
+  usage assertion directly needs an entitlement. If the mirror is killed abnormally the
+  subscription is swept on exit, but a hard `SIGKILL` can leave it running for the grace period.
+- **`ipb screenrecord` is unsupported on the tested iOS 27.0 device** (devicectl reports error
+  1001).
+- **The raw probe verbs are probes.** `nav-report`, `dock-report`, `pointer-report`,
+  `scroll-report`, `scroll-event`, `vendor-defined` and `uhid-swipe-report` are accepted by the
+  service and return 0, but no device effect has ever been demonstrated for any of them.
+- **Everything here rides private Apple ABI** and can break on any Xcode beta seed.
 
 ## License and notice
 

@@ -14,7 +14,7 @@ ipb (iOS Physical-device Bridge; GitHub home `ipbtools/ipb`, Homebrew tap `ipbto
 | --- | --- | --- |
 | `README.md` | Project purpose, requirements, build, usage, exit codes, smoke gate, pointers to everything below | Any user-facing behaviour or requirement changes |
 | `docs/protocol.md` | Protocol map: transport, features, Swift symbol evidence, service IDs, **captured wire format** (the `Wire Format` section is the authoritative reference for message shapes) | Any new message, field, feature, or evidence |
-| `docs/verification.md` | Dated, host+device-specific verification records and the compatibility matrix; what was proven, how, with what artefacts | Every verification run; never edit older records, append |
+| `docs/verification.md` | Two parts. The head is **"Open items — current state"**, a living list of every open problem with its root-cause status and whether it is agent-fixable or user-decided; it is overwritten in place. Everything below it is dated, host+device-specific verification records: what was proven, how, with what artefacts | Overwrite the head whenever an item opens, closes or changes status; append a record for every verification run and never edit an older one |
 | `bin/ipb` | The CLI surface: command names, `-s`/`--device` selection, and the grouped help text that `ipb help` and `ipb help hid` print. The help text is user documentation, not a comment | Any command, argument, or selection behaviour changes |
 | `completions/_ipb` | zsh completion: the command list with one-line descriptions, and `-s` completing against the attached devices by UUID and by name. Installed to `share/zsh/site-functions/_ipb` | Any command is added, renamed, or removed |
 | `docs/devicehub-tracing.md` | The methodology for capturing DeviceHub's own behaviour with the lldb tracer in `Experiments/devicehub-trace/`: how a capture session is scripted, the hit-rate budget that keeps DeviceHub alive, and what the decoder reads | When the tracer or the capture procedure changes |
@@ -80,7 +80,7 @@ Stages are cumulative; a stage is "done" when `scripts/smoke_matrix.sh` passes o
 | --- | --- | --- | --- |
 | 1 | macOS 27 + Xcode 27 beta | iOS 27 | Verified (<macos27-host>, iPhone 12 mini) |
 | 2 | macOS 27 + Xcode 27 beta | iOS 27 / iOS 26 | Verified (<macos27-host>, iPhone 15 Pro on 26.6.1; `touchscreenGesture` is iOS 27 only) |
-| 3 | macOS 27 / macOS 26 + Xcode 27 beta | iOS 27 / iOS 26 | macOS 26.5.1 + iOS 27 verified on this Mac; macOS 26 + iOS 26 not yet run |
-| 4 | macOS / Windows / Linux, no Xcode | iOS 27 / iOS 26 | Spike only: pymobiledevice3 userspace tunnel drove `dtuhidd` from macOS; see `docs/standalone-distribution.md` |
+| 3 | macOS 27 / macOS 26 + Xcode 27 beta | iOS 27+ | macOS 26.5.1 + iOS 27 verified on this Mac. The iOS 26 half of this row was dropped on 2026-09-20 with the rest of the matrix; the historical iOS 26 results in stage 2 are kept as history, not as a supported target |
+| 4 | macOS / Windows / Linux, no Xcode | iOS 27+ | Spike only: pymobiledevice3 userspace tunnel drove `dtuhidd` from macOS; see `docs/standalone-distribution.md` |
 
 Implementation path (from the direction review): keep the current helper as the protocol oracle; build the stage 4 client on pymobiledevice3 (CLI + MCP sharing one session layer); consider a native single binary only if licence, performance, or install cost measured there demand it.

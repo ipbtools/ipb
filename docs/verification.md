@@ -1,5 +1,47 @@
 # Verification Notes
 
+## Open items — current state (living section)
+
+**This section is overwritten in place; everything below the first dated heading is append-only.**
+It exists because the records below are 3 700 lines of history in which several "Known, not fixed"
+entries have since been closed or retracted, and a reader cannot tell today's state from them.
+Each entry names its root-cause status and, per the house rule, whether it is mine to fix or the
+user's to decide.
+
+### Blocked on a decision or on hardware — not mine to close
+
+| Item | Root-cause status | Blocker |
+| --- | --- | --- |
+| **Gap 1: Device Hub drives a locked device, ipb cannot** | **Root-caused.** Escrowed `RemoteUnlockKeypair` + `KeybagProvider.unlock` in `remotepairingd`; our `RemotePairingError 1016` is its `unlockRequired` case. Gated by the `com.apple.dt.Devices` keychain group and `com.apple.private.coredevice.client`, so it is a structural boundary, not a bug. See 2026-09-15 "Gap 1 mechanism found". | User: "这个问题可能也需要 device hub 测试下才行". A Device Hub run would confirm the boundary; it cannot remove it. Recommended outcome: document as a permanent capability limit. |
+| **Gap 2: Device Hub can tap system dialogs, ipb cannot** | **Not root-caused.** Two hypotheses survive: `remoteTimestamp = 0` (weakened — zero is Apple's own nil encoding) and tap framing against Device Hub's real digitizer bytes (never captured). The `contactCount` lift fix was committed on its own merits and is **not** a claimed fix. | Needs a real system-presented prompt. Every app on the attached devices has already granted its permissions. Open question to the user: which app produced the original prompt. |
+| **`TODO(media-lifetime)`** | **Not root-caused.** Identical runs produced 1 236 and 265 frames; the earlier "constant ~266 frames" claim was retracted as host-state noise. | User: "同样复现下". Planned reproduction: a run against a *continuously changing* screen (loop home/recents) to separate an idle-screen watchdog from a genuine media limit. |
+| **`TODO(tunnel-keepalive)`** | **Root-caused, workaround accepted.** The tunnel is a lease with a ~10–11 s grace, identical wired and localNetwork; we hold it by proxy with a resident `devicectl notification observe` instead of taking our own assertion, because `acquireusageassertion` needs an entitlement. `bin/ipb:273`. | User closed it: "就维持现状把". Do not reopen. |
+
+### Mine to fix
+
+| Item | Root-cause status | Next step |
+| --- | --- | --- |
+| **`KeyboardReport` is 31 B against a 312-bit (39 B) descriptor** | **Root-caused.** `makeKeyboardHIDReport` calls `uhidHIDReportInit(0xf8, 0x01)` = 248 bits; the descriptor and Device Hub's captured ⌘L reports are both 39 B. The timestamp setter silently no-ops below 39 B, so adding a timestamp later would do nothing. `protocol.md` "Report descriptors". | **Authorised by the user ("先修复"), not yet implemented.** Fix the size, and add the build-time check that each builder's bitCount and offsets match the descriptor — that check is what would have caught this. |
+| **Report-send timeouts are fatal, and an abandoned send is not serialised** | **Partly root-caused.** A timed-out `sendBounded` returns while the real call "still runs to completion in the background" (record of 2026-09-14), so a later send can race it on the same `xrc_t`. Barrier timeouts were made non-fatal; report timeouts were not. | Make a report timeout drop the gesture and force an UP so the contact is released, rather than killing the session; serialise per-connection sends so an abandoned call cannot race the next one. |
+| **The smoke gate treats identical consecutive frames as advisory** | N/A — a gate defect, not a device defect. `scripts/smoke_matrix.sh:171` prints `WARN` and continues, while Rule 4 says an identical frame "is a warning that must be explained ... not ignored". | Require an explanation (an allow-list of expected-identical steps) or fail. |
+| **Raw probe verbs have never shown a device effect** | **Known.** `nav-report`, `dock-report`, `pointer-report`, `scroll-report`, `scroll-event`, `vendor-defined`, `uhid-swipe-report` are accepted by the service and do nothing observable; `nav-report`/`dock-report` additionally rest on a retracted premise. They are now marked as probes in `README.md` and `docs/protocol.md`. | Whether to quarantine them out of the main help (Fable's recommendation) is a CLI surface decision, not a doc fix. Marked, not moved. |
+| **Device Hub's own tap has never been captured** | **Root-caused as a methodology failure.** `taps.tsv` only tapped `UniversalHIDService.send`, never the Indigo sockets, and no action script ever contained a click; the digitizer bytes once presented as a Device Hub reference came from ipb's own helper. | Capture at `xpc_remote_connection_send_message*` under lldb, which is the universal choke point and also yields the `HIDServiceID` argument. |
+
+### Recorded, lower priority
+
+- **Which `HIDServiceID` Device Hub targets is still unobserved.** The IDs ipb uses
+  (`0x101`, `0x200`, `0x402`, `0x501`) are not invented — they are read from the device through
+  `connectedServiceDescriptors()` (see the descriptor dump below). What was never captured is which
+  of them *Device Hub* passes for a given gesture, because the capture never dereferenced `x2`.
+- **Scroll `accelX = dx/40` and the momentum decay are invented**, though the phase sequence around
+  them is captured (`protocol.md`, "Scroll: the full sequence Device Hub sends").
+- **Silent no-ops are structural**: an ineffective usage returns `rc=0`, as the `0xff01/0x100`
+  App Switcher bug did for weeks. The gate cannot distinguish "sent" from "worked" without a
+  screenshot assertion.
+- Older per-record "Known, not fixed" lists remain below for history. Where they conflict with this
+  section, this section wins.
+
+
 Host:
 
 - macOS 27 beta

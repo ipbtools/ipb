@@ -61,7 +61,19 @@ connected services {messageType: "Request", featureIdentifier, payload: {connect
 barrier            {isBarrier: true}   (synchronous, empty dictionary reply)
 ```
 
-Report bytes seen: keyboard `KeyboardReport` is 31 bytes with report id `0x01`; the touchscreen `DigitizerReport` is 40 bytes with report id `0x09`, for example `09 01 01 c0 ff 7f ff 7f 00…` for a contact at (0.5, 0.5) and `09 00 01 00 ff 7f ff 7f 00…` for the release.
+**Provenance warning.** The XPC envelope shapes above are valid whoever sends them — they were read
+at the send boundary and do not depend on the client. The *report bytes* below are a different
+matter: they were captured from **ipb's own helper**, not from Device Hub, and must not be read as a
+Device Hub reference. Device Hub's digitizer traffic has never been captured (see the 2026-09-20
+protocol alignment audit in `docs/verification.md`).
+
+ipb's own report bytes: keyboard `KeyboardReport` is 31 bytes with report id `0x01`; the touchscreen `DigitizerReport` is 40 bytes with report id `0x09`, for example `09 01 01 c0 ff 7f ff 7f 00…` for a contact at (0.5, 0.5) and `09 00 01 00 ff 7f ff 7f 00…` for the release.
+
+Both of those sizes are ipb's, and both are below what the report descriptors specify. Device Hub's
+captured ⌘L `KeyboardReport` is **39 bytes**, not 31 (see "Lock: Device Hub does not send it over
+UniversalHID"), and the descriptor gives `DigitizerReport` 464 bits / 58 bytes once contact-0 swipe
+bits are written (see "Report descriptors: the authoritative field map"). The 31-byte keyboard
+allocation is a live defect.
 
 Indigo features (`hid.button`, `hid.digitizer`, `hid.scroll`; `hid.vendordefined` follows the same shape):
 
@@ -367,14 +379,19 @@ Currently generated via `UniversalHID.framework` private Swift symbols:
 
 | Report | Report ID / size | Fields currently set |
 | --- | --- | --- |
-| `UniversalHID.DigitizerReport` | `reportID = 0x09`, `bitCount = 0x140` | contact index, touch, range, resting, x, y, contact count, max count |
-| `UniversalHID.KeyboardReport` | `reportID = 0x01`, `bitCount = 0xf8` | keyboard usage bit at `usage + 8` |
+| `UniversalHID.DigitizerReport` | `reportID = 0x09`, `bitCount = 0x140` initial, grown to `0x1d0` (464) when contact-0 swipe bits are set | contact index, touch, range, resting, x, y, contact count, max count |
+| `UniversalHID.KeyboardReport` | `reportID = 0x01`, `bitCount = 0xf8` — **8 bytes short of the 312-bit descriptor; live defect**, see "Report descriptors" below | keyboard usage bit at `usage + 8` |
 | `UniversalHID.PointerReport` | queried from framework | x, y, button mask, accel x, accel y, raw UInt32 flags |
 | `UniversalHID.ScrollReport` + `ScrollCollection` | queried from framework | collection flags, phase, momentum, x, y, accel x, accel y |
 | `UniversalHID.NavigationSwipeReport` | queried from framework | phase, swipe mask, gesture motion, flavor, progress, x, y |
 | `UniversalHID.DockSwipeReport` | queried from framework | phase, swipe mask, gesture motion, flavor, progress, x, y |
 
-Low-level CLI commands:
+Low-level CLI commands. **These are raw probes, not working features.** Every one of them is
+accepted by the service and returns `rc=0`; for `uhid-swipe-report`, `pointer-report`,
+`scroll-report`, `scroll-event`, `vendor-defined`, `nav-report` and `dock-report` **no device effect
+has ever been demonstrated**, and `nav-report`/`dock-report` additionally rest on a premise that was
+later retracted. Use them to probe the protocol, not to drive a device.
+
 
 ```sh
 bin/ipb uhid-report 0x101 0.5 0.5 1 1
@@ -706,6 +723,23 @@ Verified high-level use:
 
 ## Current Gaps
 
+The living list of open items for the project as a whole is the head of `docs/verification.md`;
+this section covers only the protocol-level gaps. Ranked by the 2026-09-20 alignment audit:
+
+1. **Tap framing has never been checked against Device Hub.** Contact identity is never set,
+   `remoteTimestamp` is never set, and the pointer-buttons byte on a click is unknown. Device Hub's
+   own digitizer traffic was never captured — see the audit record in `docs/verification.md`.
+2. **`KeyboardReport` is 31 bytes against a 312-bit (39 B) descriptor**, and the timestamp setter
+   no-ops below 39 B, so adding a timestamp later would silently do nothing.
+3. **Which `HIDServiceID` Device Hub targets is unobserved.** The IDs ipb uses are read from the
+   device via `connectedServiceDescriptors()`, but the capture never dereferenced the `HIDServiceID`
+   argument, so which service Device Hub picks per gesture is unknown.
+4. **Scroll `accelX = dx/40` and the momentum decay are invented**; only the phase sequence around
+   them is captured.
+5. **System dialogs ignore our taps** and no hypothesis is confirmed (Gap 2).
+
+Older ABI-surface gaps, still accurate:
+
 - `connectedServiceDescriptors()` is decoded on the current macOS 27/Xcode 27 beta 2 host and iOS 27 device, but the ABI is private Swift framework ABI and should be re-verified on each beta seed.
 - `connectedServices` remains symbol-mapped but is not exposed because the verified DeviceHub path is `connectedServiceDescriptors()`.
 - `connectedServiceIDs()` is symbol-mapped as a protocol extension; it still needs a separate extension ABI bridge before exposure.
@@ -888,10 +922,13 @@ Established:
   9,935,071 bytes bright) after two earlier conclusions that `0x66` locks were both traced to the
   device's own fast auto-lock rather than to the report.
 
-The next tap is `UniversalHID.KeyboardFilter.updateCopyMask(oldValue:newValue:) -> [HIDReport]`
-(UniversalHID `0x5b0bc`). It takes two `HIDEventMask` values — an `OptionSet` over `UInt`, so plain
-integers in `x0`/`x1` — and returns the built reports directly, which makes it the shortest path
-from a key transition to wire bytes. See `docs/devicehub-tracing.md`.
+**This question is now closed, and `updateCopyMask` was not the answer.**
+`UniversalHID.KeyboardFilter.updateCopyMask(oldValue:newValue:) -> [HIDReport]` (UniversalHID
+`0x5b0bc`) was proposed as the next tap and then bound: **zero hits** across the ⌘L capture
+(`docs/verification.md`, 2026-09-09 second capture). The capture that did land is below, under
+"Lock: Device Hub does not send it over UniversalHID" — ⌘L puts only the Command modifier on the
+wire, and Device Hub locks through some other channel. `ipb lock` reaches the same result by an
+independently verified route (Consumer `0x0c`/`0x30`, held).
 
 ## Lock (source: runtime capture + on-device A/B)
 
