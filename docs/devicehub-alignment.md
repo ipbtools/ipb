@@ -51,21 +51,24 @@ Screenshots must show the expected transitions, not merely exceed the pixel thre
 The final installed-layout run passed on the local macOS 26.5.1 host, and its key screenshots
 confirmed Settings launch, App Switcher, list down/back up, context menu, search input/clear and
 final Home. The sender and smoke host fixtures also passed. These results validate this local
-configuration; they do not close either acceptance item below.
+configuration; they do not close the supported release-matrix gate below.
 
 The macOS 27 host (26A5425a, CoreDevice 642.15) built the helpers and passed the bounded sender
 fixture in an isolated directory. Its selected Xcode is **26.4**, and its paired iOS 27 device is
 **unavailable**. This is host build evidence only. The declared macOS 27 + Xcode 27 + iOS 27 release
 gate remains pending; historical passes do not validate this patch.
 
-The Mac locked before the new mirror's native mouse/shortcut regression could be completed.
-The computer-use tool requires manual unlock; the user has been asked. CLI/device tests and
-source/host tests continue independently. Do not count a 120-second no-input mirror run as an
-interactive input test. Final gate outcomes are recorded in `docs/verification.md`.
+After the user manually unlocked the Mac, native mirror regression on revision `1ed76f7` passed:
+Settings tap, list drag down/back, Home/App Switcher shortcuts, bottom-edge Home, screenshot,
+fit/actual-size fallback, a correctly mapped tap after resize, and normal window close. All 23
+dispatched events completed with zero report/barrier codes; no abandoned/in-flight sends or child
+processes remained. The one synthetic precise scroll event lacked a phase and was explicitly
+rejected without moving the list. This closes the local mouse/button/digitizer regression, not
+physical trackpad parity. Volume and Lock/Wake were not rerun. See `docs/verification.md`.
 
 ## Next work
 
-1. Finish the supported-matrix and mirror input gates when the host/device prerequisites are available.
+1. Finish the supported-matrix gate when the host/device prerequisites are available.
 2. Add ordinary keyboard capture and measured pointer/scroll parity to mirror; preserve no-replay
    and sender ownership. Presentation rotation needs an explicit coordinate transform.
 3. Capture a reproducible original permission prompt and locked-device Device Hub A/B before

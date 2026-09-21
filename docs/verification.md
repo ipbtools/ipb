@@ -10,10 +10,9 @@ The latest native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with an u
 
 | Item | Current evidence and root-cause status | Owner / next discriminator |
 | --- | --- | --- |
-| **Mirror native input regression** | Builds, host sender fault tests, idle/resume and process cleanup passed. The computer-use tool reported the Mac locked before the new mirror could be clicked. | Manual Mac unlock required; no-input runs do not validate the changed interactive sender path. |
 | **Supported release matrix gate** | macOS 27 host build and host fault test passed in isolation, but that host currently selects Xcode 26.4 and its paired iOS 27 device is unavailable. | Hardware/environment prerequisite: macOS 27 + Xcode 27 + an available unlocked iOS 27 phone. Do not label the local macOS 26 run a release pass. |
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
-| **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Synthetic wheel produced only may-begin with zero movement, so it did not calibrate physical trackpad deltas, acceleration or momentum. ipb's gains remain unverified. | Agent-fixable after a real nonzero reference gesture; preserve ordinary drag-scroll and do not change gains from a zero-motion trace. |
+| **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | Pixel change alone is not action success. UI tree, arbitrary Unicode input and frame identity/PTS/orientation metadata are absent. `AccessibilityAudit`/lockdown is a static candidate; the live service and UI-tree payload are unconfirmed. | Agent research/implementation work, scoped separately from this native reliability patch. Prioritize frame/action correlation and live AX service verification. |
 | **Device Hub function parity** | Mirror lacks keyboard capture/ordinary text input, display rotation, Siri, recording, Action Button and Camera Control. Siri code/state was captured but had no visible effect; recording and Action Button were disabled on the tested 13 Pro. | Agent can add verified host UI behavior and validate keyboard forwarding. Hardware buttons require corresponding hardware; disabled menus are not proven capabilities. |
 | **Tap/keyboard timestamp and contact identity** | Captured count and sizes now agree. Device Hub uses max=5, identifier=2, identity=2 and nonzero timestamp; current ipb differs. No demonstrated failing effect caused by these differences. | Known, not patched speculatively. Compare on an actual remaining failure before changing fields. |
@@ -25,7 +24,9 @@ The latest native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with an u
 - **Input ownership:** host fault injection reproduced two abandoned calls concurrently entering one
   sender. Per-connection ownership now lasts until the real call returns, with bounded admission
   and shutdown. Report timeouts stay fatal and uncertain input is never replayed. A forced UP cannot
-  guarantee device release after a transport failure.
+  guarantee device release after a transport failure. After manual Mac unlock, native mouse drag,
+  Home/App Switcher shortcuts, bottom-edge Home and normal window close passed on the local host;
+  this covers all three sender connections, without claiming physical scroll calibration.
 - **Media idle timeout:** stream and mirror both reproduced exit 7 on a static Settings screen.
   Both now survive the idle interval and resume after Home; first-frame, output and overall bounds
   remain. This explains the reproduced idle failure, not every historical media symptom.
@@ -4035,3 +4036,40 @@ host test in isolated `/tmp/ipb-alignment-20260921-D2DOwc`. It currently selects
 paired iOS 27 phone reports **unavailable**. Therefore the required **macOS 27 + Xcode 27 + iOS 27**
 real-device gate is still open. Native mirror input also awaits manual Mac unlock. These are
 acceptance limits, not evidence that the release matrix passed.
+
+
+## 2026-09-21 — Mirror native input regression after manual Mac unlock
+
+Revision `1ed76f7`; same local macOS **26.5.1 (25F80)** / Xcode **27 Beta 6** / CoreDevice
+**642.15**, wired **iPhone 13 Pro / iOS 27.0 (24A437)**. `lock-state` explicitly returned
+`passcodeRequired: false`. `make -q XCODE_PATH=/Applications/Xcode-27.0.0-Beta.6.app build/ipb-mirror`
+confirmed the existing build was current; its executable was copied into a local test app bundle
+and ad-hoc signed so the computer-use tool could select its window. No implementation changed.
+
+The app ran through `IPB_MIRROR_HELPER=<local-test-app>/Contents/MacOS/ipb-mirror caffeinate -di
+bin/ipb -s <13-pro-coredevice-uuid> mirror --seconds 600 --csv <local-evidence>/events.csv`, with
+`DEVELOPER_DIR` selecting Beta 6. Direct native-window operations visibly demonstrated:
+
+- Click Settings; drag the list down and back to the top.
+- Home and App Switcher shortcuts; a bottom-edge swipe from Settings back to Home.
+- Screenshot shortcut produced the expected Settings image at 1170 x 2532.
+- Actual Size explicitly fell back to fit because the visible screen was too small; Zoom to Fit
+  remained usable, and a resized-coordinate click opened General as intended.
+- Return Home and close the window normally: helper/wrapper exit 0, reason `window closed`, with
+  no surviving wrapper/helper/keepalive/caffeinate PIDs. The computer-use AX lookup after closing
+  timed out because the target exited; process status and shutdown logs independently prove exit.
+
+CSV/log totals: 24 submitted, **23 sent**, one `scroll_unsupported`, zero report/barrier errors,
+zero abandoned/in-flight sends, max queue depth 2, and 8863 received media frames with zero reported
+media errors. TOUCH, typed-button and BOTTOM_EDGE paths were exercised. Host sender timings are
+not device-completion measurements; the visible states above are the effect evidence.
+
+**Remaining limit:** the computer-use scroll operation emitted one precise AppKit event with
+phase=0, momentum=0, delta=(0,-872). Mirror rejected it explicitly and the list did not move. This
+is a reproducible synthetic-event limitation, not calibration or disproof of physical trackpad
+scrolling. Volume, Lock/Wake and forced transport loss were not rerun. The macOS 27 release matrix
+still lacks its previously recorded Xcode/device prerequisites.
+
+Local artifacts: `~/.local/state/ipb/20260921-alignment/mirror-unlocked/` contains `run.json`,
+`summary.json`, `mirror.log`, `events.csv` and the key device screenshots. The screenshot-shortcut
+output path is recorded in `run.json`. Raw artifacts remain outside version control.
