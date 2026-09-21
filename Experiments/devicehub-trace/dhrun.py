@@ -26,7 +26,20 @@ def dhrun(debugger, command, result, internal_dict):
 
     debugger.SetAsync(True)
     process = debugger.GetSelectedTarget().GetProcess()
-    process.Continue()
+    target = debugger.GetSelectedTarget()
+    unresolved = [target.GetBreakpointAtIndex(i).GetID()
+                  for i in range(target.GetNumBreakpoints())
+                  if target.GetBreakpointAtIndex(i).GetNumLocations() == 0]
+    if unresolved:
+        process.Detach()
+        result.SetError("Unresolved breakpoints: %s; no capture was started" % unresolved)
+        return
+    error = process.Continue()
+    if not error.Success():
+        process.Detach()
+        result.SetError("Could not resume capture target: %s" % error)
+        return
+    print("DHRUN running pid=%s" % process.GetProcessID(), flush=True)
 
     deadline = time.time() + duration
     reason = "cap"
@@ -41,6 +54,8 @@ def dhrun(debugger, command, result, internal_dict):
     err = process.Detach()
     print("DHRUN detached ok=%s state=%s reason=%s" %
           (err.Success(), process.GetState(), reason))
+    if not err.Success():
+        result.SetError("Could not detach capture target: %s" % err)
 
 
 def __lldb_init_module(debugger, internal_dict):

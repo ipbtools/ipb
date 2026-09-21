@@ -87,10 +87,10 @@ ipb stream --dir DIR [--count N] [--fps F] [--seconds S]
 ipb stream --stdout            # repeated [uint32 BE length][jpeg bytes] on stdout
 ```
 
-Frames are native-resolution baseline JPEG. Only distinct frames are written (a static screen yields
-~1/s, a changing screen ~40-57/s). Exit codes: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down,
-5 negotiation rejected, 6 stream did not start or the media server died, 7 no frames within the
-watchdog window, 8 output failed / consumer did not drain stdout / `--count` not reached,
+Frames are native-resolution baseline JPEG. Only distinct frames are written; a static screen may
+produce no output for extended periods, while changing-screen rates depend on host and content. Exit codes: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down,
+5 negotiation rejected, 6 stream/connection failure, 7 no initial output within the first-frame
+budget, 8 output failed / consumer did not drain stdout / `--count` not reached,
 9 a watchdog expired (the stage is printed first). See "Design (as shipped)" below for the
 ingress/writer split that makes a slow consumer drop frames instead of accumulating latency.
 
@@ -105,9 +105,9 @@ that path DOES require the `allow-conferencing` entitlement (sign with `Sources/
 and only works where AMFI honours it (this dev Mac: SIP off + `amfi_get_out_of_my_way=1`). It exists as a
 fallback/oracle, not the shipping path.
 
-Not yet verified on a stock, SIP-enabled Mac: dlopening the private frameworks and in-process AppleAVD
-decode should not need SIP-off, but that has not been proven on such a machine. See
-`docs/research/entitlement-astra-2026-09-08.md`.
+The earlier SIP-enabled verification gap was closed by the macOS 27 + SIP-on / iPhone 12 mini
+record in `docs/verification.md` (2026-09-08). The research review predates that run; current code
+changes still require their own matrix gate.
 
 ## Standalone path found: raw XPC + plain UDP socket + ObjC AVCVideoStream (2026-09-08, gpt-6-astra source review)
 
@@ -203,6 +203,10 @@ on the wire a consumer cannot pace playback correctly, which is why a live view 
 from a single latest-frame slot to `AVSampleBufferDisplayLayer`, using immediate presentation
 on an independent sample container. Absolute touch input runs through a separate serial queue
 with persistent service connections, bounded pending events, and no automatic replay.
+Each connection now retains exclusive ownership until its synchronous sender actually returns, even
+after the caller times out. Shutdown drains the queued release before closing admission, then waits
+for active owners with one shared deadline. It never cancels a connection underneath an active send.
+Report timeouts remain fatal because delivery is unknown; a synthesized UP is not guaranteed cleanup.
 Shortcuts match DeviceHub (Home, App Switcher, volume, screenshot, fit, actual size); see
 [README.md](../README.md#interactive-mirror-ipb-mirror) and the existing M1/M2/M3/M4 runtime
 records in [verification.md](verification.md). Statistics go to stderr; event CSV is produced
@@ -283,10 +287,13 @@ Still open:
   connections on a separate serial input queue. End-to-end input-to-display latency remains unmeasured.
 - **Slight frame loss remains**, comparable to what DeviceHub itself shows on the same device
   (user-observed, 2026-09-08). Believed to be link-level rather than client-side; not measured.
-- **Two 15 s captures stopped at t+5.81 s and still exited 0.** Not reproduced across five later
-  runs (20 s, 30 s, with a rotation), all of which ran full duration. Cause unknown. Related: the
-  12 s hard-stall guard ends a run and still returns 0 when frames stop mid-capture — whether a
-  stall should be a failure is an open contract decision.
+- **Idle-content timeout was reproduced and fixed (2026-09-21).** On an isolated Settings screen,
+  both stream and mirror falsely exited 7 after silence. Stream previously measured distinct output,
+  conflating deduplication with progress; decoded frames can also cease while idle. The first-frame
+  deadline remains 12 s, but after a valid image silence alone no longer ends a finite session.
+  Both clients stayed alive through a 22 s idle interval and resumed after Home. Explicit media stop,
+  server death and RemoteXPC errors fail; writer drain and outer stage watchdogs remain bounded.
+  A silent failure with no callback is still indistinguishable from idle until new content arrives.
 - **Watchdog budgets are unvalidated** (45 s setup, 5 s margins). No cold-start data.
 - **Exit 9 has no natural reproduction.** Reachable by inspection at three arming sites; triggering
   it needs fault injection that blocks one call while leaving the watchdog queue live.

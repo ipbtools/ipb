@@ -15,7 +15,7 @@ to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
 ## Requirements
 
 - A host whose installed CoreDevice package is 636.x or newer. This ships with Xcode 27 beta (`XcodeSystemResources.pkg`); it is what puts `UniversalHIDService`, the `HIDServiceID` helpers, and the embedded `UniversalHID.framework` into `/Library/Developer/PrivateFrameworks`.
-- Xcode 27 beta on the host. Its minimum macOS is 26.4, so macOS 26.4+ hosts qualify as well as macOS 27 beta hosts. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
+- macOS 27 + Xcode 27 beta on the host (the current v1 release matrix). macOS 26.5.1 has separate development verification records; those do not expand the supported release matrix. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
 - A connected iOS 27+ device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted. iOS 26 is no longer a supported target (dropped 2026-09-20, no device available to verify against). On iOS 26 the `touchscreenGesture` service (`0x501`) was absent, so `pointer`, `abs-pointer`, `scroll-report`, `scroll-gesture` and the mirror's scroll wheel never worked there. See `docs/verification.md`.
 - GitHub-hosted code should be treated as beta/private-ABI research, because Apple may change these interfaces between seeds.
 
@@ -196,7 +196,7 @@ falling behind.
 reached within it, the command exits 8 rather than reporting success with fewer frames.
 
 Exit codes for `ipb stream`: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down, 5 negotiation
-rejected, 6 stream did not start or the media server died, 7 no frames within the watchdog window,
+rejected, 6 stream/connection failure, 7 no initial output within the first-frame budget,
 8 output failed / the consumer did not drain stdout / `--count` not reached, 9 a watchdog expired
 (the stage — setup, collection, or shutdown — is printed before exit). When the consumer is slower
 than the device, frames are **dropped, not queued**; the count is reported on exit.
@@ -224,16 +224,20 @@ device's own scroll path (`0x501`, iOS 27 only). The shortcuts match DeviceHub:
 | ⌘0 | Zoom to fit |
 | ⌘1 | Actual size (falls back to fit if it exceeds the available screen) |
 
-Key repeat is ignored, so holding a shortcut sends one press.
+Key repeat is ignored, so holding a shortcut sends one press. The mirror does not yet forward
+ordinary typing like Device Hub's Capture Keyboard mode; use the CLI `key` commands for individual usages.
 
 **Requires a GUI login session**, just like `ipb stream`: in-process decoding needs
 `CVDisplayLink`. It works with SIP enabled and needs no entitlement; plain ssh is unsupported.
 
-While a mirror session runs, `ipb` renews the CoreDevice tunnel in the background (a `devicectl`
-call every few seconds). The tunnel is a lease, not a link: it drops about 10 seconds after the last
-`devicectl device ...` call, and HID traffic does not renew it, which used to freeze the mirror
-about 10 seconds into use. See `docs/verification.md` (2026-09-14) — the keepalive is a workaround
-and is marked `TODO(tunnel-keepalive)` in `bin/ipb`.
+While a mirror session runs, `ipb` holds a resident `devicectl notification observe`
+subscription to keep the CoreDevice tunnel lease alive. HID traffic alone does not renew the
+lease. This proxy keepalive is the accepted workaround; see `docs/verification.md`.
+
+A static display can stop publishing frames and resume when the screen changes. After the first
+valid frame, silence alone does not close the mirror or stream. Explicit stream/connection errors
+still fail; collection and shutdown remain bounded. A silent transport failure without an error
+callback cannot currently be distinguished from an idle display until new content arrives.
 
 The default run lasts 300 seconds; `--seconds` accepts values greater than 0 and at most 3600.
 The existing 8192-input-event cap also ends the run. Statistics retain their existing fields and
@@ -248,13 +252,13 @@ against a 1170×2532 screen). The mirror crops it rather than compensating for i
 aspect ratio matches the phone's and a click lands where it is drawn; see the 2026-09-09 record in
 [docs/verification.md](docs/verification.md).
 
-Not implemented: Siri (⇧⌥⌘H), screen recording (⇧⌘R), Action Button, and Camera Control. Siri and
-the hardware buttons lack usage-code evidence; recording lacks capture/recording behaviour
-evidence. The local 13 Pro also lacks Action Button and Camera Control hardware.
+Not implemented: Siri (⇧⌥⌘H), screen recording (⇧⌘R), Action Button, and Camera Control. A Device Hub Siri invocation has now been captured (code `0xcf`, states 0/1), but produced no visible
+Siri UI on the tested phone; its full typed page encoding and functional behavior still need validation.
+The other hardware buttons lack usage-code evidence; recording lacks capture/recording behavior evidence. The local 13 Pro also lacks Action Button and Camera Control hardware.
 
 Exit codes: 0 success, **1 input/connection failure**, 2 usage/local setup, 3 service socket or
 descriptor discovery failure, 4 tunnel/interface/bind failure, 5 negotiation failure,
-6 media/decoder/display failure, 7 no media frames for 12 seconds, **8 local I/O failure**
+6 media/decoder/display failure, 7 no initial media frame within 12 seconds, **8 local I/O failure**
 (including CSV output, descriptor capture, or screenshot shutdown drain), 9 setup/run/shutdown
 watchdog or input-drain timeout, 130 SIGINT, 143 SIGTERM. Unlike `stream`, mirror has input
 failure code 1 and no `--count` contract. Sent input is never automatically replayed.
@@ -348,25 +352,30 @@ compatibility matrix at the top of that file is the current state.
 The smoke gate is what keeps this honest: `scripts/smoke_matrix.sh` exercises service discovery,
 device selection, one report per HID feature, and — with `SMOKE_INTERACTIVE=1` — home, tap,
 recents, swipe, scroll, long press and a key, with a screenshot before and after each step.
+Run it in a GUI login session, including the noninteractive subset. Startup failures are failures,
+not a headless success. Pixel checks detect stale/no-op results; inspect the screenshots for the
+expected UI state before accepting a run. See [docs/devicehub-alignment.md](docs/devicehub-alignment.md)
+for the current comparison and verification boundary.
 
 ## Known limitations
 
 These are boundaries a user hits in normal use, not theoretical ones. Each links to a dated record;
 the living open-items list is at the head of [docs/verification.md](docs/verification.md).
 
-- **The device must be unlocked.** A locked device refuses the HID path with `RemotePairingError`
-  1016 (`unlockRequired`). Xcode's own Device Hub gets past this with an escrowed remote-unlock
-  keypair held in `remotepairingd` and gated by Apple-private entitlements, so it is a structural
-  boundary for any third-party tool, not something ipb can fix.
-- **System-presented dialogs do not respond to taps.** Permission prompts and similar
-  system UI ignore our digitizer reports, while ordinary app UI works normally. Not root-caused.
+- **Use an unlocked device.** The recorded locked-device failure is `RemotePairingError` 1016
+  (`unlockRequired`). Shipped symbols point to an escrowed remote-unlock keypair and private
+  entitlements in Apple's path. A controlled locked-device A/B is still needed before treating
+  that mechanism as the proven cause or a permanent impossibility for every third-party tool.
+- **Permission-prompt handling remains unverified.** On 2026-09-21, both ipb and Device Hub
+  dismissed the same SpringBoard “Remove App” confirmation with Cancel. The older blanket claim
+  that all system dialogs ignore ipb is withdrawn; the original permission prompt was not recreated.
 - **The long-running paths hold the CoreDevice tunnel by proxy.** `ipb mirror` and `ipb stream`
   keep a resident `devicectl` subscription alive because the tunnel is a ~10 s lease and taking a
   usage assertion directly needs an entitlement. If the mirror is killed abnormally the
   subscription is swept on exit, but a hard `SIGKILL` can leave it running for the grace period.
 - **`ipb screenrecord` is unsupported on the tested iOS 27.0 device** (devicectl reports error
   1001).
-- **The raw probe verbs are probes.** `nav-report`, `dock-report`, `pointer-report`,
+- **The raw probe verbs are probes.** `nav-report`, `dock-report`, `pointer` / `pointer-report`,
   `scroll-report`, `scroll-event`, `vendor-defined` and `uhid-swipe-report` are accepted by the
   service and return 0, but no device effect has ever been demonstrated for any of them.
 - **Everything here rides private Apple ABI** and can break on any Xcode beta seed.

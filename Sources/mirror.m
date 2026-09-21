@@ -59,6 +59,7 @@ extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc
 #include <stdatomic.h>
 #include <fcntl.h>
 #include <poll.h>
+#include "bounded_sender.h"
 // Evidence: docs/video-stream.md and docs/verification.md (2026-09-08), and
 // Sources/video_stream.m: mode-5 negotiation and VCImageQueue installation copied below.
 // HID evidence: docs/protocol.md Wire Format and Sources/action_sender.m:625,
@@ -172,6 +173,8 @@ static xrc_t gInput; // only input queue reads/writes this connection and gestur
 static int gInputFD=-1;
 static xrc_t gButton,gDigitizer;
 static int gButtonFD=-1,gDigitizerFD=-1;
+static ipb_bounded_sender gInputSender,gButtonSender,gDigitizerSender;
+static BOOL gSendersInitialized;
 static BOOL gInputLive;
 static double nowSec(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); return ts.tv_sec+ts.tv_nsec/1e9; }
 static void fail(int code,NSString *reason){
@@ -633,34 +636,24 @@ static int openInput(const char *dev,const char *feature,xrc_t *remote,int *fd){
 
 // Apple's HID senders are synchronous and cannot be cancelled. On a connection that has gone
 // invalid they block for hundreds of milliseconds to seconds -- measured 744 ms to 2846 ms, against
-// a 3.5-5.3 ms healthy median -- and then return 0, so a caller that waits on one strands every
-// event queued behind it (docs/verification.md, 2026-09-14). Run the call off the input queue and
-// stop waiting at a deadline. The abandoned call still runs to completion in the background; it
-// simply no longer owns the input queue. Expiry is a send failure, never a retry: nothing is re-sent.
-static int sendBounded(int (^call)(void)){
-    __block int result=0;
-    dispatch_semaphore_t done=dispatch_semaphore_create(0);
-    // Global concurrent queue: a stuck call must not hold up the next one behind it.
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
-        result=call();
-        dispatch_semaphore_signal(done);
-    });
-    if(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,
-            (int64_t)(SendDeadlineSeconds*NSEC_PER_SEC)))){
-        // Timed out. `result` belongs to the still-running block from here on; never read it.
-        atomic_fetch_add(&gAbandonedSends,1);
-        return SendTimedOutCode;
-    }
+// a 3.5-5.3 ms healthy median. The bounded sender runs the call off the input queue, but retains
+// ownership of its connection until the abandoned call really returns; no later call can overlap it.
+// Expiry is a send failure, never a retry: nothing is re-sent.
+static int sendBounded(ipb_bounded_sender *sender,int (^call)(void)){
+    bool started=false;
+    int result=ipb_bounded_call(sender,
+        ipb_bounded_now_ns()+(uint64_t)(SendDeadlineSeconds*NSEC_PER_SEC),call,&started);
+    if(result==SendTimedOutCode && started) atomic_fetch_add(&gAbandonedSends,1);
     return result;
 }
 
 // A C array cannot be captured by a block, and the report bytes must outlive an abandoned call,
 // so they are copied to the heap and the block owns the copy.
-static int sendReportBounded(xrc_t connection,const void *words,size_t length,uint64_t serviceID){
+static int sendReportBounded(ipb_bounded_sender *sender,xrc_t connection,const void *words,size_t length,uint64_t serviceID){
     void *copy=malloc(length);
     if(!copy) return SendTimedOutCode;
     memcpy(copy,words,length);
-    return sendBounded(^{
+    return sendBounded(sender,^{
         int code=coredevice_send_universalhid_hid_report(connection,copy,serviceID);
         free(copy);
         return code;
@@ -696,7 +689,7 @@ static void keyStep(unsigned index,unsigned step){
             uint64_t page=r.event.kind==KeyRecents?0xff01:0x0c;
             uint64_t usage=r.event.kind==KeyHome?0x40:r.event.kind==KeyRecents?0x10:
                            r.event.kind==KeyVolumeUp?0xE9:r.event.kind==KeyVolumeDown?0xEA:0x30;
-            code=sendBounded(^{ return step==2?coredevice_send_hid_button_barrier(gButton):
+            code=sendBounded(&gButtonSender,^{ return step==2?coredevice_send_hid_button_barrier(gButton):
                 coredevice_send_hid_button_custom(gButton,page,usage,(uint8_t)step); });
             // Hold is per-shortcut, not shared. The side button is duration-gated: the boundary is
             // 0.29 s (0.28 fails, 0.29 works -- user measurement 2026-09-15), identical on wired and
@@ -825,7 +818,7 @@ static void drainInput(void){
                             r.result=BuildFailed; r.reportCode=pointerCount;
                             inputError(@"AbsolutePointer report construction failed");
                         }else{
-                            int pointerCode=sendReportBounded(gInput,pointerWords,sizeof pointerWords,gScrollServiceID);
+                            int pointerCode=sendReportBounded(&gInputSender,gInput,pointerWords,sizeof pointerWords,gScrollServiceID);
                             if(pointerCode){
                                 r.result=failureFor(pointerCode,SendFailed); r.reportCode=pointerCode;
                                 r.reportReturn=nowSec();
@@ -839,9 +832,9 @@ static void drainInput(void){
                     BOOL pointerFailed=(r.result==BuildFailed || r.result==SendFailed || r.result==SendTimedOut);
                     if(!pointerFailed){
                         r.reportCode=activeMode==BottomEdge?
-                            sendBounded(^{ return coredevice_send_hid_digitizer_cgpoint(gDigitizer,
+                            sendBounded(&gDigitizerSender,^{ return coredevice_send_hid_digitizer_cgpoint(gDigitizer,
                                 event.x,event.y,0,0,1,starts?0:ends?2:1,3,0,0); }):
-                            sendReportBounded(gInput,words,sizeof words,scrolling?gScrollServiceID:gServiceID);
+                            sendReportBounded(&gInputSender,gInput,words,sizeof words,scrolling?gScrollServiceID:gServiceID);
                         r.reportReturn=nowSec();
                         r.result=r.reportCode?failureFor(r.reportCode,SendFailed):Sent;
                     }
@@ -853,7 +846,7 @@ static void drainInput(void){
                         // No digitizer barrier in the existing oracle. Its END return is
                         // the fourth point, just as for RECENTS; not device acknowledgement.
                         r.barrierCode=activeMode==BottomEdge?0:
-                            sendBounded(^{ return coredevice_send_universalhid_barrier(gInput); });
+                            sendBounded(&gInputSender,^{ return coredevice_send_universalhid_barrier(gInput); });
                         r.barrierReturn=nowSec();
                         if(r.barrierCode){
                             r.result=failureFor(r.barrierCode,BarrierFailed);
@@ -1495,6 +1488,10 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
 
     gInputQueue=dispatch_queue_create("ipb.mirror.input",DISPATCH_QUEUE_SERIAL);
     gInputGroup=dispatch_group_create();
+    ipb_bounded_sender_init(&gInputSender);
+    ipb_bounded_sender_init(&gButtonSender);
+    ipb_bounded_sender_init(&gDigitizerSender);
+    gSendersInitialized=YES;
     dispatch_group_async(gInputGroup,gInputQueue,^{
         if(openInput(dev,"com.apple.coredevice.feature.remote.universalhidservice",&gInput,&gInputFD)) return;
         discoverService(); // scroll ID is discovered even with --service-id
@@ -1514,7 +1511,7 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     // hardwareGestureControls.actionButton / .sideButton use ConditionalKeyboardShortcut;
     // neither menu item appears with the 13 Pro. Revisit on corresponding hardware.
     LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⌘L=Lock/Wake, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size (key repeat ignored).");
-    LOGE("Siri (⇧⌥⌘H): not implemented; usage-code evidence missing. Recording (⇧⌘R): not implemented; capture/recording behavior evidence missing. Action Button / Camera Control: usage-code evidence and corresponding local hardware missing.");
+    LOGE("Siri (⇧⌥⌘H): not implemented; full encoding/behavior unverified. Recording (⇧⌘R): not implemented; capture/recording behavior evidence missing. Action Button / Camera Control: usage-code evidence and corresponding local hardware missing.");
     armWatchdog(watchdog,runSeconds+10);
     double deadline=nowSec()+runSeconds;
     NSTimer *timer=[NSTimer timerWithTimeInterval:1.0/120 repeats:YES block:^(NSTimer *t){
@@ -1522,8 +1519,10 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
             if(atomic_load(&gFailure)) requestClose(@"connection/stream failure");
             if(nowSec()>=deadline) requestClose(@"run duration reached");
             if(gSubmitted>=Capacity-1) requestClose(@"8192-event oracle allocation limit reached");
-            pthread_mutex_lock(&gLock); double last=gLastFrame; pthread_mutex_unlock(&gLock);
-            if(nowSec()-last>12){ fail(7,@"no media frames for 12s"); requestClose(@"media stall"); }
+            pthread_mutex_lock(&gLock); double last=gLastFrame; BOOL received=gFrames>0; pthread_mutex_unlock(&gLock);
+            // Device screens can stop publishing while static, then resume on input.
+            // Explicit media/connection errors still fail; silence only bounds first frame.
+            if(!received && nowSec()-last>12){ fail(7,@"no initial media frame within 12s"); requestClose(@"first frame timeout"); }
             if(!gClosing) presentLatest();
             if(gClosing){
                 [NSApp stop:nil];
@@ -1544,10 +1543,23 @@ static void shutdownMirror(void){
     // UP is already on the ordered input chain. Keep every private call bounded
     // by the independent shutdown watchdog, including stop/cancel.
     armWatchdog(gWatchdog,10);
-    if(gInputGroup && dispatch_group_wait(gInputGroup,dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC)))
+    uint64_t senderDeadline=ipb_bounded_now_ns()+5ull*NSEC_PER_SEC;
+    if(gInputGroup && dispatch_group_wait(gInputGroup,ipb_bounded_dispatch_deadline(senderDeadline)))
         fail(9,@"input drain exceeded 5s; device release is NOT guaranteed");
+    // requestClose() has already queued the ordered UP. Do not close admission
+    // until that worker has had its bounded chance to submit the release.
     pthread_mutex_lock(&gLock);
     gStopping=YES; gCollect=NO;
+    pthread_mutex_unlock(&gLock);
+    bool inputIdle=true,buttonIdle=true,digitizerIdle=true;
+    if(gSendersInitialized){
+        inputIdle=ipb_bounded_sender_close(&gInputSender,senderDeadline);
+        buttonIdle=ipb_bounded_sender_close(&gButtonSender,senderDeadline);
+        digitizerIdle=ipb_bounded_sender_close(&gDigitizerSender,senderDeadline);
+    }
+    if(!inputIdle || !buttonIdle || !digitizerIdle)
+        fail(9,@"HID sender drain exceeded shutdown deadline; device release is NOT guaranteed");
+    pthread_mutex_lock(&gLock);
     if(gLatest){ CFRelease(gLatest); gLatest=NULL; }
     if(gScreenshotFrame){ CVPixelBufferRelease(gScreenshotFrame); gScreenshotFrame=NULL; }
     pthread_mutex_unlock(&gLock);
@@ -1558,14 +1570,14 @@ static void shutdownMirror(void){
     if(gInputGroup && !dispatch_group_wait(gInputGroup,DISPATCH_TIME_NOW)){
         dispatch_group_async(gInputGroup,gInputQueue,^{
             pthread_mutex_lock(&gLock); gInputLive=NO; pthread_mutex_unlock(&gLock);
-            if(gButton) xpc_remote_connection_cancel(gButton);
-            if(gDigitizer) xpc_remote_connection_cancel(gDigitizer);
-            if(gButtonFD>=0){ close(gButtonFD); gButtonFD=-1; }
-            if(gDigitizerFD>=0){ close(gDigitizerFD); gDigitizerFD=-1; }
-            if(gInput) xpc_remote_connection_cancel(gInput);
-            if(gInputFD>=0){ close(gInputFD); gInputFD=-1; }
+            if(buttonIdle && gButton) xpc_remote_connection_cancel(gButton);
+            if(digitizerIdle && gDigitizer) xpc_remote_connection_cancel(gDigitizer);
+            if(buttonIdle && gButtonFD>=0){ close(gButtonFD); gButtonFD=-1; }
+            if(digitizerIdle && gDigitizerFD>=0){ close(gDigitizerFD); gDigitizerFD=-1; }
+            if(inputIdle && gInput) xpc_remote_connection_cancel(gInput);
+            if(inputIdle && gInputFD>=0){ close(gInputFD); gInputFD=-1; }
         });
-        if(dispatch_group_wait(gInputGroup,dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC))) fail(9,@"input cancellation exceeded 2s");
+        if(dispatch_group_wait(gInputGroup,ipb_bounded_dispatch_deadline(senderDeadline))) fail(9,@"input cancellation exceeded shutdown deadline");
     }
     if(gMediaRemote) xpc_remote_connection_cancel(gMediaRemote);
     if(gMediaService) xpc_connection_cancel(gMediaService);

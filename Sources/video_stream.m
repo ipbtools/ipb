@@ -10,11 +10,10 @@
 //   xpc_dictionary_set_fd(socks,"avcKeySharedSocket",fd) -> AVCVideoStream initWithNetworkSockets:options:
 //   -[AVCVideoStream requestLastDecodedFrame] -> delegate stream:didGetLastDecodedFrame: -> baseline JPEG NSData
 //
-// Decode runs out-of-process in the system daemon avconferenced, which gates the client on the
-// entitlement com.apple.videoconference.allow-conferencing (see docs; distribution caveat).
+// Decode runs in-process by default. Optional --daemon uses avconferenced and its entitlement gate.
 //
 // Exit codes: 0 ok; 2 usage/setup; 3 socket/service refused; 4 tunnel down; 5 negotiation rejected;
-//             6 stream did not start/server died; 7 no frames within the watchdog window;
+//             6 stream/connection failed; 7 no initial output within the first-frame budget;
 //             8 output failed/incomplete (including undrained consumer or unmet count);
 //             9 process watchdog expired (setup, framework call, or shutdown stalled).
 
@@ -82,7 +81,9 @@ static BOOL gStdout = NO;          // stream frames to stdout as [4-byte BE leng
 static int gSaved = 0, gPulls = 0;
 static unsigned long gPrevHash = 0;
 static double gLastSaveT = 0;       // writer-owned
-static double gLastOutputT = 0, gLastRequestT = 0; // protected by gFrameLock
+static double gLastRequestT = 0; // protected by gFrameLock
+static double gLastDecodedT = 0; // receive progress, independent of duplicate-image suppression
+static unsigned long gDecodedFrames = 0;
 static AVCVideoStream *gStream = nil;
 static pthread_mutex_t gFrameLock = PTHREAD_MUTEX_INITIALIZER;
 static dispatch_queue_t gDelegateQueue, gWriterQueue;
@@ -101,6 +102,13 @@ static void stopFramesLocked(void){
     gStopping=YES;
     if(gLatest){ CFRelease(gLatest); gLatest=NULL; }
     gLatestJPEG=nil;
+}
+static void mediaFailure(NSString *reason){
+    pthread_mutex_lock(&gFrameLock);
+    BOOL active=!gStopping;
+    if(active){ if(!gFailure) gFailure=6; stopFramesLocked(); }
+    pthread_mutex_unlock(&gFrameLock);
+    if(active) LOGE("%s",reason.UTF8String);
 }
 static BOOL gDaemon = NO;   // --daemon: decode in avconferenced (needs entitlement); default is in-process
 
@@ -166,6 +174,9 @@ static id gImageQueue = nil;   // captured live VCImageQueue
     if(!sb) return;
     CMTime pts=CMSampleBufferGetPresentationTimeStamp(sb);
     pthread_mutex_lock(&gFrameLock);
+    if(!gStopping && CMTIME_IS_NUMERIC(pts) && CMSampleBufferGetImageBuffer(sb)){
+        gLastDecodedT=nowSec(); gDecodedFrames++;
+    }
     // Reject invalid/late timestamps before they can replace a newer pending frame.
     if(gStopping){
         // Shutdown callbacks do not count as timestamp drops.
@@ -231,7 +242,7 @@ static void emitJPEG(NSData *jpeg){
     gPrevHash=h; gLastSaveT=t;
     gSaved++;
     pthread_mutex_lock(&gFrameLock);
-    gReportedSaved=gSaved; gLastOutputT=nowSec(); // only completed output renews the stall guard
+    gReportedSaved=gSaved;
     if(gMaxFrames>0 && gSaved>=gMaxFrames) stopFramesLocked();
     pthread_mutex_unlock(&gFrameLock);
 }
@@ -252,6 +263,7 @@ static void emitJPEG(NSData *jpeg){
     if(!gStopping){
         gPulls++;
         if([f isKindOfClass:[NSData class]]){
+            if([(NSData*)f length]){ gLastDecodedT=nowSec(); gDecodedFrames++; }
             if(gLatestJPEG) gBackpressureDrops++;
             gLatestJPEG=(NSData*)f;
             wakeWriterLocked();
@@ -259,14 +271,10 @@ static void emitJPEG(NSData *jpeg){
     }
     pthread_mutex_unlock(&gFrameLock);
 }
-- (void)streamDidStop:(id)s {}
-- (void)vcMediaStreamDidStop:(id)s {}
+- (void)streamDidStop:(id)s { mediaFailure(@"unexpected stream stop"); }
+- (void)vcMediaStreamDidStop:(id)s { mediaFailure(@"unexpected media stream stop"); }
 - (void)streamDidServerDie:(id)s {
-    pthread_mutex_lock(&gFrameLock);
-    BOOL active=!gStopping;
-    if(active){ if(!gFailure) gFailure=6; stopFramesLocked(); }
-    pthread_mutex_unlock(&gFrameLock);
-    if(active) LOGE("media server (avconferenced) closed the stream");
+    mediaFailure(@"media server (avconferenced) closed the stream");
 }
 @end
 
@@ -375,7 +383,13 @@ int main(int argc,char**argv){
     uint64_t flags=xpc_dictionary_get_uint64(out,"remoteXPCVersionFlags");
     if(sfd<0) DIE(3,"no service fd");
     xrc_t rc=xpc_remote_connection_create_with_connected_fd(sfd,dispatch_queue_create("ipb.video.rc",0),flags,0);
-    xpc_remote_connection_set_event_handler(rc,^(xpc_object_t ev){});
+    if(!rc) DIE(3,"media RemoteXPC create failed");
+    xpc_remote_connection_set_event_handler(rc,^(xpc_object_t ev){
+        if(ev && xpc_get_type(ev)==XPC_TYPE_ERROR){
+            const char *desc=xpc_dictionary_get_string(ev,XPC_ERROR_KEY_DESCRIPTION);
+            mediaFailure([NSString stringWithFormat:@"media RemoteXPC: %s",desc?desc:"unknown"]);
+        }
+    });
     xpc_remote_connection_activate(rc);
 
     int rtp=socket(AF_INET6,SOCK_DGRAM,0); if(rtp<0) DIE(3,"socket: %s",strerror(errno));
@@ -436,7 +450,7 @@ int main(int argc,char**argv){
     gWriterGroup=dispatch_group_create();
     gNewestPTS=kCMTimeInvalid;
     dispatch_sync(gWriterQueue,^{ gLastSaveT=nowSec(); });
-    gLastOutputT=gLastRequestT=nowSec();
+    gLastRequestT=nowSec();
     if(!gDaemon) installInProcessSink();  // in-process capture (needs a GUI display session)
     Class VS=objc_getClass("AVCVideoStream"); if(!VS) DIE(6,"no AVCVideoStream class");
     NSError *se=nil;
@@ -449,7 +463,7 @@ int main(int argc,char**argv){
     [vs start];
 
     // warm up, then collect frames; in-process frames arrive by push, daemon frames by pull.
-    int stalledOut=0;
+    BOOL firstFrameExpired=NO;
     for(int w=0; w<50; w++) [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];  // ~2.5s
     pthread_mutex_lock(&gFrameLock);
     BOOL active=!gStopping;
@@ -466,17 +480,17 @@ int main(int argc,char**argv){
         double t=nowSec();
         pthread_mutex_lock(&gFrameLock);
         BOOL stopped=gStopping;
-        double lastSave=gLastOutputT;
+        int saved=gReportedSaved;
         BOOL rearm=gDaemon && !stopped && !gBusy && (t-gLastRequestT)>2.0;
         if(rearm) gLastRequestT=t;
         pthread_mutex_unlock(&gFrameLock);
         if(stopped) break;
         if((t-start) >= runSeconds) break;
         if(rearm) [vs requestLastDecodedFrame];  // daemon: re-arm on stall
-        if((t-lastSave) > 12.0){ stalledOut=1; break; }  // hard stall guard (no frames at all)
+        // A static screen may stop producing frames altogether. Silence after a valid
+        // image is not proof of a failed stream; retain the requested finite budget.
+        if(!saved && (t-start)>12.0){ firstFrameExpired=YES; break; }
     }
-    // stalledOut distinguishes "ran the full budget" from "gave up early because frames stopped";
-    // without it a --seconds 60 run that ended at 15 s reported success (Rule 2).
     // Fresh complete shutdown budget, independent of time left in collection:
     // existing 5s writer grace + 5s framework stop policy + 5s scheduling headroom.
     armWatchdog(watchdog,watchdogQueue,writerGrace+stopGrace+watchdogMargin,
@@ -493,22 +507,22 @@ int main(int argc,char**argv){
     int failure=gFailure;
     unsigned long dropped=gBackpressureDrops;
     unsigned long invalidPTS=gInvalidPTS, nonIncreasingPTS=gNonIncreasingPTS;
+    unsigned long decoded=gDecodedFrames;
+    double decodedAge=gLastDecodedT?nowSec()-gLastDecodedT:-1;
     pthread_mutex_unlock(&gFrameLock);
     LOGE("saved %d distinct frame(s) from %d pull(s); dropped %lu frame(s) due to backpressure; invalidPTS %lu; nonIncreasingPTS %lu", saved, pulls, dropped, invalidPTS, nonIncreasingPTS);
+    LOGE("decoded %lu frame(s); last decoded age %.3fs",decoded,decodedAge);
     // exit() would flush stdout and could wait on the blocked writer's stdio lock.
     if(writerBlocked || failure==8) _Exit(8);
     // Preserve the private API's main-thread call site. The watchdog queue never waits
     // for the main thread or writer; the full shutdown deadline remains armed during stop.
     [vs stop];
     if(failure) _Exit(failure);
-    if(!saved) _Exit(7);
-    if(gMaxFrames>0 && saved<gMaxFrames) _Exit(8);
-    // The 12 s stall guard fired before the requested budget elapsed: the run did not do what was
-    // asked, so it must not exit 0. 7 is already documented as "no frames within the watchdog
-    // window", which is exactly this.
-    if(stalledOut){
-        LOGE("stopped early: no new frame for 12s, before the requested --seconds elapsed");
+    if(firstFrameExpired){
+        LOGE("no initial output within 12s");
         _Exit(7);
     }
+    if(!saved) _Exit(7);
+    if(gMaxFrames>0 && saved<gMaxFrames) _Exit(8);
     _Exit(0); // all output was flushed by the writer; do not wait for framework teardown
 }

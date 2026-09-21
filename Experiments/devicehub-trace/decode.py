@@ -28,7 +28,7 @@ REPORT_IDS = {
 # plus the grown sizes observed on the wire (see docs/protocol.md).
 LEN_HINTS = {
     19: "AbsolutePointer(19)", 21: "Scroll(7), grown", 58: "Digitizer(9), grown",
-    13: "Scroll(7), initial", 31: "Keyboard(1), initial", 17: "Pointer(5)",
+    13: "Scroll(7), initial", 31: "Keyboard(1), old short allocation", 39: "Keyboard(1)", 17: "Pointer(5)",
     9: "Consumer(2)", 5: "AppleVendorTopCase(4)", 3: "AppleVendorKeyboard(3)",
 }
 
@@ -62,6 +62,82 @@ def iter_reports(rec):
         for sub in res.get("reports") or []:
             if isinstance(sub, dict):
                 yield sub
+
+
+def _bytes(value):
+    """Decode a captured hex string without changing or reformatting the source."""
+    if not value:
+        return None
+    try:
+        return bytes.fromhex(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def service_id(rec):
+    """Return the HIDServiceID value captured by the dereferenced x2 argument."""
+    raw = _bytes((rec.get("deref") or {}).get("x2"))
+    if raw is None or len(raw) < 8:
+        return None
+    return int.from_bytes(raw[:8], "little")
+
+
+def digitizer_fields(rep):
+    """Decode the 464-bit DigitizerReport descriptor from docs/protocol.md.
+
+    The report is little-endian at the bit level. Keep the raw report separate;
+    these fields are a view of it, not a replacement for captured evidence.
+    """
+    raw = _bytes(rep.get("bytes"))
+    if raw is None or len(raw) < 58 or raw[0] != 9:
+        return None
+
+    def bits(offset, width):
+        value = int.from_bytes(raw, "little")
+        return (value >> offset) & ((1 << width) - 1)
+
+    count = bits(8, 8)
+    maximum = bits(16, 8)
+    contacts = []
+    for index in range(min(count, 5)):
+        base = 24 + index * 40
+        contacts.append({
+            "index": index,
+            "identifier": bits(base, 5),
+            "resting": bits(base + 5, 1),
+            "touch": bits(base + 6, 1),
+            "inRange": bits(base + 7, 1),
+            "x": bits(base + 8, 16),
+            "y": bits(base + 24, 16),
+            "identity": bits(320 + index * 8, 8),
+        })
+    return {
+        "contactCount": count,
+        "contactCountMaximum": maximum,
+        "contacts": contacts,
+        "remoteTimestamp": bits(360, 64),
+    }
+
+
+def digitizer_summary(rep, rec):
+    fields = digitizer_fields(rep)
+    if fields is None:
+        return None
+    sid = service_id(rec)
+    sid_text = "unknown" if sid is None else "0x%x" % sid
+    contacts = []
+    for contact in fields["contacts"]:
+        contacts.append(
+            "#%d id=%d resting=%d touch=%d inRange=%d x=%d y=%d identity=0x%02x"
+            % (contact["index"], contact["identifier"], contact["resting"],
+               contact["touch"], contact["inRange"], contact["x"],
+               contact["y"], contact["identity"])
+        )
+    return ("service_id=%s service_id_raw=%s count=%d max=%d contacts=[%s] "
+            "remoteTimestamp=%d" %
+            (sid_text, (rec.get("deref") or {}).get("x2", "-"),
+             fields["contactCount"], fields["contactCountMaximum"],
+             "; ".join(contacts), fields["remoteTimestamp"]))
 
 
 def load_actions(path):
@@ -159,6 +235,10 @@ def main():
                         if alt:
                             for k, v in alt.items():
                                 print("      %-26s %s=%s" % (name, k, v))
+                if name.startswith("Digitizer("):
+                    summary = digitizer_summary(rep, rec)
+                    if summary:
+                        print("      %s" % summary)
             if rec.get("words"):
                 print("      words   %s" % rec["words"])
             if rec.get("doubles"):

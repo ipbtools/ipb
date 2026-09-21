@@ -61,20 +61,16 @@ connected services {messageType: "Request", featureIdentifier, payload: {connect
 barrier            {isBarrier: true}   (synchronous, empty dictionary reply)
 ```
 
-**Provenance warning.** The XPC envelope shapes above are valid whoever sends them — they were read
-at the send boundary and do not depend on the client. The *report bytes* below are a different
-matter: they were captured from **ipb's own helper**, not from Device Hub, and must not be read as a
-Device Hub reference. Device Hub's digitizer traffic has never been captured (see the 2026-09-20
-protocol alignment audit in `docs/verification.md`).
+**Provenance.** The envelope shapes above were captured at the send boundary. The early examples
+below came from **ipb's own helper**, not Device Hub: the old helper emitted a 31 B KeyboardReport
+and a 40 B DigitizerReport, with `09 01 01 c0 ff 7f ff 7f 00…` down and
+`09 00 01 00 ff 7f ff 7f 00…` up at (0.5, 0.5). They are historical pre-fix output, not current
+framing or a Device Hub oracle.
 
-ipb's own report bytes: keyboard `KeyboardReport` is 31 bytes with report id `0x01`; the touchscreen `DigitizerReport` is 40 bytes with report id `0x09`, for example `09 01 01 c0 ff 7f ff 7f 00…` for a contact at (0.5, 0.5) and `09 00 01 00 ff 7f ff 7f 00…` for the release.
-
-Both of those sizes are ipb's, and both are below what the report descriptors specify. Device Hub's
-captured ⌘L `KeyboardReport` is **39 bytes**, not 31 (see "Lock: Device Hub does not send it over
-UniversalHID"), and the descriptor gives `DigitizerReport` 464 bits / 58 bytes once contact-0 swipe
-bits are written (see "Report descriptors: the authoritative field map"). The 31-byte keyboard
-allocation was a live defect; it was fixed on 2026-09-21 and ipb now allocates the full 312 bits,
-so the bytes quoted above are the pre-fix output.
+Current ipb allocations are Keyboard **39 B** and Digitizer **58 B**, and its digitizer lift keeps
+count=1. Device Hub's actual tap, drag, keyboard and system-confirmation Cancel reports were captured
+on 2026-09-21; see “Device Hub digitizer, keyboard and target IDs” below for the measured seed, raw
+bytes, service IDs, remaining field differences and effect boundaries.
 
 Indigo features (`hid.button`, `hid.digitizer`, `hid.scroll`; `hid.vendordefined` follows the same shape):
 
@@ -725,19 +721,20 @@ Verified high-level use:
 ## Current Gaps
 
 The living list of open items for the project as a whole is the head of `docs/verification.md`;
-this section covers only the protocol-level gaps. Ranked by the 2026-09-20 alignment audit:
+this section covers only the protocol-level gaps, refreshed after the 2026-09-21 capture:
 
-1. **Tap framing has never been checked against Device Hub.** Contact identity is never set,
-   `remoteTimestamp` is never set, and the pointer-buttons byte on a click is unknown. Device Hub's
-   own digitizer traffic was never captured — see the audit record in `docs/verification.md`.
-2. **`KeyboardReport` is 31 bytes against a 312-bit (39 B) descriptor**, and the timestamp setter
-   no-ops below 39 B, so adding a timestamp later would silently do nothing.
-3. **Which `HIDServiceID` Device Hub targets is unobserved.** The IDs ipb uses are read from the
-   device via `connectedServiceDescriptors()`, but the capture never dereferenced the `HIDServiceID`
-   argument, so which service Device Hub picks per gesture is unknown.
-4. **Scroll `accelX = dx/40` and the momentum decay are invented**; only the phase sequence around
-   them is captured.
-5. **System dialogs ignore our taps** and no hypothesis is confirmed (Gap 2).
+1. **Tap fields differ, but the observed differences are not a demonstrated failure cause.**
+   The 2026-09-21 capture below shows Device Hub's count/max, identity and nonzero timestamp;
+   ipb's count/size and service target agree, while max/identity/timestamp differ.
+2. **Keyboard size is fixed at 39 B.** Device Hub's 39 B reports and `0x200` target were captured
+   while typing `ipb` into Settings search; timestamp parity is still absent.
+3. **Service targets are now observed:** digitizer `0x101`, keyboard `0x200`, AbsolutePointer and
+   Scroll `0x501`. Button menu actions use the typed Indigo socket, not a UniversalHID report.
+4. **Scroll acceleration and momentum remain uncalibrated.** The complete historical phase
+   sequence is captured, but `accelX = dx/40` and the decay are not established by it. The latest
+   synthetic wheel produced only a zero-movement may-begin report and no visible scroll.
+5. **Permission prompts remain unverified.** The “Remove App” confirmation can be cancelled by
+   both clients on the latest tested seed. Do not generalize that result to TCC/privacy prompts.
 
 Older ABI-surface gaps, still accurate:
 
@@ -1069,8 +1066,8 @@ was identified on 2026-09-21 and it is not exotic: it is the Indigo button socke
 open was that `taps.tsv` bound only `UniversalHIDService.send`, so the Indigo sockets could not
 have produced a hit no matter what Device Hub did.
 
-Note also that `KeyboardReport` on the wire is 39 bytes, where `ipb`'s builder allocates
-`0xf8` = 248 bits = 31 bytes and writes no timestamp.
+At the time of this capture, `ipb` allocated 31 B for the 39 B keyboard report. The allocation
+was fixed to `0x138` = 312 bits on 2026-09-21; ipb still does not set its remote timestamp.
 
 
 ## Report descriptors: the authoritative field map (2026-09-20)
@@ -1117,14 +1114,11 @@ a timestamp later without fixing the allocation would silently do nothing.
 
 ### What this says about `ContactCount`
 
-Per the HID specification, Contact Count is the number of contacts **reported in the current
-report**, not the number of fingers still touching. `makeDigitizerReportData` currently sends
-`contactCount = touching ? 1 : 0`, so a lift reports **zero** contacts while still populating contact
-0 with `Touch` clear. A decoder iterating `0..<contactCount` never sees that lift.
-
-This is a **hypothesis about a defect**, not yet a device-verified fix — an attempt to test it on
-2026-09-20 was void because the device was on the passcode screen throughout. Recorded here because
-the descriptor and the specification agree on what the field means.
+`makeDigitizerReportData` now sends `contactCount = 1` on both down and lift, describing contact 0
+with Touch/InRange cleared on lift. The earlier `touching ? 1 : 0` implementation is historical.
+The latest Device Hub down/up capture independently confirms count 1 on both reports. The earlier
+locked-screen experiment remains void; neither this agreement nor the later Cancel success proves
+that the count change fixed the original permission-prompt failure.
 
 
 ## Device Hub's buttons: captured (source: runtime capture, 2026-09-21)
@@ -1174,3 +1168,41 @@ three actions in a run, so all three ride one page; the usage values themselves
   Both work on device. Recorded as a known divergence, not a defect: switching `recents` to the
   double-press would trade a verified one-event path for Apple's four-event path, and that is a
   behaviour change that needs its own on-device evidence before it is made.
+
+
+## Device Hub digitizer, keyboard and target IDs (runtime capture, 2026-09-21)
+
+Seed measured for this run: **macOS 26.5.1 (25F80), Xcode 27 Beta 6, Device Hub 27.0 (255.2.3.5), CoreDevice 642.15,
+iPhone 13 Pro iOS 27.0 (24A437), wired**. This is distinct from the seed labels in older records.
+All ten entries in `Experiments/devicehub-trace/taps-full.tsv` resolved before input. The initial
+capture had a zero-input baseline, 14 digitizer reports and 4 typed button calls, with no shed taps.
+The follow-up capture had 21 calls, no shed taps, and clean detach/target survival. The decoder
+reads the first eight little-endian bytes of dereferenced `x2` as the service ID.
+
+| Actual operation | Entry/report | Observed target and fields |
+| --- | --- | --- |
+| Settings tap; Settings drag; Remove App menu and Cancel | `uhid_send_id`, Digitizer ID 9, 58 B | `0x101`; count=1, max=5; contact identifier=2, identity=2; Touch/InRange=1/1 down, 0/0 up; timestamp nonzero |
+| Type `ipb` in Settings search | `uhid_send_id`, Keyboard ID 1, 39 B, six reports | `0x200`; down/up pairs; timestamps nonzero; text visibly arrived |
+| Pointer movement | `uhid_send_id`, AbsolutePointer ID 19, 19 B | `0x501`; four reports in follow-up capture |
+| Synthetic wheel on Settings list | `uhid_send_id`, Scroll ID 7, 21 B | `0x501`; only phase `0x80`, zero movement; no visible scrolling |
+| Siri menu | `indigo_button_typed` | dereferenced code `0xcf`, states 0 then 1 about 0.509 s apart; full page representation not decoded; no visible Siri UI |
+| Rotate Left then Right | Native window observation | phone preview rotated and restored; native device screenshot remained portrait; zero calls on the ten HID taps during rotation |
+
+Representative normal tap, preserving raw bytes:
+
+```text
+down 090105c2189c28b200000000000000000000000000000000000000000000000000000000000000000200000000159c521a3b1800000000000000
+up   09010502189c28b200000000000000000000000000000000000000000000000000000000000000000200000000d89c551a3b1800000000000000
+service ID bytes: 0101000000000000
+```
+
+The system Cancel pair also used `0x101`, count=1/max=5, contact identifier/identity=2,
+X=32798, Y=41395, and timestamps 26648605825097 / 26648606276108. The current ipb tap uses
+max=1, identifier=0, and unset identity/timestamp. These are measured differences, not reasons to
+change fields blindly: the same Cancel action succeeded with current ipb and with Device Hub.
+
+The synthetic wheel trace does **not** characterize a physical trackpad gesture or disprove Device
+Hub scrolling. It confirms target selection only. Rotate appears to be presentation behavior;
+absence from these ten HID taps does not rule out another non-HID control path. Record Screen and
+Action Button were disabled in Device Hub's Controls menu on this phone. No capability is inferred
+merely from a menu label. See `docs/devicehub-alignment.md` for outstanding functional parity work.
