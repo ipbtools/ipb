@@ -13,8 +13,9 @@ The latest native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with an u
 | **Supported release matrix gate** | macOS 27 host build and host fault test passed in isolation, but that host currently selects Xcode 26.4 and its paired iOS 27 device is unavailable. | Hardware/environment prerequisite: macOS 27 + Xcode 27 + an available unlocked iOS 27 phone. Do not label the local macOS 26 run a release pass. |
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
-| **Agent observation contract** | Pixel change alone is not action success. UI tree, arbitrary Unicode input and frame identity/PTS/orientation metadata are absent. `AccessibilityAudit`/lockdown is a static candidate; the live service and UI-tree payload are unconfirmed. | Agent research/implementation work, scoped separately from this native reliability patch. Prioritize frame/action correlation and live AX service verification. |
-| **Device Hub function parity** | Mirror lacks keyboard capture/ordinary text input, display rotation, Siri, recording, Action Button and Camera Control. Siri code/state was captured but had no visible effect; recording and Action Button were disabled on the tested 13 Pro. | Agent can add verified host UI behavior and validate keyboard forwarding. Hardware buttons require corresponding hardware; disabled menus are not proven capabilities. |
+| **Agent observation contract** | Pixel change alone is not action success. Stream lacks frame identity/PTS/orientation metadata. Live `devicectl info displays` now provides primary size, display direction, scale and backlight; `info details` provides capability IDs. UI tree remains unverified. | Agent-fixable: structured display/capability snapshot first, then frame/action correlation. Select the primary display explicitly; a Wireless entry disappeared after Device Hub quit. AX remains a separate research path. |
+| **Keyboard and focused text** | Device Hub chords use a held-usage set; Command+A/Backspace cleared search. `aA1!` became `啊A1!` with the phone input method. Synthetic Unicode emitted no HID reports; host paste only emitted Command+V. Existing UTF-8 clipboard copy/get works historically, but focused insertion is unverified; current clipboard info returns policy error 26006. | Agent-fixable: chord state and focused mirror capture; separate text-insertion experiment. Do not equate clipboard round-trip or key delivery with literal text insertion. |
+| **Orientation and other Device Hub parity** | Rotate Left changed device orientation to landscapeLeft while Settings display stayed rot0; rotated clicks work and pointer/touch coordinate pairs differ. Mirror lacks this transform layer. Siri code/state had no visible effect; recording and Action Button were disabled on the 13 Pro. | Agent can implement device/display/presentation separation after the full orientation matrix. Other buttons require corresponding evidence/hardware; absent recording/audio-selection capabilities should be surfaced explicitly. |
 | **Tap/keyboard timestamp and contact identity** | Captured count and sizes now agree. Device Hub uses max=5, identifier=2, identity=2 and nonzero timestamp; current ipb differs. No demonstrated failing effect caused by these differences. | Known, not patched speculatively. Compare on an actual remaining failure before changing fields. |
 | **Silent media loss / cold-start budgets** | Static silence is now correctly tolerated; explicit stream/connection errors fail. Silent loss without an error callback remains indistinguishable from idle until content changes. Setup/watchdog margins are policy values without cold-start calibration. | Agent-fixable measurement work; do not treat a frame-count ceiling as an established transport lifetime. |
 | **Probe commands and standalone transport** | Raw reports may return 0 without visible effects. Xcode-free Python transport has a spike, not a completed CLI/MCP/screenshot implementation. | Keep probes labelled and stage-4 work separate. |
@@ -4073,3 +4074,49 @@ still lacks its previously recorded Xcode/device prerequisites.
 Local artifacts: `~/.local/state/ipb/20260921-alignment/mirror-unlocked/` contains `run.json`,
 `summary.json`, `mirror.log`, `events.csv` and the key device screenshots. The screenshot-shortcut
 output path is recorded in `run.json`. Raw artifacts remain outside version control.
+
+
+## 2026-09-21 — Deeper Device Hub keyboard, display and rotation research
+
+Source revision `c14eed6`; macOS **26.5.1 (25F80)**, Xcode **27 Beta 6**, Device Hub
+**27.0 (255.2.3.5)**, DeviceKit **255.2.3**, CoreDevice **642.15**, wired **iPhone 13 Pro /
+iOS 27.0 (24A437)**. `lock-state` explicitly returned `passcodeRequired: false`.
+This was a research pass with no product code changes, build or smoke rerun.
+
+Two native Device Hub captures resolved all ten HID taps, shed none and detached with lldb exit 0:
+`text-input` recorded **35 calls** (24 Keyboard, eight Digitizer, three AbsolutePointer, including
+setup/cleanup); `rotation` recorded **three calls** (one AbsolutePointer, two Digitizer).
+Action markers fall after the respective `.bound` readiness file and before the final trace
+summary. The decoder's first-call-based window is narrower and is not the actual readiness window.
+
+- **Key delivery is not literal text.** Shift/Command chords contain simultaneous held usage bits.
+  Injected `aA1!` appeared as `啊A1!` with the phone's Pinyin keyboard visible; Command+A/Backspace
+  visibly cleared it. Synthetic `中文🙂` produced no captured HID call or insertion. Host paste
+  timed out waiting for the application to read the clipboard; only Command+V was captured and
+  the field stayed empty. These observations do not characterize every physical keyboard/IME path.
+- **Clipboard policy is independent.** Device Hub exposes Use Shared Clipboard, Get Clipboard and
+  Send Clipboard; their synchronization state was not established. `pasteboard info` returned
+  26006 for `com.apple.is-remote-clipboard`. No contents were read or overwritten, and this error
+  is not a proven explanation for the earlier host paste timeout. Existing UTF-8 clipboard
+  copy/get evidence remains valid; focused arbitrary-text insertion is still unverified.
+- **The earlier presentation-only rotation inference is superseded.** Rotate Left changed queried
+  device orientation to landscapeLeft, while primary display orientation stayed rot0 and native
+  Settings remained portrait. No HID report accompanied the rotation itself. A rotated-preview
+  click opened General; its Pointer and Digitizer coordinates differed consistently with a
+  quarter-turn transform. Only this orientation was measured; see `docs/protocol.md` for values.
+- **Display/capability metadata is available now.** `device info displays` returned primary
+  1170x2532 bounds, scale 3, orientation and backlight. A non-primary Wireless entry present during
+  viewing disappeared after quitting Device Hub. `device info details` advertised `startaudiooutput`
+  but not `audiooutput`; `device info audio` returned missing-capability error 1001. Presence of an
+  audio-stream feature is not proof of audio-device selection or recording support.
+
+Local artifacts: `~/.local/state/ipb/20260921-deep/` contains `session-manifest.json`, both trace
+sets and action markers, decoded reports, display/capability JSON, screenshots and targeted shipped
+binary symbol/disassembly extracts. Proposed additions and their acceptance criteria are in
+`docs/devicehub-alignment.md`. Raw artifacts remain outside version control.
+
+Cleanup restored and queried portrait, cleared test search text, returned the phone Home, disabled
+keyboard capture and quit Device Hub. Tracers detached cleanly. This local macOS 26 run does not
+close the macOS 27 release gate. Full orientation mapping, physical trackpad calibration, real
+host IME input, UI-tree transport, multi-touch, remote unlock, recording and audio streaming remain
+unverified by this pass.

@@ -296,7 +296,7 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Select a device | `-s <serial>`, `$ANDROID_SERIAL` | `-s <uuid\|prefix\|name>`, `DEVICE_ID` | `--udid <udid>` | `--device <uuid>` |
 | Tap / swipe / long press | `input tap/swipe` | `ipb tap/swipe/long` (own) | no | no |
 | Scroll | `input swipe` | `ipb scroll` (drag) and `ipb scroll-gesture` (trackpad phases, iOS 27; own) | no | no |
-| Key / text | `input keyevent/text` | `ipb key` (HID usages, own); Unicode via `ipb clipboard set` + paste | no | no |
+| Key / text | `input keyevent/text` | `ipb key` (HID usages, own); UTF-8 clipboard copy/get works, focused Unicode insertion still needs end-to-end verification | no | no |
 | Home / App Switcher | `keyevent HOME/APP_SWITCH` | `ipb home` / `ipb recents` (own) | no | no |
 | Lock / wake screen | `input keyevent POWER` | `ipb power` (aliases `lock`, `wake`; own, 0.4 s hold) | no | no |
 | Screenshot | `screencap` | `ipb screenshot` (devicectl) | yes | `capture screenshot` |

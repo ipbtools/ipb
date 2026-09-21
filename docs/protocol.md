@@ -1202,7 +1202,96 @@ max=1, identifier=0, and unset identity/timestamp. These are measured difference
 change fields blindly: the same Cancel action succeeded with current ipb and with Device Hub.
 
 The synthetic wheel trace does **not** characterize a physical trackpad gesture or disprove Device
-Hub scrolling. It confirms target selection only. Rotate appears to be presentation behavior;
-absence from these ten HID taps does not rule out another non-HID control path. Record Screen and
+Hub scrolling. It confirms target selection only. A later orientation query proved that Rotate
+also changes device orientation, despite no HID sends; see the next section. Record Screen and
 Action Button were disabled in Device Hub's Controls menu on this phone. No capability is inferred
 merely from a menu label. See `docs/devicehub-alignment.md` for outstanding functional parity work.
+
+
+## Deeper keyboard, display and orientation observations (2026-09-21)
+
+**Sources:** actual Device Hub HID captures, devicectl JSON/error output and shipped binary symbols.
+Same seed as above: macOS 26.5.1 (25F80), Xcode 27 Beta 6, Device Hub 255.2.3.5, CoreDevice 642.15,
+iPhone 13 Pro / iOS 27.0 (24A437). DeviceKit build 255.2.3 is at
+`/Applications/Xcode-27.0.0-Beta.6.app/Contents/SharedFrameworks/DeviceKit.framework/Versions/A/DeviceKit`.
+Raw evidence is local in `~/.local/state/ipb/20260921-deep/`; source revision `c14eed6`.
+
+### Keyboard reports describe a set of held usages
+
+With Capture Keyboard enabled and Settings search focused, `typeText("aA1!")` produced 12 reports
+of 39 B targeting `0x200`. Decoding usage bits at `usage + 8` gave:
+
+```text
+{4}, {}, {225}, {4,225}, {4}, {}, {30}, {}, {225}, {30,225}, {30}, {}
+```
+
+These are A, Shift, and digit-1 combinations. Command+A followed by Backspace emitted
+`{227}, {4,227}, {4}, {}, {42}, {}` and visibly cleared the field. The single-key builder currently
+sets one usage bit, so repeatedly invoking that builder cannot preserve a held modifier across
+another key. A chord/capture implementation needs a set, not just independently timed key clicks.
+
+The actual text from `aA1!` was **`啊A1!`**, with the phone's Pinyin keyboard visible. This shows
+that correct key reports do not guarantee literal text. The exact input-method transformation was
+not separately instrumented. Synthetic `typeText("中文🙂")` emitted no call on the ten HID taps and
+left the search field empty. Native host paste of test text timed out waiting for a clipboard read;
+only four `0x200` reports appeared: `{227}, {25,227}, {25}, {}` (Command+V), with no visible insertion.
+These are CUA-operation observations, not a proof that every real IME path is unsupported.
+
+Device Hub's Edit menu separately exposes **Use Shared Clipboard / Get Clipboard / Send Clipboard**;
+ordinary Paste was disabled when inspected. Installed `devicectl device pasteboard --help` exposes
+copy, paste, info, monitor, transfer and sync-with-host. The existing ipb UTF-8 clipboard round-trip
+is historical device evidence; focused Unicode insertion is not yet verified. In the current
+clipboard state, `pasteboard info` failed with **26006**, identifying `com.apple.is-remote-clipboard`
+as a transient/confidential/already-synchronized type. The contents were not read or overwritten.
+That error is not assigned as the proven cause of the earlier paste timeout.
+
+### Device, content and preview orientations are distinct
+
+Before Rotate Left, `ipb orientation` and `device info displays` reported portrait. After clicking
+Device Hub's Rotate Left button:
+
+- `orientation.currentDeviceOrientation` and `currentDeviceNonFlatOrientation` became
+  `landscapeLeft`; `currentDeviceOrientationLocked` remained false.
+- The primary display's `currentOrientation` stayed **rot0**, with native size/bounds
+  **1170 x 2532**. Settings remained portrait in the native screenshot.
+- Device Hub displayed a rotated phone preview. Clicking General in that preview opened General.
+- The rotation itself produced no call on the ten HID taps. The typed CoreDevice
+  `OrientationControl.rotate(direction:)` symbol is separately present (0x39b348); it is a static
+  candidate for the non-HID path, not a captured call in this run.
+
+The rotated click emitted Pointer ID 19 on `0x501` with raw x/y **55659 / 46451**, then Digitizer
+ID 9 on `0x101` with contact x/y **19084 / 55658**. Using the respective report scales, these are
+approximately pointer **(0.8493, 0.7088)** and touch **(0.2912, 0.8493)**. Their relationship is
+consistent with `(touchX,touchY) = (1-pointerY,pointerX)` for this one orientation. Do not generalize
+it to all orientations without the remaining matrix. It does demonstrate that the two service
+coordinate pairs need not be identical. Portrait was restored and queried afterward.
+
+Static support for a geometry layer: DeviceKit `HIDEventGeometry.init` at **0x4241e8** accepts
+windowToViewTransform, viewToUnitTransform, viewFrame, edgeSwipeRegion, roiUnitRect and
+orientationCorrection. `DisplayInfo.normalizedCurrentOrientation` is at **0x6c79ec** and
+`displaySizeAtCurrentOrientation` at **0x6c7ab4**. These symbols support the separation above;
+the exact internal matrix composition remains untraced.
+
+### Current display/capability JSON is available without a new ABI shim
+
+`devicectl device info displays --device <uuid> --json-output <path>` returned:
+
+```text
+result.backlightState = activeOn
+result.displays[primary=true]:
+  displayId=1, type.integrated={}, bounds=[[0,0],[1170,2532]], nativeSize=[1170,2532],
+  pointScale=3, nativeOrientation=rot0, currentOrientation=rot0
+result.orientation:
+  currentDeviceOrientation, currentDeviceNonFlatOrientation, currentDeviceOrientationLocked
+```
+
+While Device Hub viewed the phone, a second non-primary **Wireless** entry had displayId=2,
+nativeSize=1184x2544 and pointScale=1. After quitting Device Hub only the primary LCD remained.
+This is a session-dependent inventory observation, not proof of a persistent external display.
+
+`device info details` returned `result.capabilities` entries with featureIdentifier and name.
+The list contains `getdisplayinfo`, `remote.devicecontrol.orientation`, `pasteboard` and
+`startaudiooutput`. It does **not** contain Screen Recording or `audiooutput` (Audio Output Device
+Selection). `device info audio` failed with **1001**, naming the missing `audiooutput` capability.
+Media audio transport, audio-device selection and screen recording must therefore be represented
+separately. Advertised presence alone is not proof that opening or using a feature will succeed.
