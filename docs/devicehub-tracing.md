@@ -177,3 +177,47 @@ click — so every digitizer byte here is ipb's own output. The recorded conclus
 locks "through a non-UniversalHID channel" is therefore partly an artefact of not tapping the right
 thing. The universal choke point is `xpc_remote_connection_send_message*` under lldb, which also
 yields the `HIDServiceID` argument that the existing captures dropped.
+
+
+## Driving Device Hub with an agent operator (2026-09-21)
+
+The capture needs somebody clicking inside Device Hub's mirrored screen. When
+that operator is another agent rather than a person, three things in the
+original harness stop working, and each cost a round before it was understood.
+
+**`dhtrace.sh` deadlocks.** It prints countdowns and waits on ENTER, which only
+exists if the operator shares the terminal. `dhattach.sh` traces a running
+process with no prompts at all: it writes a bound-breakpoint count, releases the
+operator, and records until a stopfile appears or a cap expires. The operator
+logs `{"ts", "action"}` lines and `decode.py --actions` joins the two streams on
+their timestamps, reporting when they do not overlap rather than silently
+producing empty groups.
+
+**The Accessibility API will lie to you about the screen.** See
+`Experiments/operator/README.md`: AX reported a perfectly stable window frame for
+a window that was on another Space, behind a full-screen remote-desktop client.
+Coordinates derived from it were arithmetically correct and would have sent
+clicks into an unrelated machine. Only `CGWindowListCopyWindowInfo`, which
+reports true front-to-back on-screen order, can distinguish "this window exists
+at these coordinates" from "this window is what is drawn at these coordinates".
+`Experiments/operator/click` refuses to emit an event when they disagree.
+
+**A locked screen looks exactly like a broken app.** With
+`CGSSessionScreenIsLocked = true`, a menu click is genuinely delivered —
+`sendAction:` appears in the target's own AppKit log — but no window is ever
+created, `count windows` stays 0 even for the app's main window, and `frontmost`
+freezes on whatever was last in front. Three agents chased focus and permission
+theories before anyone checked the lock state. Check it first:
+
+```sh
+ioreg -n Root -d1 -a | grep -A1 CGSSessionScreenIsLocked
+```
+
+This is the same constraint the project already documents from the other
+direction — `ipb stream` and `ipb mirror` need a real GUI login session — so it
+should have been the first hypothesis, not the fourth.
+
+**A note on the menu item's title.** Device Hub's Window menu entry uses a
+typographic apostrophe (U+2019) in the device name. A straight `'` in an
+AppleScript `menu item` lookup fails with `-1728`, which reads as "the menu item
+does not exist" rather than "your string is wrong".
