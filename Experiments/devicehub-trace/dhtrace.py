@@ -288,6 +288,18 @@ def on_hit(frame, bp_loc, extra, internal_dict):
             rec["words"] = {k: regs.get(k) for k in spec["args_are_words"]}
         if spec.get("doubles"):
             rec["doubles"] = _doubles(frame, spec["doubles"])
+        if spec.get("deref"):
+            # Swift generic parameters are passed indirectly: the register holds
+            # a pointer to the value, not the value. HIDButton.sendButton is
+            # generic over HIDUsagePageProtocol, so its page/code/state arrive
+            # as addresses -- reading the registers alone yields stack pointers
+            # and tells you nothing about which button was pressed.
+            out = {}
+            for reg, nbytes in spec["deref"].items():
+                addr = regs.get(reg) or 0
+                buf = _read(proc, addr, int(nbytes)) if addr else None
+                out[reg] = buf.hex() if buf else None
+            rec["deref"] = out
         if spec.get("returns"):
             lr = regs.get("lr") or 0
             if lr:

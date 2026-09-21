@@ -24,7 +24,7 @@ uhid_send_ext	CoreDevice	$s10CoreDevice19UniversalHIDServicePAAE4send6report2toy
 indigo_digitizer	CoreDevice	$s10CoreDevice12HIDDigitizerP4send8pointOne0E3Two9eventType4edge6targetyAA14DigitizerPointV_AKSgAA0l5EventI0OAA0L4EdgeOAA0L6TargetOtKFTj	{"args_are_words":["x0","x1","x2","x3","x4","x5","x6","x7"],"doubles":["d0","d1","d2","d3"]}
 indigo_digitizer_cg	CoreDevice	$s10CoreDevice12HIDDigitizerPAAE4send8pointOne0E3Two9eventType4edge6targetySo7CGPointV_AKSgAA014DigitizerEventI0OAA0M4EdgeOAA0M6TargetOtKF	{"args_are_words":["x0","x1","x2","x3","x4","x5"],"doubles":["d0","d1","d2","d3"]}
 indigo_button	CoreDevice	$s10CoreDevice9HIDButtonP16sendCustomButton9usagePage0G4Code5stateySi_SiAA0C5StateOtKFTj	{"args_are_words":["x0","x1","x2","x3"]}
-indigo_button_typed	CoreDevice	$s10CoreDevice9HIDButtonP10sendButton4page4code5stateyAA20HIDUsageStaticMemberVyqd__G_AA0I4CodeVyqd__GAA0C5StateOtKAA0I12PageProtocolRd__lFTj	{"args_are_words":["x0","x1","x2","x3"]}
+indigo_button_typed	CoreDevice	$s10CoreDevice9HIDButtonP10sendButton4page4code5stateyAA20HIDUsageStaticMemberVyqd__G_AA0I4CodeVyqd__GAA0C5StateOtKAA0I12PageProtocolRd__lFTj	{"args_are_words":["x0","x1","x2","x3"],"deref":{"x0":16,"x1":16,"x2":8}}
 indigo_scroll	CoreDevice	$s10CoreDevice9HIDScrollP4send5point5phase8momentum6targetyAA11ScrollPointV_AA0I5PhaseVAA0I8MomentumVAA0I6TargetOtKFTj	{"args_are_words":["x0","x1","x2","x3","x4"],"doubles":["d0","d1","d2"]}
 indigo_vendor	CoreDevice	$s10CoreDevice16HIDVendorDefinedP4send9usagePage0F07version4datays6UInt16V_AJs6UInt32V10Foundation4DataVtAA0aB5ErrorVYKFTj	{"args_are_words":["x0","x1","x2","x3","x4"]}
 indigo_keyboard	CoreDevice	$s10CoreDevice11HIDKeyboardP4send3key5stateyAA0C9UsageCodeV_AA14HIDButtonStateOtKFTj	{"args_are_words":["x0","x1","x2"]}

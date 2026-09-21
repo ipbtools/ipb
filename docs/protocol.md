@@ -1062,9 +1062,12 @@ consumed by AppKit as a menu shortcut and never reaches the device, and no lock 
 `UniversalHIDService.send` either — during that window the universal tap captured these two reports
 and no others, while capturing 497 reports across the run as a whole.
 
-Device Hub therefore locks the phone through some channel that is not UniversalHID. This does not
-block `ipb`: `ipb lock` locks the device by a different and independently verified route
-(Consumer `0x0c`/`0x30`, held; see above).
+Device Hub therefore locks the phone through some channel that is not UniversalHID. **That channel
+was identified on 2026-09-21 and it is not exotic: it is the Indigo button socket,
+`CoreDevice.HIDButton.sendButton`, carrying the same Consumer usage `ipb` already sends.** See
+"Device Hub's buttons: captured" below. The open question in this section is closed; what kept it
+open was that `taps.tsv` bound only `UniversalHIDService.send`, so the Indigo sockets could not
+have produced a hit no matter what Device Hub did.
 
 Note also that `KeyboardReport` on the wire is 39 bytes, where `ipb`'s builder allocates
 `0xf8` = 248 bits = 31 bytes and writes no timestamp.
@@ -1122,3 +1125,52 @@ report**, not the number of fingers still touching. `makeDigitizerReportData` cu
 This is a **hypothesis about a defect**, not yet a device-verified fix — an attempt to test it on
 2026-09-20 was void because the device was on the passcode screen throughout. Recorded here because
 the descriptor and the specification agree on what the field means.
+
+
+## Device Hub's buttons: captured (source: runtime capture, 2026-09-21)
+
+Seed: host macOS 27 beta, Xcode 27.0 Beta 6, DeviceHub 27.0, CoreDevice 636.3, device iPhone 13 Pro
+on iOS 27.0, wired. lldb attached to `DeviceHub` with **all ten** CoreDevice HID send paths bound
+(`Experiments/devicehub-trace/taps-full.tsv`); an agent drove Device Hub's own `Controls` menu while
+the tracer recorded. A no-input baseline window recorded **zero** reports, so the counts below are
+traffic, not noise.
+
+Every hit landed on `CoreDevice.HIDButton.sendButton<A>(page:code:state:)` — the **typed generic**
+overload. `sendCustomButton` (the non-generic `Int, Int, state` variant) took zero hits, as did all
+three `UniversalHIDService.send` overloads and every other Indigo socket.
+
+| Device Hub menu action | usage code | states sent | calls |
+| --- | ---: | --- | ---: |
+| Home | `0x40` | 0, 1 | 2 |
+| **App Switcher** | **`0x40`** | **0, 1, 0, 1** | **4** |
+| Lock | `0x30` | 0, 1 | 2 |
+
+State `0` is the press and `1` the release (they arrive in that order); this is the Swift enum's
+case index, which the wire encoding renders as `1|2` — see the Indigo payload shape above.
+
+### Reading the page requires dereferencing
+
+`sendButton` is generic over `HIDUsagePageProtocol`, so `page`, `code` and `state` are passed
+**indirectly**: the argument registers hold pointers, not values, and the usage page is carried by
+the *generic type parameter* rather than by any value. Reading the registers directly yields stack
+addresses and says nothing about which button was pressed — the tracer needs an explicit
+dereference (`"deref"` in the tap spec). The page's type-metadata pointer was identical across all
+three actions in a run, so all three ride one page; the usage values themselves
+(`0x40` = Consumer AC Home, `0x30` = Consumer Power) match Consumer page `0x0c` exactly.
+
+### What this confirms, and the one place ipb differs
+
+- **Home** — `ipb` sends Consumer `0x0c`/`0x40` (`cd_home_button`). **Identical to Device Hub.**
+  Confirmed against Apple's own client for the first time rather than assumed.
+- **Lock** — `ipb` sends Consumer `0x0c`/`0x30` (`ipb power`/`lock`/`wake`). **Identical to Device
+  Hub.** The route `ipb` arrived at independently is the route Apple uses.
+- **App Switcher — this is the divergence.** Device Hub has **no dedicated App Switcher usage**. It
+  presses **Home twice**. `ipb`'s `cd_recents_button` instead sends AppleVendorKeyboard
+  `0xff01`/`0x10`, found by trial and screenshot-verified working (2026-09-14), which is a
+  different mechanism that happens to produce the same result. `ipb` already contains
+  `cd_home_double_button` (`send_coredevice_button_double_click(remote, 0x0c, 0x40)`), which is
+  exactly what Device Hub does; it is simply not what `recents` is wired to.
+
+  Both work on device. Recorded as a known divergence, not a defect: switching `recents` to the
+  double-press would trade a verified one-event path for Apple's four-event path, and that is a
+  behaviour change that needs its own on-device evidence before it is made.

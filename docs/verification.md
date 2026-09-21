@@ -25,7 +25,7 @@ user's to decide.
 | **Report-send timeouts are fatal, and an abandoned send is not serialised** | **Partly root-caused.** A timed-out `sendBounded` returns while the real call "still runs to completion in the background" (record of 2026-09-14), so a later send can race it on the same `xrc_t`. Barrier timeouts were made non-fatal; report timeouts were not. | Make a report timeout drop the gesture and force an UP so the contact is released, rather than killing the session; serialise per-connection sends so an abandoned call cannot race the next one. |
 | **The smoke gate treats identical consecutive frames as advisory** | N/A — a gate defect, not a device defect. `scripts/smoke_matrix.sh:171` prints `WARN` and continues, while Rule 4 says an identical frame "is a warning that must be explained ... not ignored". | Require an explanation (an allow-list of expected-identical steps) or fail. |
 | **Raw probe verbs have never shown a device effect** | **Known.** `nav-report`, `dock-report`, `pointer-report`, `scroll-report`, `scroll-event`, `vendor-defined`, `uhid-swipe-report` are accepted by the service and do nothing observable; `nav-report`/`dock-report` additionally rest on a retracted premise. They are now marked as probes in `README.md` and `docs/protocol.md`. | Whether to quarantine them out of the main help (Fable's recommendation) is a CLI surface decision, not a doc fix. Marked, not moved. |
-| **Device Hub's own tap has never been captured** | **Root-caused as a methodology failure.** `taps.tsv` only tapped `UniversalHIDService.send`, never the Indigo sockets, and no action script ever contained a click; the digitizer bytes once presented as a Device Hub reference came from ipb's own helper. | Capture at `xpc_remote_connection_send_message*` under lldb, which is the universal choke point and also yields the `HIDServiceID` argument. |
+| **Device Hub's own tap has never been captured** | **Methodology failure fixed; tap itself still uncaptured.** All ten CoreDevice HID send paths are now bound (`taps-full.tsv`) and the rig is proven to record live Device Hub traffic — Home, App Switcher and Lock were captured on 2026-09-21, with a clean zero baseline. What remains uncaptured is specifically a **tap**, because sending a synthetic touch is blocked on the operator's session. `xpc_remote_connection_send_message*` turned out to be unusable: it does not resolve by name under lldb on this host. | Needs tap/long-press authorisation for the operator, or the user performing the clicks. Everything else is ready. |
 
 ### Recorded, lower priority
 
@@ -3800,3 +3800,63 @@ self-validating property that made the descriptors worth trusting in the first p
 
 This does **not** set `remoteTimestamp`; it only makes the field exist, so that setting it later
 will do something instead of silently nothing. No claim is made about Gap 2.
+
+
+## 2026-09-21 — Device Hub's buttons captured; the "lock goes somewhere we cannot see" question is closed
+
+Host macOS 27 beta / Xcode 27.0 Beta 6, DeviceHub 27.0, CoreDevice 636.3; device iPhone 13 Pro on
+iOS 27.0, wired. lldb attached to `DeviceHub` with all ten CoreDevice HID send paths bound. An
+agent operator drove Device Hub's own `Controls` menu; no synthetic touch was used at any point.
+
+### The result
+
+| window | reports |
+| --- | --- |
+| baseline, no input | **0** |
+| Home | `HIDButton.sendButton` ×2 — code `0x40`, states 0,1 |
+| App Switcher | `HIDButton.sendButton` ×4 — code `0x40`, states 0,1,0,1 |
+| Lock | `HIDButton.sendButton` ×2 — code `0x30`, states 0,1 |
+
+`sendCustomButton`, all three `UniversalHIDService.send` overloads, and every other Indigo socket
+took **zero** hits. Full layout and the dereference technique are in `docs/protocol.md`,
+"Device Hub's buttons: captured".
+
+### What it overturns
+
+`docs/protocol.md` recorded that Cmd-L produces only the Command modifier on the wire and concluded
+Device Hub "locks the phone through some channel that is not UniversalHID" — an open mystery since
+2026-09-09. It is closed, and the answer is mundane: **the Indigo button socket, Consumer `0x30`,
+the same usage `ipb lock` already sends.**
+
+The reason it stayed open for twelve days is the reason the 2026-09-20 alignment audit predicted it
+would: `taps.tsv` had exactly **one** active tap, `UniversalHIDService.send`. The Indigo
+button/digitizer/scroll sockets were never bound, so "Device Hub does not send it over
+UniversalHID" was the only conclusion the instrument could ever have produced. The audit called
+this an artefact of not tapping the right thing. It was.
+
+### What it confirms
+
+Home (`0x0c`/`0x40`) and Lock (`0x0c`/`0x30`) are **identical** to what `ipb` already sends —
+verified against Apple's own client rather than inferred. Two independently-derived routes agreeing
+is the strongest evidence this repo has produced for either command.
+
+### What it finds
+
+**Device Hub has no dedicated App Switcher usage — it double-presses Home.** `ipb` uses
+AppleVendorKeyboard `0xff01`/`0x10`, found by trial on 2026-09-14 and screenshot-verified working.
+Both mechanisms work; they are not the same mechanism. `ipb` already carries
+`cd_home_double_button`, which is exactly Device Hub's approach, unused by `recents`. Recorded as a
+known divergence, not a defect — swapping a verified one-event path for a four-event one is a
+behaviour change that needs its own evidence.
+
+### Method note
+
+`sendButton` is generic, so its arguments arrive as pointers and the usage page lives in the
+generic type parameter. A tracer that reads argument registers directly records stack addresses and
+learns nothing; `dhtrace.py` needed an explicit `deref` spec. The first run of this capture produced
+exactly that useless output, which is why there were two rounds.
+
+### Not claimed
+
+No tap was captured — sending a synthetic touch is blocked on the operator's session. Gap 2 is
+untouched by this record.
