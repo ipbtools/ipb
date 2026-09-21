@@ -43,6 +43,7 @@ _ipb_commands() {
     'lock:the side button, under the name you want'
     'wake:the side button, under the name you want'
     'key:one keyboard key'
+    'text:replace device clipboard and paste into focused field'
     'key-down:hold a key'
     'key-up:release a key, or all keys'
     'button:a hardware button by HID usage'
@@ -67,6 +68,8 @@ _ipb_commands() {
     'pull:copy a file from the device'
 
     'info:device details'
+    'displays:live primary/display metadata and orientation'
+    'capabilities:advertised CoreDevice features'
     'lock-state:passcode and lock state'
     'clipboard:device pasteboard'
     'location:simulate or clear location'
@@ -119,6 +122,7 @@ _ipb() {
         clipboard) _values 'action' get set ;;
         location) _values 'action' clear ;;
         orientation) _values 'orientation' portrait landscapeLeft landscapeRight portraitUpsideDown ;;
+        displays|capabilities) _values 'format' --json ;;
         stream) _values 'option' --dir --count --fps --seconds --stdout ;;
         mirror) _values 'option' --seconds --csv --service-id --help ;;
       esac

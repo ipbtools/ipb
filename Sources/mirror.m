@@ -19,6 +19,8 @@
 #include <signal.h>
 #include <math.h>
 #include <unistd.h>
+#include "display_geometry.h"
+#include "device_control.h"
 
 #define LOGE(...) do{ fprintf(stderr, "ipb-mirror: " __VA_ARGS__); fprintf(stderr,"\n"); }while(0)
 #define DIE(code, ...) do{ fail((code), [NSString stringWithFormat:@"" __VA_ARGS__]); return (code); }while(0)
@@ -65,6 +67,7 @@ extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc
 // HID evidence: docs/protocol.md Wire Format and Sources/action_sender.m:625,
 // using the existing Xcode 27 oracle glue unchanged.
 extern int uhid_make_digitizer_hid_report(double,double,int,int,void*);
+extern int uhid_make_edge_touch_hid_report(double,double,int,int,int,void*);
 extern int uhid_make_scroll_hid_report(int64_t,int64_t,uint32_t,uint32_t,uint32_t,double,double,void*);
 extern int uhid_make_scroll_wire_hid_report(int32_t,int32_t,uint32_t,uint32_t,double,double,void*);
 extern int uhid_make_absolute_pointer_hid_report(double,double,uint32_t,void*);
@@ -90,7 +93,7 @@ typedef struct {
 } ScrollReport;
 typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, SendTimedOut, Interrupted, ScrollUnsupported, ScrollStationary, InputConflict, ScrollUnavailable, ScrollOrphan, ScrollOffTarget } Result;
 typedef struct { uint64_t seq, generation, gesture; Kind kind; double x,y,submit;
-                 InputMode mode; ScrollReport scroll;
+                 InputMode mode; int edgeQuarter; ScrollReport scroll;
                  // Where the pointer was when a scroll arrived. For scroll events
                  // x/y are the deltas, so the position needs its own field: the
                  // device routes a scroll to the view under the cursor, and
@@ -132,6 +135,7 @@ static uint64_t gDisplayDrops,gDisplayed,gBlackBars;
 static BOOL gReady,gClosing,gMousePressed;
 static uint64_t gServiceID,gGesture,gMouseGeneration;
 static double gMouseX,gMouseY;
+static int gMouseEdgeQuarter;
 static InputMode gMouseMode; // main thread: frozen at Down, copied into every event
 static uint64_t gScrollServiceID,gScrollGesture,gScrollGeneration;
 // Last AbsolutePointer position accepted by the device, input queue only.
@@ -139,6 +143,7 @@ static double lastPointerX=-1,lastPointerY=-1;
 static const double PointerEpsilon=0.001;
 static BOOL gScrollActive,gScrollPrecise,gScrollMomentum,gScrollMomentumAllowed; // main thread
 static BOOL isScroll(Kind kind){ return kind>=ScrollPrecise && kind<=ScrollEnd; }
+static BOOL isIndigoEdge(Event event){ return event.mode==BottomEdge && event.edgeQuarter==0; }
 static BOOL isEnd(Event event){ return event.kind==Up || (isScroll(event.kind) && event.scroll.ends); }
 static const char *inputResults[]={"pending","running","sent","rejected","overload","build_failed",
     "send_failed","barrier_failed","send_timed_out","interrupted","scroll_unsupported","scroll_stationary",
@@ -155,6 +160,14 @@ static CGSize gVideoSize; // content size used by every UI geometry consumer
 static CGSize gFrameSize;
 static CGRect gContentRect;
 static CALayer *gContentClip;
+static CALayer *gNativeClip;
+static IPBDisplayInfo gDisplayInfo; // updated on main, copied under gLock for the media sink
+static int gPresentationQuarter=-1;
+static BOOL gGeometryUpdating,gMetadataBusy;
+static int gPendingRotation;
+static NSString *gDeviceIdentifier;
+static dispatch_queue_t gDeviceQueue;
+static dispatch_group_t gDeviceGroup;
 static AVSampleBufferDisplayLayer *gDisplay;
 static NSWindow *gWindow;
 static int gOutputFD=-1; // saved stdout for descriptor discovery
@@ -166,6 +179,8 @@ static xpc_connection_t gMediaService;
 static int gMediaFD=-1,gRTP=-1;
 static void requestClose(NSString *reason);
 static void presentLatest(void);
+static void applyContentGeometry(CGSize frameSize,CGRect crop);
+static void rotateDisplay(int delta);
 static AVCVideoStream *gStream;
 static dispatch_queue_t gDelegateQueue,gInputQueue;
 static dispatch_group_t gInputGroup;
@@ -272,7 +287,7 @@ static void finish(int code,NSString *reason){
         intervalN?[NSString stringWithFormat:@"%.3f",intervals[(unsigned)ceil(intervalN*.95)-1]*1000]:@"NA",
         (unsigned long long)drops,(unsigned long long)errors,intervalN,(unsigned long long)intervalCount];
     [s appendString:@"KEY_* report_return=first send return; barrier_return=button barrier or RECENTS end return (digitizer has no barrier in the existing oracle).\n"];
-    [s appendString:@"BOTTOM_EDGE UP: end return only; no digitizer barrier exists in the oracle. Scroll x/y are relative AppKit deltas; scroll calibration is UNVERIFIED.\n"];
+    [s appendString:@"BOTTOM_EDGE: portrait-content uses Indigo END only; rotated content uses UHID direction flags + UP barrier. Scroll x/y are relative AppKit deltas; scroll calibration is UNVERIFIED.\n"];
     [s appendString:@"drops=local invalid/non-increasing PTS only; transport/decoder losses unknown. Times=CLOCK_MONOTONIC seconds; blank=not reached.\n"];
     NSMutableString *csv=nil;
     if(gCSVFD>=0) csv=[NSMutableString stringWithString:@"seq,type,generation,gesture,result,queue_depth,x,y,t_submit,t_received,t_report_return,t_barrier_return,report_code,barrier_code,mode,scroll_phase,scroll_momentum,scroll_flags,raw_x,raw_y,accel_x,accel_y,app_phase,app_momentum\n"];
@@ -432,6 +447,7 @@ static BOOL acceptScreenSize(CGSize size,const char *source){
     selectContentRect((CGRect){CGPointZero,size},source); return YES;
 }
 static BOOL selectTableContentRect(void){
+    if(acceptScreenSize(gDisplayInfo.nativeSize,"live-primary-display")) return YES;
     BOOL matched=NO;
     for(size_t i=0;i<sizeof gScreenTable/sizeof gScreenTable[0];i++){
         if(strcmp(gProductType,gScreenTable[i].productType)) continue;
@@ -770,7 +786,7 @@ static void drainInput(void){
                 if(ends) state=Ending;
                 uint64_t words[2]={0,0};
                 int count=sizeof words;
-                if(activeMode!=BottomEdge){
+                {
                     ScrollReport scroll=event.scroll;
                     // The wire builder, not uhid_make_scroll_hid_report: it stamps
                     // remoteTimestamp, which Device Hub sets on every report and
@@ -780,14 +796,15 @@ static void drainInput(void){
                     // already hold.
                     count=scrolling?uhid_make_scroll_wire_hid_report((int32_t)scroll.rawX,(int32_t)scroll.rawY,
                         scroll.phase,scroll.momentum,scroll.accelX,scroll.accelY,words):
-                        uhid_make_digitizer_hid_report(event.x,event.y,!ends,!ends,words);
+                        uhid_make_edge_touch_hid_report(event.x,event.y,!ends,!ends,
+                            activeMode==BottomEdge?event.edgeQuarter:-1,words);
                 }
                 if(count!=sizeof words){ r.result=BuildFailed; r.reportCode=count; inputError(@"HID report construction failed"); }
                 else if(event.generation!=atomic_load(&gGeneration)) r.result=Rejected;
                 else {
-                    // gesture-impl.md task 1: one IndigoDigitizerEvent per real mouse
-                    // event, optional second point absent, edge=bottom, mainScreen=(0,0).
-                    // Never use the 320-bit swipe-contact report or shortcut interpolation.
+                    // Preserve the verified portrait-content Indigo edge behavior.
+                    // Rotated-content edges need native UHID directional flags;
+                    // direction stays frozen through UP. No time interpolation.
                     // Place the cursor before opening a scroll gesture. The
                     // device routes a scroll to the view under the pointer, and
                     // Device Hub keeps an AbsolutePointer stream running as the
@@ -831,7 +848,7 @@ static void drainInput(void){
                     // still holds. r.result and r.reportCode are already set.
                     BOOL pointerFailed=(r.result==BuildFailed || r.result==SendFailed || r.result==SendTimedOut);
                     if(!pointerFailed){
-                        r.reportCode=activeMode==BottomEdge?
+                        r.reportCode=isIndigoEdge(event)?
                             sendBounded(&gDigitizerSender,^{ return coredevice_send_hid_digitizer_cgpoint(gDigitizer,
                                 event.x,event.y,0,0,1,starts?0:ends?2:1,3,0,0); }):
                             sendReportBounded(&gInputSender,gInput,words,sizeof words,scrolling?gScrollServiceID:gServiceID);
@@ -843,9 +860,8 @@ static void drainInput(void){
                     else if(r.reportCode) inputError(@"HID report sender failed (see report_code)");
                     else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
                     else if(ends){
-                        // No digitizer barrier in the existing oracle. Its END return is
-                        // the fourth point, just as for RECENTS; not device acknowledgement.
-                        r.barrierCode=activeMode==BottomEdge?0:
+                        // Flush only: this does not acknowledge the UI effect.
+                        r.barrierCode=isIndigoEdge(event)?0:
                             sendBounded(&gInputSender,^{ return coredevice_send_universalhid_barrier(gInput); });
                         r.barrierReturn=nowSec();
                         if(r.barrierCode){
@@ -893,7 +909,7 @@ static void submitEvent(Event event,Result disposition){
 }
 static void submit(Kind kind,uint64_t gesture,uint64_t generation,double x,double y,double submitted){
     submitEvent((Event){.generation=generation,.gesture=gesture,.kind=kind,.x=x,.y=y,.submit=submitted,
-        .mode=kind<=Up?gMouseMode:Touch},Pending);
+        .mode=kind<=Up?gMouseMode:Touch,.edgeQuarter=gMouseEdgeQuarter},Pending);
 }
 // Single conversion boundary, gesture-impl.md task 2, UniversalHID 90.1 enums.
 // UNVERIFIED: units, sign, gain and flags=0 need real-device calibration. These
@@ -1023,6 +1039,7 @@ static void releaseMouse(double submitted){
     submit(Up,gGesture,gMouseGeneration,gMouseX,gMouseY,submitted);
 }
 static void requestClose(NSString *reason){
+    ipbStopDeviceControl();
     if(gClosing) return;
     releaseMouse(nowSec()); releaseScroll(nowSec());
     gReady=NO; gClosing=YES;
@@ -1106,6 +1123,67 @@ static void saveScreenshot(void){
     }});
 }
 
+// Geometry changes end an old gesture on its original coordinates before a new
+// transform is published. No queued event is reinterpreted or replayed.
+static void publishDisplayInfo(IPBDisplayInfo info){
+    BOOL changed=info.displayID!=gDisplayInfo.displayID ||
+        !CGSizeEqualToSize(info.nativeSize,gDisplayInfo.nativeSize) ||
+        info.deviceQuarter!=gDisplayInfo.deviceQuarter || info.contentQuarter!=gDisplayInfo.contentQuarter;
+    if(!changed){ gGeometryUpdating=NO; rotateDisplay(0); return; }
+    gGeometryUpdating=YES;
+    releaseMouse(nowSec()); releaseScroll(nowSec());
+    dispatch_group_notify(gInputGroup,dispatch_get_main_queue(),^{
+        if(gClosing || atomic_load(&gFailure)) return;
+        pthread_mutex_lock(&gLock);
+        gDisplayInfo=info;
+        if(gCrop.size.width>0) selectTableContentRect();
+        CGSize size=gCrop.size; CGRect crop=gCrop.rect;
+        pthread_mutex_unlock(&gLock);
+        if(size.width>0) applyContentGeometry(size,crop);
+        LOGE("display: id=%llu native=%.0fx%.0f deviceQuarter=%d contentQuarter=%d",
+            (unsigned long long)info.displayID,info.nativeSize.width,info.nativeSize.height,info.deviceQuarter,info.contentQuarter);
+        gGeometryUpdating=NO;
+        rotateDisplay(0);
+    });
+}
+static void refreshDisplay(NSString *orientation){
+    if(gClosing || atomic_load(&gFailure)) return;
+    if(gMetadataBusy || gGeometryUpdating){
+        if(orientation) LOGE("rotation not submitted: display update in progress");
+        return;
+    }
+    gMetadataBusy=YES;
+    if(orientation){ gGeometryUpdating=YES; releaseMouse(nowSec()); releaseScroll(nowSec()); }
+    // Only explicit rotation waits for releases, with the same bounded input
+    // deadline. Read-only refreshes never depend on the HID queue becoming idle.
+    dispatch_group_async(gDeviceGroup,gDeviceQueue,^{ @autoreleasepool {
+            NSString *error=nil;
+            if(orientation && dispatch_group_wait(gInputGroup,dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC)))
+                error=@"rotation not sent: input release did not finish within 2s";
+            if(orientation && !error) ipbDeviceControl(gDeviceIdentifier,@[@"device",@"orientation",@"set",orientation],&error);
+            NSDictionary *result=error?nil:ipbDeviceControl(gDeviceIdentifier,@[@"device",@"info",@"displays"],&error);
+            IPBDisplayInfo info={0};
+            if(result && !ipbParseDisplayInfo(result,&info)) error=@"invalid/unsupported primary display geometry";
+            dispatch_async(dispatch_get_main_queue(),^{
+                gMetadataBusy=NO;
+                if(gClosing) return;
+                if(error){ gGeometryUpdating=NO; fail(1,[NSString stringWithFormat:@"display control: %@",error]); return; }
+                publishDisplayInfo(info);
+            });
+    }});
+}
+static void rotateDisplay(int delta){
+    if(gClosing || atomic_load(&gFailure)) return;
+    // Accumulate explicit relative requests while the read/rotation is in flight.
+    // They have not been sent yet; nothing with uncertain completion is replayed.
+    gPendingRotation=(gPendingRotation+delta)%4;
+    if(!gPendingRotation || gMetadataBusy || gGeometryUpdating) return;
+    NSArray *names=@[@"portrait",@"landscapeLeft",@"portraitUpsideDown",@"landscapeRight"];
+    int target=(gDisplayInfo.deviceQuarter+gPendingRotation+4)&3;
+    gPendingRotation=0;
+    refreshDisplay(names[target]);
+}
+
 @interface MirrorView : NSView @end
 @implementation MirrorView
 - (BOOL)isFlipped { return YES; }
@@ -1117,7 +1195,11 @@ static void saveScreenshot(void){
         AVMakeRectWithAspectRatioInsideRect(gVideoSize,self.bounds):self.bounds;
     gContentClip.frame=content;
     if(gVideoSize.width>0 && gVideoSize.height>0){
-        CGFloat sx=content.size.width/gVideoSize.width,sy=content.size.height/gVideoSize.height;
+        CGFloat sx=content.size.width/gVideoSize.width,sy=sx;
+        gNativeClip.affineTransform=CGAffineTransformIdentity;
+        gNativeClip.bounds=CGRectMake(0,0,gContentRect.size.width*sx,gContentRect.size.height*sy);
+        gNativeClip.position=CGPointMake(content.size.width/2,content.size.height/2);
+        gNativeClip.affineTransform=CGAffineTransformMakeRotation(-gPresentationQuarter*M_PI_2);
         gDisplay.frame=CGRectMake(-gContentRect.origin.x*sx,-gContentRect.origin.y*sy,
                                  gFrameSize.width*sx,gFrameSize.height*sy);
     }else gDisplay.frame=gContentClip.bounds;
@@ -1125,8 +1207,8 @@ static void saveScreenshot(void){
     [CATransaction commit];
 }
 - (void)viewDidChangeBackingProperties { [super viewDidChangeBackingProperties]; [self setNeedsLayout:YES]; }
-- (BOOL)mapEvent:(NSEvent*)event x:(double*)x y:(double*)y {
-    if(gVideoSize.width<=0 || gVideoSize.height<=0) return NO;
+- (BOOL)mapEvent:(NSEvent*)event x:(double*)x y:(double*)y pointer:(BOOL)pointer {
+    if(gGeometryUpdating || gVideoSize.width<=0 || gVideoSize.height<=0) return NO;
     // Stay in the view's own (flipped, points) space. Backing conversion is NOT
     // used on purpose: -convertPointToBacking:/-convertRectToBacking: map into the
     // unflipped backing store, which negates y on a flipped view (measured: view
@@ -1141,6 +1223,10 @@ static void saveScreenshot(void){
     }
     *x=(point.x-content.origin.x)/content.size.width;
     *y=(point.y-content.origin.y)/content.size.height; // flipped view: top-left is (0,0)
+    if(!pointer){
+        CGPoint native=ipbRotateUnit(CGPointMake(*x,*y),-gPresentationQuarter);
+        *x=native.x; *y=native.y;
+    }
     return YES;
 }
 - (BOOL)performKeyEquivalent:(NSEvent*)event {
@@ -1149,7 +1235,7 @@ static void saveScreenshot(void){
     NSString *key=event.charactersIgnoringModifiers.lowercaseString;
     NSEventModifierFlags command=NSEventModifierFlagCommand,shiftCommand=command|NSEventModifierFlagShift;
     Kind kind=KeyHome;
-    enum { DeviceKey, Screenshot, ZoomToFit, ActualSize } action=DeviceKey;
+    enum { DeviceKey, Screenshot, ZoomToFit, ActualSize, RotateLeft, RotateRight } action=DeviceKey;
     // Device Hub bindings captured in the M4 brief (Xcode 27 beta 6).
     if(flags==shiftCommand && [key isEqualToString:@"h"]) kind=KeyHome;
     else if(flags==(shiftCommand|NSEventModifierFlagControl) && [key isEqualToString:@"h"]) kind=KeyRecents;
@@ -1172,6 +1258,8 @@ static void saveScreenshot(void){
     else if(flags==shiftCommand && [key isEqualToString:@"s"]) action=Screenshot;
     else if(flags==command && [key isEqualToString:@"0"]) action=ZoomToFit;
     else if(flags==command && [key isEqualToString:@"1"]) action=ActualSize;
+    else if(flags==command && key.length==1 && [key characterAtIndex:0]==NSLeftArrowFunctionKey) action=RotateLeft;
+    else if(flags==command && key.length==1 && [key characterAtIndex:0]==NSRightArrowFunctionKey) action=RotateRight;
     else return [super performKeyEquivalent:event];
     double t=nowSec();
     if(event.isARepeat || !gReady || gClosing || atomic_load(&gFailure)) return YES;
@@ -1189,6 +1277,7 @@ static void saveScreenshot(void){
             gLocalShortcutPending=NO;
             if(!gReady || gClosing || atomic_load(&gFailure) || generation!=atomic_load(&gGeneration)) return;
             if(action==Screenshot) saveScreenshot();
+            else if(action==RotateLeft || action==RotateRight) rotateDisplay(action==RotateLeft?1:-1);
             else resizeMirror(action==ActualSize);
         });
     }
@@ -1202,7 +1291,7 @@ static void saveScreenshot(void){
         .x=event.scrollingDeltaX,.y=event.scrollingDeltaY,.submit=t,.mode=Scroll,
         .appPhase=event.phase,.appMomentum=event.momentumPhase};
     double px=0,py=0;
-    input.pointerValid=[self mapEvent:event x:&px y:&py];
+    input.pointerValid=[self mapEvent:event x:&px y:&py pointer:YES];
     input.pointerX=px; input.pointerY=py;
     Result result=convertScroll(event,&input.scroll);
     if(!gScrollServiceID){ rejectScroll(input,ScrollUnavailable); return; }
@@ -1241,9 +1330,11 @@ static void saveScreenshot(void){
     double t=nowSec(),x,y; // real AppKit arrival, before conversion/submission
     if(!gReady || gClosing || gMousePressed || atomic_load(&gFailure)) return;
     if(gSubmitted>=Capacity-2){ requestClose(@"event capacity reached"); return; }
-    if(![self mapEvent:event x:&x y:&y]) return;
+    if(![self mapEvent:event x:&x y:&y pointer:NO]) return;
     releaseScroll(t);
-    gMouseMode=y>=1.0-BottomEdgeFraction?BottomEdge:Touch;
+    CGPoint displayPoint=ipbRotateUnit(CGPointMake(x,y),-gDisplayInfo.contentQuarter);
+    gMouseMode=displayPoint.y>=1.0-BottomEdgeFraction?BottomEdge:Touch;
+    gMouseEdgeQuarter=gDisplayInfo.contentQuarter;
     gMousePressed=YES; gGesture++; gMouseGeneration=atomic_load(&gGeneration);
     gMouseX=x; gMouseY=y; submit(Down,gGesture,gMouseGeneration,x,y,t);
 }
@@ -1251,13 +1342,13 @@ static void saveScreenshot(void){
     double t=nowSec(),x,y;
     if(!gMousePressed || !gReady || gClosing) return;
     if(gSubmitted>=Capacity-1){ requestClose(@"event capacity reached"); return; }
-    if(![self mapEvent:event x:&x y:&y]) return;
+    if(![self mapEvent:event x:&x y:&y pointer:NO]) return;
     gMouseX=x; gMouseY=y; submit(Move,gGesture,gMouseGeneration,x,y,t);
 }
 - (void)mouseUp:(NSEvent*)event {
     double t=nowSec(),x,y;
     if(!gMousePressed) return;
-    if([self mapEvent:event x:&x y:&y]){ gMouseX=x; gMouseY=y; }
+    if([self mapEvent:event x:&x y:&y pointer:NO]){ gMouseX=x; gMouseY=y; }
     // An outside UP is rejected as a position, then ends at the last valid point.
     releaseMouse(t);
 }
@@ -1288,15 +1379,18 @@ static void createWindow(void){
     // Clip at the same aspect-fit rectangle mapEvent uses, including during resize.
     gContentClip=[CALayer layer]; gContentClip.masksToBounds=YES;
     [view.layer addSublayer:gContentClip];
+    gNativeClip=[CALayer layer]; gNativeClip.masksToBounds=YES;
+    [gContentClip addSublayer:gNativeClip];
     gDisplay=[AVSampleBufferDisplayLayer layer];
     gDisplay.videoGravity=AVLayerVideoGravityResize; // explicit raw-frame geometry owns the aspect ratio
-    [gContentClip addSublayer:gDisplay]; gWindow.contentView=view;
+    [gNativeClip addSublayer:gDisplay]; gWindow.contentView=view;
     [view setNeedsLayout:YES]; [gWindow center]; fitWindow(CGSizeMake(420,840),NO); [gWindow makeKeyAndOrderFront:nil];
     [gWindow makeFirstResponder:view]; [NSApp activateIgnoringOtherApps:YES];
 }
 static void applyContentGeometry(CGSize frameSize,CGRect crop){
-    if(!CGSizeEqualToSize(gFrameSize,frameSize) || !CGRectEqualToRect(gContentRect,crop)){
-        gFrameSize=frameSize; gContentRect=crop; gVideoSize=crop.size;
+    if(!CGSizeEqualToSize(gFrameSize,frameSize) || !CGRectEqualToRect(gContentRect,crop) || gPresentationQuarter!=gDisplayInfo.deviceQuarter){
+        gFrameSize=frameSize; gContentRect=crop; gPresentationQuarter=gDisplayInfo.deviceQuarter;
+        gVideoSize=(gPresentationQuarter&1)?CGSizeMake(crop.size.height,crop.size.width):crop.size;
         fitWindow(gVideoSize,YES);
     }
 }
@@ -1385,6 +1479,13 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
         if(gCSVFD<0) DIE(8,"open CSV %s: %s",csvPath,strerror(errno));
     }
     uuid_t deviceUUID; if(uuid_parse(dev,deviceUUID)) DIE(2,"invalid CoreDevice UUID");
+    gDeviceIdentifier=[NSString stringWithUTF8String:dev];
+    NSString *displayError=nil;
+    NSDictionary *displayResult=ipbDeviceControl(gDeviceIdentifier,@[@"device",@"info",@"displays"],&displayError);
+    if(!displayResult || !ipbParseDisplayInfo(displayResult,&gDisplayInfo))
+        DIE(1,"display metadata: %s",(displayError ?: @"invalid/unsupported primary display geometry").UTF8String);
+    gDeviceQueue=dispatch_queue_create("ipb.mirror.device-control",DISPATCH_QUEUE_SERIAL);
+    gDeviceGroup=dispatch_group_create();
     if(!dlopen("/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice",RTLD_NOW)) DIE(2,"CoreDevice dlopen: %s",dlerror());
     if(!dlopen("/System/Library/PrivateFrameworks/AVConference.framework/Versions/A/AVConference",RTLD_NOW)) DIE(2,"AVConference dlopen: %s",dlerror());
     _coredevice_xpc_add_bundle([NSBundle bundleWithPath:@"/Library/Developer/PrivateFrameworks/CoreDevice.framework"]);
@@ -1510,10 +1611,12 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     // M4 brief: AX menu capture, Device Hub in Xcode 27 beta 6, iPhone 13 Pro.
     // hardwareGestureControls.actionButton / .sideButton use ConditionalKeyboardShortcut;
     // neither menu item appears with the 13 Pro. Revisit on corresponding hardware.
-    LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⌘L=Lock/Wake, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size (key repeat ignored).");
+    LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⌘L=Lock/Wake, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size, ⌘←/⌘→=Rotate Left/Right (key repeat ignored).");
     LOGE("Siri (⇧⌥⌘H): not implemented; full encoding/behavior unverified. Recording (⇧⌘R): not implemented; capture/recording behavior evidence missing. Action Button / Camera Control: usage-code evidence and corresponding local hardware missing.");
     armWatchdog(watchdog,runSeconds+10);
     double deadline=nowSec()+runSeconds;
+    NSTimer *displayTimer=[NSTimer timerWithTimeInterval:1 repeats:YES block:^(NSTimer *t){ refreshDisplay(nil); }];
+    [[NSRunLoop mainRunLoop] addTimer:displayTimer forMode:NSRunLoopCommonModes];
     NSTimer *timer=[NSTimer timerWithTimeInterval:1.0/120 repeats:YES block:^(NSTimer *t){
         @try {
             if(atomic_load(&gFailure)) requestClose(@"connection/stream failure");
@@ -1535,6 +1638,7 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
     [NSApp run];
     [timer invalidate];
+    [displayTimer invalidate];
     requestClose(@"application stopped");
     return atomic_load(&gFailure);
 }
@@ -1543,6 +1647,8 @@ static void shutdownMirror(void){
     // UP is already on the ordered input chain. Keep every private call bounded
     // by the independent shutdown watchdog, including stop/cancel.
     armWatchdog(gWatchdog,10);
+    if(gDeviceGroup && dispatch_group_wait(gDeviceGroup,dispatch_time(DISPATCH_TIME_NOW,7*NSEC_PER_SEC)))
+        fail(9,@"device-control drain exceeded shutdown deadline");
     uint64_t senderDeadline=ipb_bounded_now_ns()+5ull*NSEC_PER_SEC;
     if(gInputGroup && dispatch_group_wait(gInputGroup,ipb_bounded_dispatch_deadline(senderDeadline)))
         fail(9,@"input drain exceeded 5s; device release is NOT guaranteed");

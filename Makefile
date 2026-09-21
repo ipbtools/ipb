@@ -97,7 +97,7 @@ $(MIRROR_PROBE_TARGET): $(BUILD_DIR)/mirror_probe.o $(MIRROR_GLUE)
 	codesign -s - -f $@
 
 # Interactive mirror: existing oracle glue, with AppKit presentation.
-$(BUILD_DIR)/mirror.o: $(SOURCES_DIR)/mirror.m $(SOURCES_DIR)/bounded_sender.h | $(BUILD_DIR)
+$(BUILD_DIR)/mirror.o: $(SOURCES_DIR)/mirror.m $(SOURCES_DIR)/bounded_sender.h $(SOURCES_DIR)/display_geometry.h $(SOURCES_DIR)/device_control.h | $(BUILD_DIR)
 	clang -fobjc-arc -fblocks -Wall -Wextra -Wno-unused-parameter \
 		-Wno-deprecated-declarations -c $< -o $@
 
@@ -130,6 +130,7 @@ install: all
 	install -m 755 scripts/smoke_matrix.sh $(PREFIX)/share/ipb/smoke_matrix.sh
 	install -m 755 scripts/smoke_assertions.zsh $(PREFIX)/share/ipb/smoke_assertions.zsh
 	install -m 755 scripts/png_pixels_digest.py $(PREFIX)/share/ipb/png_pixels_digest.py
+	install -m 644 scripts/assert_search_text.swift $(PREFIX)/share/ipb/assert_search_text.swift
 	install -m 644 completions/_ipb $(PREFIX)/share/zsh/site-functions/_ipb
 
 clean:

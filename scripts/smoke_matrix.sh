@@ -24,6 +24,7 @@ TAP_XY="${TAP_XY:-0.15 0.12}"     # first home-screen icon on an iPhone 12 mini 
 LONG_XY="${LONG_XY:-$TAP_XY}"
 KEY_XY="${KEY_XY:-0.5 0.935}"  # iOS 27 Settings search field; verify on the target layout
 KEY_CLOSE_XY="${KEY_CLOSE_XY:-0.915 0.569}" # search cancel beside the focused field
+TEXT_CLEAR_XY="${TEXT_CLEAR_XY:-0.763 0.569}" # clear focused Settings search
 
 fail() { failures=$((failures + 1)); printf 'FAIL: %s\n' "$*" | tee -a "$log"; }
 
@@ -55,11 +56,32 @@ shot() {
   fi
 }
 
+verify_literal_text() {
+  local checker="$ROOT/scripts/assert_search_text.swift"
+  [[ -r "$checker" ]] || checker="$SCRIPT_DIR/assert_search_text.swift"
+  # This interactive fixture may need the operator to allow the synthetic paste.
+  # Never answer a permission dialog by coordinate or silently skip the check.
+  local deadline=$(( SECONDS + 30 ))
+  print -u2 'Waiting up to 30s for focused text; if iOS shows a paste prompt, handle it normally.'
+  while true; do
+    swift "$checker" "$OUT/14_literal_text.png" 'ipb-中文 A1' && return 0
+    (( SECONDS >= deadline )) && return 1
+    sleep 1
+    "$CTL" screenshot "$OUT/14_literal_text.png" || return 1
+  done
+}
+
 echo "host: $(sw_vers -productVersion) $(sw_vers -buildVersion)  DEVICE_ID=${DEVICE_ID:-auto}" | tee -a "$log"
 # The completion is user documentation the shell executes; a syntax error in it is silent
 # until someone presses Tab. Loading it here is host-only and costs nothing.
 run "zsh completion loads" -- zsh -c 'fpath=("$1" $fpath); autoload -Uz _ipb; autoload +X _ipb' -- "$COMPLETION_DIR"
 run "service-ids (host only)" --expect '^mainTouchscreen +0x101' -- "$CTL" service-ids
+run "displays JSON" -- "$CTL" displays --json
+print -r -- "$LAST_OUT" > "$OUT/displays.json"
+run "primary display contract" -- python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["schemaVersion"]==1; p=[v for v in d["displays"] if v.get("primary")]; assert len(p)==1 and len(p[0]["nativeSize"])==2; assert all(n>0 for n in p[0]["nativeSize"]); assert d["orientation"]["currentDeviceOrientation"]' "$OUT/displays.json"
+run "capabilities JSON" -- "$CTL" capabilities --json
+print -r -- "$LAST_OUT" > "$OUT/capabilities.json"
+run "capability contract" -- python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["schemaVersion"]==1; assert any(v["featureIdentifier"]=="com.apple.coredevice.feature.getdisplayinfo" for v in d["capabilities"])' "$OUT/capabilities.json"
 run "descriptors" --expect 'connected descriptors count=[1-9]' -- "$CTL" descriptors
 # Capability expectations come from the device OS: iOS 27 exposes five HID services (adds
 # touchscreenGesture 0x501), iOS 26 exposes four. Derived from the descriptors step that just ran,
@@ -200,6 +222,11 @@ if [[ "${SMOKE_INTERACTIVE:-0}" == 1 ]]; then
   run "focus Settings search" -- "$CTL" tap ${=KEY_XY}; sleep 1; shot 12_before_key
   run "key a" -- "$CTL" key a 0.02; sleep 1; shot 13_after_key
   run "clear test key" -- "$CTL" key backspace 0.02; sleep 1; shot 14_after_clear
+  run "literal Unicode text" -- "$CTL" text 'ipb-中文🙂 A1!'; sleep 1; shot 14_literal_text
+  # A paste-permission modal changes pixels too. Do not clear/close anything
+  # until the field is verified: the clear coordinate could deny that modal.
+  run "literal text in focused field" -- verify_literal_text || exit 1
+  run "clear literal test text" -- "$CTL" tap ${=TEXT_CLEAR_XY}; sleep 1; shot 14_after_text_clear
   run "close Settings search" -- "$CTL" tap ${=KEY_CLOSE_XY}
   run "home" -- "$CTL" home; sleep 1; shot 15_final_home
   # Each no-op allowance has an explicit reason. Other transitions must change
@@ -217,6 +244,8 @@ if [[ "${SMOKE_INTERACTIVE:-0}" == 1 ]]; then
   check_frame_transition "home after long" "$OUT/10_after_long.png" "$OUT/11_after_home.png" changed "Home dismisses the context menu" || true
   check_frame_transition "key a" "$OUT/12_before_key.png" "$OUT/13_after_key.png" changed "search query and results should change" || true
   check_frame_transition "clear key" "$OUT/13_after_key.png" "$OUT/14_after_clear.png" changed "clear query restores search suggestions" || true
+  check_frame_transition "literal text" "$OUT/14_after_clear.png" "$OUT/14_literal_text.png" changed "focused search contains literal Unicode text; inspect exact content" || true
+  check_frame_transition "clear literal text" "$OUT/14_literal_text.png" "$OUT/14_after_text_clear.png" changed "clear query restores suggestions" || true
   check_frame_transition "final home" "$OUT/14_after_clear.png" "$OUT/15_final_home.png" changed "return from Settings search" || true
   fi
 fi

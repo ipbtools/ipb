@@ -721,7 +721,7 @@ Verified high-level use:
 ## Current Gaps
 
 The living list of open items for the project as a whole is the head of `docs/verification.md`;
-this section covers only the protocol-level gaps, refreshed after the 2026-09-21 capture:
+this section covers only the protocol-level gaps, refreshed after the 2026-09-22 capture:
 
 1. **Tap fields differ, but the observed differences are not a demonstrated failure cause.**
    The 2026-09-21 capture below shows Device Hub's count/max, identity and nonzero timestamp;
@@ -733,8 +733,9 @@ this section covers only the protocol-level gaps, refreshed after the 2026-09-21
 4. **Scroll acceleration and momentum remain uncalibrated.** The complete historical phase
    sequence is captured, but `accelX = dx/40` and the decay are not established by it. The latest
    synthetic wheel produced only a zero-movement may-begin report and no visible scroll.
-5. **Permission prompts remain unverified.** The “Remove App” confirmation can be cancelled by
-   both clients on the latest tested seed. Do not generalize that result to TCC/privacy prompts.
+5. **Permission prompts remain operation-specific.** Remove App Cancel works in both clients;
+   Settings Allow Paste was reproduced and accepted for synthetic test text. The original TCC
+   prompt remains unverified; neither success generalizes to every privacy prompt.
 
 Older ABI-surface gaps, still accurate:
 
@@ -1109,7 +1110,7 @@ a timestamp later without fixing the allocation would silently do nothing.
 | 224–320 | embedded ScrollCollection | flags 224, momentum 232, X i8 240, Y i8 248, accelX 256, accelY 288 |
 | 320–360 | `0xff1a/0xe0f4` × 5 (8b each) | per-contact identity — **ipb never sets this** |
 | 360–424 | `AppleVendor/0x102` × 8 (8b each) | **`remoteTimestamp`** — ipb never sets this |
-| 424–459 | `0xff1a/0xe062…0xe068`, seven × 5b | swipe flags: pending 424, locked 429, up 434; the rest by order (inferred) |
+| 424–459 | `0xff1a/0xe062…0xe068`, seven × 5b | swipe flags: pending424, locked429, up434, down439, left444, right449, cancel454 (setters verified2026-09-22) |
 | 459–464 | padding | |
 
 ### What this says about `ContactCount`
@@ -1295,3 +1296,97 @@ The list contains `getdisplayinfo`, `remote.devicecontrol.orientation`, `pastebo
 Selection). `device info audio` failed with **1001**, naming the missing `audiooutput` capability.
 Media audio transport, audio-device selection and screen recording must therefore be represented
 separately. Advertised presence alone is not proof that opening or using a feature will succeed.
+
+
+## Display, literal text and rotated edge alignment (2026-09-22)
+
+**Seed:** macOS 26.5.1 (25F80), Xcode 27 Beta 6, DeviceHub 27.0 (255.2.3.5), DeviceKit 255.2.3,
+CoreDevice 642.15, UniversalHID 90.1, DDI 27A5252f (live `device info ddiServices` metadata),
+wired iPhone 13 Pro / iOS 27.0 (24A437). These findings supersede the earlier single-orientation/text
+uncertainty only within the measured scope.
+
+### Display and input spaces — runtime plus static evidence
+
+`device info displays` supplies one explicit primary LCD (`displayId:1`, nativeSize 1170x2532,
+pointScale 3, nativeOrientation rot0) and separate device/content orientation values. During landscape
+Calculator, device landscapeRight accompanied display rot90; landscapeLeft accompanied rot270.
+Settings can retain display rot0 while device direction changes. A non-primary Wireless entry
+was present while Device Hub viewed the screen and must not replace the primary screen's geometry.
+
+Additional captured Device Hub pointer→native touch pairs, with report quantization:
+
+| Device direction | Pointer x,y | Digitizer x,y | Observed inverse mapping |
+| --- | --- | --- | --- |
+| portrait | .27690,.84976 | .27689,.84974 | x,y |
+| landscapeLeft | .84929,.74358 | .25643,.84929 | 1-y,x |
+| portraitUpsideDown | .72270,.14868 | .27729,.85132 | 1-x,1-y |
+
+The first landscapeRight click capture was invalidated by another task's concurrent device
+orientation changes and is not evidence. The inverse quarter-turn mapping for that direction was
+subsequently validated by ipb's actual Settings/Calculator click effects, not a claimed valid
+Device Hub pointer pair. Final native mirror clicks worked at all four device directions.
+
+Static DeviceKit at the path in the preceding section: `windowToUnitTransform` at 0x424400 composes
+its matrices without the extra pointer rotation; pointer variant 0x424464 adds a centered rotation.
+This supports keeping pointer and touchscreen mappings separate. The current implementation uses
+explicit inverse device rotation for touch and presentation coordinates for pointer; content
+orientation is used for edge classification. Physical rotated-scroll calibration remains open.
+
+`devicectl device info displays --stream --json-output - --timeout 5` emitted human updates on
+stderr, with only a final timeout JSON envelope on stdout. The mirror therefore polls structured
+snapshots, one in flight, rather than treating human text as a protocol. A snapshot is not an atomic
+frame-orientation epoch; the preview may lag an external change by a refresh interval.
+
+### Literal focused paste — actual effect evidence
+
+Device Hub Command+V after copying `ipb-中文🙂 A1!` inserted that exact text into Settings search
+with Pinyin active. The new `ipb text` did the same with Device Hub keyboard capture disabled.
+It writes the device clipboard once, then sends the earlier captured 39 B held sets
+`{0xe3}`, `{0xe3,0x19}`, `{0x19}`, `{}` on the resolved keyboard service. This does not imply a
+Unicode HID report or full mirror keyboard capture. Clipboard contents are replaced, not restored.
+
+A later fresh test displayed Settings' “Allow Paste from dtpasteboardd” permission prompt. After
+explicitly allowing this synthetic test paste, the exact field appeared. Thus clipboard copy and
+HID submission can succeed while insertion awaits application policy; rc0 cannot certify text
+acceptance. `ipb text` does not approve permission dialogs. The smoke field check now rejects
+that modal instead of accepting its large pixel difference.
+
+### Rotated bottom-edge touch flags — capture and setter evidence
+
+A separate Device Hub trace resolved all 10 taps, captured 8 calls, shed none and detached with rc0.
+The landscapeRight Calculator bottom swipe returned Home using four 58 B Digitizer reports on 0x101;
+no Indigo digitizer call occurred. Native x moved 65535→53538→40026 with y=32802; the final report
+cleared Touch/InRange but still described one contact. All four tails at bytes 53–57 were
+`20 00 10 00 00`. The portrait Settings edge control also returned Home; its tails were
+`20 04 00 00 00`. These tails are locked+left and locked+up respectively, including on UP.
+
+Static setters in
+`/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks/UniversalHID.framework/UniversalHID`
+(version 90.1) confirm the contact-index-relative offsets:
+
+| Field | Setter address | Base bit |
+| --- | --- | --- |
+| pending |0x53344|424|
+| locked |0x533d0|429|
+| up |0x5345c|434|
+| down |0x534e8|439|
+| left |0x53574|444|
+| right |0x53600|449|
+| cancel |0x5368c|454|
+
+The corresponding immediate adds are 0x1a8, 0x1ad, 0x1b2, 0x1b7, 0x1bc, 0x1c1, 0x1c6.
+The new rotated-edge builder uses the captured count 1 / max 5, identifier 2 / identity 2, native x/y,
+remote timestamp, locked plus exactly one native direction, and retains flags on UP. Mapping
+content rot0/90/180/270 to up/left/down/right follows the native-axis transform; the down case is
+static/geometry evidence only, without a real upside-down-content app in this run.
+
+A trace of ipb confirmed its rotated edge bytes and count-1 UP matched this shape. Controlled 300 ms
+sequences from the same builder returned Home at both landscape directions. Approximately 6 ms
+CUA mirror drags did not; no production timing interpolation was added. Portrait-content mirror
+edges retain the existing Indigo path, which still returned Home with CUA's short drag.
+
+The ordinary HIDReport-returning builder had retained count 0 on UP even though the separate Data
+builder was already fixed. Both now share the byte construction with count 1 on UP. Ordinary
+max 1 / identifier 0 / identity 0 / timestamp 0 remains unchanged. Host tests inspect actual framework-backed
+reports, and the installed real-device gate exercises tap/swipe/key/text again. Raw swipe probes
+are not promoted to verified high-level commands by this change.

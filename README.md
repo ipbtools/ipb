@@ -102,6 +102,9 @@ bin/ipb tap 0.5 0.5
 bin/ipb launch com.apple.Preferences
 bin/ipb open https://www.apple.com
 bin/ipb clipboard set "你好 🚀" && bin/ipb clipboard get
+bin/ipb text "你好 🚀"             # focus a text field first; replaces the device clipboard
+bin/ipb displays --json
+bin/ipb capabilities --json
 bin/ipb apps | bin/ipb ps | bin/ipb lock-state | bin/ipb orientation
 bin/ipb push local.txt /Documents/x.txt --app <bundle-id>
 bin/ipb long 0.615 0.675 1.2
@@ -168,6 +171,24 @@ HIDCTL_TIMEOUT_S=30                  # watchdog for a single helper run
 
 Exit codes from the helper: 0 ok, 1 a dispatched operation or the remote connection reported failure, 2 usage or local error, 3 CoreDeviceService refused the service socket (the CoreDevice error is printed), 4 the device tunnel is not connected, 5 watchdog timeout. On 4 the wrapper warms the tunnel once with `devicectl device info details` and retries; nothing has been sent to the device at that point.
 
+### Literal text and device metadata
+
+`ipb text <text>` copies the exact UTF-8 argument to the device clipboard, then sends the captured
+Command+V held-key sequence. It is separate from `key`, whose output depends on the phone's input
+method. Focus an editable field first. The command replaces the device clipboard; it does not
+restore it or enable continuous clipboard sharing. Discovery fails before a clipboard change;
+copy failure prevents paste. A failed paste is not replayed. Exit 0 means copy and paste submission
+succeeded, **not** that the focused application accepted the text. Verify the resulting field.
+Chinese, emoji, spaces and punctuation were verified in iOS 27 Settings search with Pinyin active.
+iOS may ask the focused app to allow pasting from `dtpasteboardd`; `text` does not answer that prompt.
+Secure fields and applications that reject paste are not covered by that result.
+
+`ipb displays --json` and `ipb capabilities --json` return a `schemaVersion: 1` envelope with the
+resolved `deviceIdentifier`. Displays preserves Apple's `displays`, `orientation`, `backlightState`;
+capabilities preserves the advertised entries, sorted by `featureIdentifier`. Select the explicit
+primary display; the first entry need not be the phone screen. Query failure is an error, not an
+empty capability list. An advertised feature is not a guarantee that its next operation will work.
+
 ### Live screen stream: `ipb stream`
 
 Streams the device screen without DeviceHub, without injecting any Apple process, and without any
@@ -221,11 +242,12 @@ device's own scroll path (`0x501`, iOS 27 only). The shortcuts match DeviceHub:
 | ⌘L | Lock, or wake a dark screen — the same side-button press |
 | ⌘↑ / ⌘↓ | Volume up / down |
 | ⇧⌘S | Save the latest decoded frame as a PNG in `~/Pictures` |
+| ⌘← / ⌘→ | Rotate device left / right, then update the preview and input mapping |
 | ⌘0 | Zoom to fit |
 | ⌘1 | Actual size (falls back to fit if it exceeds the available screen) |
 
 Key repeat is ignored, so holding a shortcut sends one press. The mirror does not yet forward
-ordinary typing like Device Hub's Capture Keyboard mode; use the CLI `key` commands for individual usages.
+ordinary typing like Device Hub's Capture Keyboard mode; use CLI `key` for individual usages or `text` for a focused paste.
 
 **Requires a GUI login session**, just like `ipb stream`: in-process decoding needs
 `CVDisplayLink`. It works with SIP enabled and needs no entitlement; plain ssh is unsupported.
@@ -247,9 +269,18 @@ that file (overwriting it; its parent directory must exist). CSV open/write fail
 `build/ipb-mirror`. The source is `Sources/mirror.m`. The helper's existing `--service-id ID`
 option is also passed through for a known touchscreen ID; descriptor discovery remains the default.
 
+The mirror reads the live primary display before opening and refreshes it on a serial background
+queue once per second, with at most one query in flight. Each query has a 5-second Apple timeout
+and a 6-second host bound; close cancels the active child. Query/geometry errors fail the session
+explicitly. Metadata changes drain old input before changing the crop or transform. External
+orientation changes can take a refresh interval to appear; there is no atomic frame/metadata epoch
+in this version. Device direction controls the preview; touch coordinates map back to native axes,
+while pointer coordinates stay in preview space. Saved PNGs retain the cropped native orientation.
+
 Decoded frames carry encoder padding for 16-pixel alignment (on the iPhone 13 Pro, 1184×2576
 against a 1170×2532 screen). The mirror crops it rather than compensating for it, so the window's
-aspect ratio matches the phone's and a click lands where it is drawn; see the 2026-09-09 record in
+aspect ratio matches the phone's and a click lands where it is drawn. Live primary `nativeSize`
+is preferred, followed by the existing model table, Xcode lookup and content detector; see the 2026-09-09 record in
 [docs/verification.md](docs/verification.md).
 
 Not implemented: Siri (⇧⌥⌘H), screen recording (⇧⌘R), Action Button, and Camera Control. A Device Hub Siri invocation has now been captured (code `0xcf`, states 0/1), but produced no visible
@@ -281,10 +312,12 @@ bin/ipb service-id avp
 
 ```sh
 scripts/smoke_matrix.sh . build/smoke            # host-only, discovery, and non-destructive reports
-SMOKE_INTERACTIVE=1 TAP_XY="0.15 0.12" scripts/smoke_matrix.sh . build/smoke   # adds home, tap, recents, swipe, scroll, long, key
+SMOKE_INTERACTIVE=1 TAP_XY="0.15 0.12" scripts/smoke_matrix.sh . build/smoke   # adds home, tap, recents, swipe, scroll, long, key, text
 ```
 
-Every step must exit 0 and, where stated, print the expected output; the script exits non-zero otherwise. Screenshots before and after each interactive step land in the output directory; identical consecutive frames are reported as warnings because a system alert can legitimately freeze the screen.
+Every step must exit 0 and, where stated, print the expected output; the script exits non-zero otherwise. Interactive steps require an explicitly unlocked phone and save screenshots in the output directory. Unexplained unchanged frames fail; declared no-ops carry their reason. Inspect the images for the intended effect, since a pixel change alone is not semantic proof.
+
+The text fixture uses the iOS 27 Settings search field in portrait. Adjust its coordinates for the target layout. It replaces the device clipboard with synthetic Unicode text and waits up to 30 seconds for field OCR; handle any iOS paste prompt normally during that interval. The gate never answers the prompt itself and stops before clearing the field if text is absent. Inspect the saved image for exact emoji and punctuation, which OCR does not certify.
 
 ## Feature matrix: ipb vs adb vs idb vs devicectl
 
@@ -296,7 +329,7 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Select a device | `-s <serial>`, `$ANDROID_SERIAL` | `-s <uuid\|prefix\|name>`, `DEVICE_ID` | `--udid <udid>` | `--device <uuid>` |
 | Tap / swipe / long press | `input tap/swipe` | `ipb tap/swipe/long` (own) | no | no |
 | Scroll | `input swipe` | `ipb scroll` (drag) and `ipb scroll-gesture` (trackpad phases, iOS 27; own) | no | no |
-| Key / text | `input keyevent/text` | `ipb key` (HID usages, own); UTF-8 clipboard copy/get works, focused Unicode insertion still needs end-to-end verification | no | no |
+| Key / text | `input keyevent/text` | `ipb key` (HID usages); `ipb text` (clipboard + paste, Settings Unicode verified; replaces clipboard) | no | no |
 | Home / App Switcher | `keyevent HOME/APP_SWITCH` | `ipb home` / `ipb recents` (own) | no | no |
 | Lock / wake screen | `input keyevent POWER` | `ipb power` (aliases `lock`, `wake`; own, 0.4 s hold) | no | no |
 | Screenshot | `screencap` | `ipb screenshot` (devicectl) | yes | `capture screenshot` |

@@ -60,6 +60,7 @@ input
   power [hold_seconds]                         side button: locks a lit screen, wakes a dark one
   lock | wake                                  the same press, under the name you want
   key <usage_or_name> [hold_seconds] [service_id]        one keyboard key
+  text <text>                                   replace device clipboard and paste into focused field
   key-down <usage_or_name> [service_id]        hold a key (paired with key-up)
   key-up [usage_or_name] [service_id]          release it, or all keys
   button <usage_page> <usage_code> [hold_seconds]        a hardware button by HID usage
@@ -88,6 +89,8 @@ files (devicectl)
 
 system (devicectl)
   info | lock-state                            device details, passcode/lock state
+  displays [--json]                            live displays, orientation and backlight
+  capabilities [--json]                        advertised CoreDevice features (not session guarantees)
   clipboard get | clipboard set <text>         device pasteboard
   location <lat> <lon> | location clear        simulate location
   orientation [portrait|landscapeLeft|landscapeRight|portraitUpsideDown]
@@ -389,6 +392,43 @@ run_scroll() {
 
 run_vendor() {
   run_helper env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$VENDOR_FEATURE" 0 "$@"
+}
+
+query_metadata() {
+  local kind="$1" format="$2" json rc=0
+  json="$(mktemp -t ipb-metadata)"
+  local verb=displays
+  [[ "$kind" == capabilities ]] && verb=details
+  devicectl device info "$verb" --device "$DEVICE" --timeout 30 --json-output "$json" --quiet >/dev/null || rc=$?
+  if (( rc )); then rm -f "$json"; return $rc; fi
+  python3 - "$json" "$kind" "$format" "$DEVICE" <<'PY' || rc=$?
+import json, sys
+try:
+    result = json.load(open(sys.argv[1]))['result']
+    kind, fmt, device = sys.argv[2:]
+    if kind == 'displays':
+        fields = ('displays', 'orientation', 'backlightState')
+        output = {k: result[k] for k in fields}
+        if not isinstance(output['displays'], list) or not isinstance(output['orientation'], dict):
+            raise ValueError('invalid display metadata')
+    else:
+        entries = result['capabilities']
+        if not isinstance(entries, list) or any(not isinstance(e.get('featureIdentifier'), str) for e in entries):
+            raise ValueError('invalid capability metadata')
+        output = {'capabilities': sorted(entries, key=lambda e: e['featureIdentifier'])}
+    if fmt == '--json':
+        print(json.dumps({'schemaVersion': 1, 'deviceIdentifier': device, **output}, ensure_ascii=False, indent=2))
+    elif kind == 'capabilities':
+        for entry in output['capabilities']:
+            print(entry['featureIdentifier'] + '\t' + entry.get('name', ''))
+    else:
+        print(json.dumps(output, ensure_ascii=False, indent=2))
+except (OSError, KeyError, TypeError, ValueError) as error:
+    print('ipb: invalid device metadata: ' + str(error), file=sys.stderr)
+    sys.exit(1)
+PY
+  rm -f "$json"
+  return $rc
 }
 
 descriptor_output() {
@@ -840,7 +880,7 @@ case "$cmd" in
     keepalive_budget=$(( keepalive_budget + 30 ))
     (( keepalive_budget > 3630 )) && keepalive_budget=3630
 
-    "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$product_type" "$@" &
+    IPB_DEVICECTL_PATH="$DEVICECTL" "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$product_type" "$@" &
     MIRROR_HELPER_PID=$!
     start_tunnel_keepalive "$keepalive_budget"
     trap 'shutdown_mirror' INT TERM
@@ -951,6 +991,20 @@ case "$cmd" in
     service_id="$(resolve_service_id "${3:-keyboard}")"
     run_uhid cd_key "$service_id" "$usage_code" "${2:-0.08}"
     ;;
+  text)
+    [[ $# -eq 1 && -n "$1" ]] || { print -u2 'usage: ipb text <non-empty text>'; exit 2; }
+    # Discover before changing the clipboard. Copy exactly once, then submit the
+    # captured Command+V sequence. No automatic retry of a partially sent paste.
+    service_id="$(resolve_service_id keyboard)"
+    print -rn -- "$1" | devicectl device pasteboard copy --device "$DEVICE" --timeout 30 --quiet || {
+      print -u2 'ipb text: clipboard write failed; paste was not sent'; exit 1;
+    }
+    run_uhid cd_paste "$service_id" || {
+      paste_rc=$?
+      print -u2 'ipb text: clipboard was written, but paste failed; do not blindly retry'; exit $paste_rc;
+    }
+    print -u2 'ipb text: paste submitted; clipboard replaced. Verify the focused field to confirm insertion.'
+    ;;
   key-down|keyboard-down)
     [[ $# -ge 1 && $# -le 2 ]] || { usage; exit 2; }
     usage_code="$(keyboard_usage "$1")"
@@ -1043,6 +1097,10 @@ case "$cmd" in
   apps)        devicectl device info apps --device "$DEVICE" "$@" ;;
   ps)          devicectl device info processes --device "$DEVICE" "$@" ;;
   info)        devicectl device info details --device "$DEVICE" "$@" ;;
+  displays|capabilities)
+    [[ $# -eq 0 || ( $# -eq 1 && "$1" == --json ) ]] || { usage; exit 2; }
+    query_metadata "$cmd" "${1:-}"
+    ;;
   lock-state)  devicectl device info lockState --device "$DEVICE" "$@" ;;
   install)
     [[ $# -eq 1 ]] || { usage; exit 2; }
