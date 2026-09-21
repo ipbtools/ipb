@@ -13,7 +13,7 @@ user's to decide.
 | Item | Root-cause status | Blocker |
 | --- | --- | --- |
 | **Gap 1: Device Hub drives a locked device, ipb cannot** | **Root-caused.** Escrowed `RemoteUnlockKeypair` + `KeybagProvider.unlock` in `remotepairingd`; our `RemotePairingError 1016` is its `unlockRequired` case. Gated by the `com.apple.dt.Devices` keychain group and `com.apple.private.coredevice.client`, so it is a structural boundary, not a bug. See 2026-09-15 "Gap 1 mechanism found". | User: "这个问题可能也需要 device hub 测试下才行". A Device Hub run would confirm the boundary; it cannot remove it. Recommended outcome: document as a permanent capability limit. |
-| **Gap 2: Device Hub can tap system dialogs, ipb cannot** | **Not root-caused.** Two hypotheses survive: `remoteTimestamp = 0` (weakened — zero is Apple's own nil encoding) and tap framing against Device Hub's real digitizer bytes (never captured). The `contactCount` lift fix was committed on its own merits and is **not** a claimed fix. | Needs a real system-presented prompt. Every app on the attached devices has already granted its permissions. Open question to the user: which app produced the original prompt. |
+| **Gap 2: Device Hub can tap system dialogs, ipb cannot** | **Not root-caused.** Two hypotheses survive: `remoteTimestamp = 0` (weakened — zero is Apple's own nil encoding) and tap framing against Device Hub's real digitizer bytes (never captured). The `contactCount` lift fix was committed on its own merits and is **not** a claimed fix. | **The reproduction problem is solved** (2026-09-21): the home-screen **"Remove App" confirmation** is a genuine system-presented alert, available on demand and dismissible with Cancel, so it no longer depends on finding the app that produced the user's original prompt. The remaining blocker is different — sending a **synthetic touch** is refused by the operator agent's permission classifier, so the experiment has never run. Needs either that authorisation or the user performing the clicks. |
 | **`TODO(media-lifetime)`** | **Not root-caused.** Identical runs produced 1 236 and 265 frames; the earlier "constant ~266 frames" claim was retracted as host-state noise. | User: "同样复现下". Planned reproduction: a run against a *continuously changing* screen (loop home/recents) to separate an idle-screen watchdog from a genuine media limit. |
 | **`TODO(tunnel-keepalive)`** | **Root-caused, workaround accepted.** The tunnel is a lease with a ~10–11 s grace, identical wired and localNetwork; we hold it by proxy with a resident `devicectl notification observe` instead of taking our own assertion, because `acquireusageassertion` needs an entitlement. `bin/ipb:273`. | User closed it: "就维持现状把". Do not reopen. |
 
@@ -24,6 +24,8 @@ user's to decide.
 | ~~**`KeyboardReport` is 31 B against a 312-bit (39 B) descriptor**~~ | **Fixed 2026-09-21.** `makeKeyboardHIDReport` now allocates `0x138` = 312 bits; verified on the wire at 39 B with the usage bit still at `usage + 8`. `scripts/check_report_sizes.py` runs on every `make` and fails the build on any hardcoded allocation short of its descriptor — it was confirmed to fail on the old `0xf8`. | Done. |
 | **Report-send timeouts are fatal, and an abandoned send is not serialised** | **Partly root-caused.** A timed-out `sendBounded` returns while the real call "still runs to completion in the background" (record of 2026-09-14), so a later send can race it on the same `xrc_t`. Barrier timeouts were made non-fatal; report timeouts were not. | Make a report timeout drop the gesture and force an UP so the contact is released, rather than killing the session; serialise per-connection sends so an abandoned call cannot race the next one. |
 | **The smoke gate treats identical consecutive frames as advisory** | N/A — a gate defect, not a device defect. `scripts/smoke_matrix.sh:171` prints `WARN` and continues, while Rule 4 says an identical frame "is a warning that must be explained ... not ignored". | Require an explanation (an allow-list of expected-identical steps) or fail. |
+| **Smoke gate identical-frame handling, and silent no-ops as a design question** | **Under-ranked, per the 2026-09-21 review.** The gate prints `WARN` and continues where Rule 4 says an identical frame "must be explained ... not ignored", so it violates the project's own written rule on every run. Separately, silent no-ops have now surfaced twice (App Switcher `0x100`, the voided `contactCount` test), which is Rule 3's own redesign trigger. | Gate: allow-list the steps expected to produce identical frames and fail otherwise. No-ops: decide whether screenshot-diff assertion is the default, rather than patching command by command. |
+| **UI hierarchy / accessibility-tree read is absent from the roadmap** | **Route settled, nothing attempted.** Not reachable over CoreDevice — the DDI ships no accessibility daemon and none of its 54 features is accessibility-related. `AccessibilityAudit` reaches `axAuditDaemon` over **lockdown**, which is stage 4's transport. | Confirm the service name on the wire, then decide whether it belongs in the stage-4 pymobiledevice3 client. Named by the 2026-09-21 review as the largest capability gap for agent use. |
 | **Raw probe verbs have never shown a device effect** | **Known.** `nav-report`, `dock-report`, `pointer-report`, `scroll-report`, `scroll-event`, `vendor-defined`, `uhid-swipe-report` are accepted by the service and do nothing observable; `nav-report`/`dock-report` additionally rest on a retracted premise. They are now marked as probes in `README.md` and `docs/protocol.md`. | Whether to quarantine them out of the main help (Fable's recommendation) is a CLI surface decision, not a doc fix. Marked, not moved. |
 | **Device Hub's own tap has never been captured** | **Methodology failure fixed; tap itself still uncaptured.** All ten CoreDevice HID send paths are now bound (`taps-full.tsv`) and the rig is proven to record live Device Hub traffic — Home, App Switcher and Lock were captured on 2026-09-21, with a clean zero baseline. What remains uncaptured is specifically a **tap**, because sending a synthetic touch is blocked on the operator's session. `xpc_remote_connection_send_message*` turned out to be unusable: it does not resolve by name under lldb on this host. | Needs tap/long-press authorisation for the operator, or the user performing the clicks. Everything else is ready. |
 
@@ -3860,3 +3862,85 @@ exactly that useless output, which is why there were two rounds.
 
 No tap was captured — sending a synthetic touch is blocked on the operator's session. Gap 2 is
 untouched by this record.
+
+
+## 2026-09-21 — Gap 2's reproduction problem solved on paper; accessibility-tree route settled
+
+Companion record to the button capture of the same date. Nothing here was measured on a device;
+these are a method and a static-analysis result that would otherwise live only in a scratch
+directory and a conversation.
+
+### A reproducible system-presented alert, at last
+
+Gap 2 has been blocked for days on **reproduction**, not on analysis: the recorded blocker was
+"needs a real system-presented prompt", and every app on the attached devices had already granted
+its permissions, so no TCC prompt could be produced. The open question to the user — *which app
+produced the original prompt* — was never answerable.
+
+It does not have to be a permission prompt. **The home-screen "Remove App" confirmation is a
+system-presented alert**: long-press an icon, choose "Remove App", and SpringBoard puts up
+"Delete 'X'?" with Delete / Remove from Home Screen / Cancel. It is available on demand, needs no
+particular app state, and is **dismissible with Cancel**, so it can be raised and dismissed
+indefinitely without deleting anything.
+
+That removes the dependency on the user's original prompt entirely. Credit: proposed by the
+independent reviewer (gpt-6-astra) while arguing — correctly — that the Gap 2 blocker was a
+reproduction problem and not a byte-level one, and that a capture should be spent falsifying a
+specific hypothesis rather than fishing.
+
+**Experiment, for when a synthetic touch is authorised:** drive Device Hub's own mirror window to
+long-press an icon, tap "Remove App", then tap **Cancel** (never Delete), with the tracer bound to
+all ten CoreDevice HID paths. Two control taps on blank wallpaper first — without a baseline
+showing the rig records an ordinary tap, an empty result on the alert is uninterpretable. This
+answers two questions in one run:
+
+1. **Does Device Hub itself succeed on a system alert?** Never tested. It has always been assumed
+   it does. If it fails, Gap 2 is a second structural boundary like Gap 1, and no amount of
+   byte-level correctness will close it.
+2. **What do Device Hub's digitizer bytes actually look like?** Still never captured.
+
+### The accessibility tree is not reachable over CoreDevice, but is over lockdown
+
+The same review named **UI-hierarchy / accessibility-tree read** as the largest capability gap for
+agent use and as absent from the roadmap, reasoning from this repo's own research notes: the
+"minimum agent loop" in `docs/research/adb-capability-boundary.md` includes a hierarchy dump, and
+`docs/research/agent-frameworks.md` attributes every other iOS framework's dependence on XCTest to
+exactly that API never being exposed outside it. Coordinate-only control is what makes an agent
+brittle.
+
+The proposed route was that Xcode's Accessibility Inspector might read a live device tree over the
+same CoreDevice/RemoteXPC mechanism as `dtuhidd`. **It does not.** Mounting the iOS DDI
+(`/Library/Developer/DeveloperDiskImages/iOS_DDI/Restore/*.dmg`) and enumerating it:
+
+- 16 daemons: `dtappserviced`, `dtconfigurationd`, `dtdebugproxyd`, `dtdeviceinfod`,
+  `dtdiagnosticsd`, `dtfilesandboxd`, `dtfileserviced`, `dthidd`, `dticond`, `dtlocationd`,
+  `dtpasteboardd`, `dtremotedisplayd`, `dtscreencaptured`, `dtuhidd`, `gputoolstransportd`,
+  `testmanagerd`. **No accessibility daemon.**
+- 54 `com.apple.coredevice.feature.*` identifiers across their launchd plists. **None is
+  accessibility-related.** The nearest are settings-level actions in CoreDevice itself
+  (`getlargeraccessibilitysizesenabled`, `getcustomizableappearanceelements`), which change
+  accessibility *settings* and do not read a UI tree.
+
+The capability is still reachable, by a different transport. `AccessibilityAudit.framework` in
+Xcode carries `AXAuditDevicesAppRemoteServer` with an `initWithTransport:` initialiser and the
+string `com.apple.accessibility.axAuditDaemon.protocolVersion`; it links no CoreDevice framework at
+all. That is the **lockdown** service family, not CoreDevice/RemoteXPC — which means it belongs to
+the stage-4 pymobiledevice3 client, where lockdown is already the transport, and **not** to this
+helper. Recorded as a finding, not as a plan: no service name has been confirmed on the wire and
+nothing has been attempted against a device.
+
+### Other points from the same review, recorded rather than actioned
+
+- The roadmap undersells what makes `ipb` different. Every surveyed real-device iOS automation
+  framework needs a signed XCTest runner on the device; `idb` cannot do real-device UI automation
+  at all. No-server, no-signing, coordinate-level injection is a different category, not a faster
+  `adb`.
+- **The smoke gate's advisory-only identical-frame handling is under-ranked.** It violates
+  `AGENTS.md` Rule 4 in writing on every run, which undermines confidence in every other
+  verification record in this file. Cheap to fix; still open.
+- **"Silent no-ops are structural" deserves promotion from a note to a design decision.** It has
+  now surfaced twice — the App Switcher `0xff01/0x100` dead usage, and the voided `contactCount`
+  test — which is Rule 3's own "third patch means redesign the area" trigger.
+- Arbitrary Unicode text entry (beyond single key usages) is part of the stated minimum agent loop
+  and is not on the roadmap either. Everything else in the adb boundary list is already covered by
+  `devicectl` and should not be reimplemented inside `ipb`.
