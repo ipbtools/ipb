@@ -115,6 +115,19 @@ performed. A caption-only AX CLI result is not proof that the system lacks geome
   Next: establish target synchronization and query liveness, reproduce Inspector's point-query
   setup, and characterize target detail restrictions before promising arbitrary-app full snapshots,
   coordinates or element-based actions.
+- Offline inspection of DDI 27A5252f / XCTest 25227 now traces XCTest snapshots to device
+  `testmanagerd`: `XCTestSession` → `XCAXManager_iOS` → `XCTAutomationSupport` → AXRuntime's
+  parameterized snapshot query. A separate `com.apple.dt.testmanagerd.remote.automation` service
+  directly implements snapshot and attribute RPCs over DTX. Its launchd declaration requires
+  `AppleInternal`, and startup only registers its listener when
+  `os_variant_allows_internal_security_policies("com.apple.testmanagerd")` succeeds. The ordinary
+  `.remote` service instead creates a harness/control session; a successful control handshake is
+  not proof of snapshot access. See [service and authorization evidence](protocol.md#xctest-snapshot-service-boundary-2026-09-22).
+  This establishes a specific restricted implementation, not universal impossibility of a
+  runner-free AX reader. No live XCTest service connection was attempted while the phone was
+  exclusively loaned to LookInside. After its explicit return, first check RSD advertisement and
+  bounded service access; only an accessible automation endpoint justifies testing its capability
+  exchange and snapshot request. AXAudit target/liveness research remains an independent path.
 
 ## Remaining work
 

@@ -14,7 +14,7 @@ The latest native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with an u
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | Captured Inspector property requests work over RSD/DTX. A Lab focus cycle exported 36 focus elements / 131 merged hierarchy nodes, but auto-scrolled and accumulated distinct heading tokens: no atomic/full snapshot proof. A recursive probe timed out and returned Lab nodes while screenshots showed Settings; a fresh Lab session then lacked a focus seed. Target synchronization/liveness causes are unknown. Two earlier Settings queries had one node and no class/address. Element geometry remains unresolved. | Agent-researchable: establish target synchronization and bounded query behavior, characterize hierarchy completeness and target detail restrictions, then reproduce successful Apple point queries. No arbitrary-app full-tree/coordinate claim or product command yet. See [current research](devicehub-alignment.md#ui-context-research); the older lockdown-only inference is superseded by the exercised RSD shim. |
+| **UI element / semantic context research** | Captured Inspector property requests work over RSD/DTX. Lab's 36-focus/131-node dump is a temporal union, with unresolved target mismatch, timeout and missing-seed failures; element geometry remains unresolved. Offline DDI analysis locates XCTest snapshots in `testmanagerd` and a direct remote automation implementation, but its listener has both an `AppleInternal` declaration and an internal-security-policy registration gate. Ordinary harness connection is a separate path; no live XCTest access result yet. | Agent-researchable: after the phone's explicit return from LookInside, check the automation endpoint's RSD advertisement/access before implementing its RPCs. Independently resolve AXAudit target/liveness, completeness and point-query behavior. No full-tree/coordinate claim or product command yet. See [current research](devicehub-alignment.md#ui-context-research) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -4281,3 +4281,33 @@ Raw requests, outputs and screenshots are local under `~/.local/state/ipb/202609
 home at the top with no preview outline. No AX activation or Settings toggle was performed.
 The next implementation needs an explicit target check, bounded query errors and an honest
 completeness/snapshot contract before this can become a reliable `ipb` command.
+
+## 2026-09-22 — XCTest snapshot processor and direct-session gates
+
+Offline follow-up to `d625705`. The user asked which device service processes XCTest snapshots
+and whether the computer can establish an effective session without a runner. The iPhone 13 Pro
+remained exclusively loaned to LookInside: **no device enumeration, connection, launch or input
+was performed in this run**. This is static research, not a release-matrix or live denial result.
+
+The Mac-local DDI image `022-22070-094.dmg` was mounted read-only. Its metadata records Public
+DDI 27A5252f / build 1335 / XCTest 25227 / CoreDevice 642.15. `nm`, `otool`, `dyld_info`, launchd
+metadata and code-signature entitlements were inspected for the arm64 slice. The traced request
+reaches `XCTestSession` in device `testmanagerd`, then `XCAXManager_iOS`, `XCTAutomationSupport`
+and AXRuntime's parameterized snapshot query. This establishes the XCTest receiver, not the
+entire downstream AX IPC chain or snapshot completeness.
+
+The decisive distinction is between ordinary `testmanagerd.remote` harness/control sessions and
+the separate `testmanagerd.remote.automation` session. The latter contains executable snapshot
+and attribute methods, but launchd declares `AppleInternal`; daemon startup also skips listener
+registration unless `os_variant_allows_internal_security_policies` succeeds. Accepted automation
+connections additionally require Automation Mode. Runner-local NSXPC authorization is a third
+path, not an automatically available host proxy. Addresses, paths, entitlement keys and the
+pymobiledevice3 control/runner sequence are condensed in
+[protocol.md](protocol.md#xctest-snapshot-service-boundary-2026-09-22).
+
+Raw static outputs, copied metadata, binary SHA-256 values and decoded CFString keys are retained
+outside Git at `~/.local/state/ipb/20260922-xctest-snapshot/`. No production code changed; no
+build/install/smoke run applies to this documentation-only investigation. Live advertisement,
+service-start authorization, protocol exchange and snapshot output are still untested. After the
+phone's explicit return, distinguish those layers with bounded probes before implementing a
+client. The prior working AXAudit shim is independent of this restricted XCTest entry.

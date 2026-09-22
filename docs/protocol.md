@@ -1510,3 +1510,119 @@ and `Contents/SharedFrameworks/AccessibilityAudit.framework`.
 The upstream comparison is
 [pymobiledevice3 at 10194d12](https://github.com/doronz88/pymobiledevice3/blob/10194d12e7cf17453887b7ac3d46e1b85b5a057a/pymobiledevice3/services/accessibilityaudit.py),
 which lacks wrappers for these property/point queries and an `AXAuditNode_v1` decoder.
+
+## XCTest snapshot service boundary (2026-09-22)
+
+**Static evidence only.** Inspected the arm64 slices in the Mac-local image
+`/Library/Developer/DeveloperDiskImages/iOS_DDI/Restore/022-22070-094.dmg`, mounted read-only.
+Its `version.plist` records DDI **27A5252f**, variant **Public**, build **1335**, XCTest **25227**
+and CoreDevice **642.15**; host is macOS 26.5.1 with Xcode 27 Beta 6. This is not a new device
+DDI inspection or live service test. The iPhone was exclusively loaned to another task throughout.
+
+Sources below are image-relative paths; addresses are unslid arm64 virtual addresses from
+`nm -arch arm64 -nm`, `otool -arch arm64 -tvV` and `dyld_info -arch arm64 -fixups`:
+
+- **T:** `usr/libexec/testmanagerd` (installed program path `/System/Developer/usr/libexec/testmanagerd`).
+- **U:** `Library/Frameworks/XCUIAutomation.framework/XCUIAutomation`.
+- **A:** `Library/PrivateFrameworks/XCTAutomationSupport.framework/XCTAutomationSupport`.
+- **P:** `Library/LaunchDaemons/com.apple.dt.testmanagerd.plist`.
+
+### Snapshot processing is in the device daemon
+
+The traced classic runner path is:
+
+```text
+XCAXClient_iOS / XCTRunnerDaemonSession (XCUIAutomation in the caller)
+  → _XCT_requestSnapshotForElement:attributes:parameters:reply:
+  → XCTestSession in device testmanagerd
+  → XCAXManager_iOS.snapshotForElement:attributes:parameters:timeoutControls:error:
+  → XCTElementSnapshotRequest (XCTAutomationSupport)
+  → XCTAccessibilityFramework.userTestingSnapshotForElement:options:error:
+  → AXUIElementCopyParameterizedAttributeValue(element, 95006, options)
+```
+
+| Evidence | Address and observed call |
+| --- | --- |
+| Client RPC | U `XCTRunnerDaemonSession` snapshot delegate at `0x6fa70` calls `daemonProxy` and `_XCT_requestSnapshotForElement:attributes:parameters:reply:` at `0x6fbb8`. Its newer `fetchSnapshot…` variant starts at `0x6fbf4`. |
+| Device receiver | T `XCTestSession._XCT_requestSnapshot…` at `0x10002f41c` first checks UI-testing readiness, then calls its `axManager` snapshot method at `0x10002f4b4`. `_XCT_fetchSnapshot…` starts at `0x10002f538`. |
+| Snapshot construction | T `XCAXManager_iOS.snapshotForElement…` at `0x10000c080` creates `XCTElementSnapshotRequest` and calls `loadSnapshotAndReturnError:`. A implements that method at `0x1073c`, then `accessibilitySnapshotOrError:` at `0x12d04`. |
+| AX request | A `XCTAccessibilityFramework.userTestingSnapshotForElement…` at `0x9a38` calls `AXUIElementCopyParameterizedAttributeValue` at `0x9b94`; the preceding instructions construct parameterized attribute `0x1731e` / **95006** and pass the element and options. |
+
+This identifies the device-side XCTest RPC processor and its AX query boundary. It does not trace
+all downstream AX IPC, establish a live snapshot's completeness, or imply a raw `UIView.subviews`
+dump. The daemon's code signature includes `com.apple.accessibility.api` and
+`com.apple.springboard.testautomation`; the host does not acquire those privileges by linking U/A.
+
+### Three distinct connection paths
+
+| Entry | Session/transport | Established boundary |
+| --- | --- | --- |
+| `com.apple.dt.testmanagerd.runner` | Device-local NSXPC → `XCTestSession` | P declares a Mach service; T startup calls `startAcceptingTestConnectionsFromListener:` at `0x1000049d0`. This is the runner-side RPC path, not an advertised host stream in P. |
+| `com.apple.dt.testmanagerd.remote` | Remote stream → DTX → `XCTDPendingHarnessSession` → `XCTDHarnessSession` | P declares `UsesRemoteXPC=false`, `RequireEntitlement=com.apple.private.dt.testmanagerd.client`. Startup registers service type **0** at `0x100004954`. This is the host test-control path. |
+| `com.apple.dt.testmanagerd.remote.automation` | Remote stream → DTX → `XCTDRemoteAutomationSession` | P declares `UsesRemoteXPC=false`, `RequireEntitlement=AppleInternal`. Startup registers service type **1** at `0x1000049a4`, conditionally as described below. This object directly implements snapshot/attribute requests. |
+
+`UsesRemoteXPC=false` does not mean no RSD tunnel; it describes the service payload transport.
+Remote-service entitlement metadata is not, by itself, proof that a host executable must carry the
+same signing entitlement. P also lists `com.apple.dt.testmanagerd.remote.runner` under
+**MachServices**, not RemoteServices; its name alone does not establish another host entry.
+
+T's service dispatch at `0x100034f74` distinguishes types 0 and 1. The type-0 branch constructs
+`XCTDPendingHarnessSession` at `0x100035018`; its proxy handler constructs `XCTDHarnessSession`
+at `0x10007c530`. Type 1 constructs `XCTDRemoteAutomationSession` at `0x1000350e4`.
+The latter's initializer at `0x10001f438` uses `DTXSocketTransport` and `DTXConnection` and
+registers the protocol pair `XCTDRemoteAutomationServer` / `XCTDRemoteAutomationClient` at
+`0x10001f6d0`. Class/protocol identities were resolved using fixups and symbol addresses, not
+otool's unresolved `bad class ref` annotations.
+
+The direct protocol has `_XCTD_requestSnapshotForElement:attributes:parameters:` and
+`_XCTD_fetchSnapshotForElement:attributes:parameters:`. The fetch implementation begins at
+`0x100021f3c`; its block calls `automationServices.axManager.snapshotForElement…` at
+`0x100022248`. `_XCTD_fetchAttributes:forElement:` begins at `0x10002240c`.
+Thus the direct snapshot implementation is real code, not just an unused selector string.
+Its on-wire object encoding and a valid live capability/session exchange remain unverified.
+
+### Authorization gates and what they prove
+
+1. **Listener registration gate.** T startup calls `hasAppleInternalSecurityPolicies` at
+   `0x100004964`; a false result skips the automation listener. That class method at
+   `0x100034304` directly calls
+   `os_variant_allows_internal_security_policies("com.apple.testmanagerd")`.
+   This is a device OS-policy gate in addition to P's `AppleInternal` declaration.
+2. **Automation Mode gate.** After constructing a remote automation session, T calls
+   `enableAutomationModeForClient:error:` at `0x100035114`. Failure reaches socket closure,
+   with the log “Rejecting connection for remote automation because Automation Mode is not
+   enabled”. A listener/socket alone is not a usable snapshot session.
+3. **Runner-local gate.** `XCTestSession` initialization at `0x10002bb6c` reads its NSXPC
+   peer's `com.apple.private.dt.xctest.internal-client` and `get-task-allow` entitlements.
+   `canSkipAutomationMode` at `0x10002c4f0` returns the internal-client flag;
+   `allowsUITestControl` at `0x10002c52c` otherwise checks `isAutomationModeEnabled`.
+   `ensureUITestingIsReadyWithTimeout:error:` at `0x10002e800` rejects a failed check with
+   code **41**, “Not authorized for performing UI testing actions.” These are actual gate
+   conditions, not a claim that `get-task-allow` alone authorizes every snapshot.
+
+Automation Mode here is the daemon's named state; it must not be equated with the Settings
+Developer Mode switch without additional evidence. The actual value of the internal-policy
+predicate on the loaned production phone was **not measured**.
+
+The installed pymobiledevice3 **11.10.2** source independently distinguishes transport/session
+setup from running tests. `services/dvt/testmanaged/xcuitest.py:54-68,136-202` selects ordinary
+`.remote`, initializes control/main proxy sessions, then launches a runner, authorizes its PID,
+waits for its reverse driver channel and starts the test plan. Its
+`dtx_services.py:551-581` declares the control/session/PID interfaces. This proves what that
+implementation does; it does not prove a live runner-free snapshot path or that every control
+RPC needs a runner PID.
+
+**Current conclusion:** the inspected seed contains a direct remote snapshot implementation,
+but behind explicit internal-policy and Automation Mode gates. Connecting the ordinary host
+control service is insufficient evidence that it exports the runner/automation snapshot object.
+This does not prove all runner-free AX approaches impossible; the separately exercised AXAudit
+shim above remains relevant. No ipb feature or support promise follows from this static result.
+
+**Next device experiment, only after exclusive ownership returns:** inventory the actual RSD
+services, then use bounded connection attempts to distinguish advertisement, service-start
+permission and DTX/session success. Record exact errors. Ordinary control-session negotiation
+can be measured separately, without launching a runner or fabricating a PID; it is not a snapshot
+success criterion. If the automation service is accessible, establish its protocol/capabilities
+and valid element handles before attempting one snapshot. Connection establishment can itself
+request Automation Mode, so account for that state change and clean up the session. If this
+entry is unavailable, keep that seed-specific result and continue AXAudit target/liveness work.
