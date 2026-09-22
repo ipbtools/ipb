@@ -67,6 +67,41 @@ The supported macOS 27 + Xcode 27 + iOS 27 release gate is still pending. A curr
 prior macOS 27 host closed at port 22; its older Xcode 26.4/unavailable-device observation is historical,
 not a current prerequisite check. This local macOS 26 run is supplementary validation only.
 
+## UI context research
+
+Source/SDK review on 2026-09-22; no device or jailbreak execution. The current product still has
+no element-query command. A caption-only AX CLI result is not proof that the system lacks geometry.
+
+- Apple exposes structured onscreen context through `appEntityIdentifier`,
+  `appEntityUIElementProvider` and `AppEntityUIElement` (identifier, local bounds, selection state,
+  subelements). These are app-provided semantic annotations, not a reader for arbitrary UIKit views.
+  The local Xcode 27 Beta 6 iPhoneOS SDK declares `AppEntityUIElement` from iOS 18.4.
+  [Apple contextual-cues documentation](https://developer.apple.com/documentation/appintents/providing-contextual-cues-to-apple-intelligence-and-siri)
+  and [WWDC26 session 343](https://developer.apple.com/videos/play/wwdc2026/343/) explain the
+  relationship between pixel understanding, entities and actions; they do not disclose Siri's full
+  internal retrieval pipeline.
+- iOS 27 `AppIntentsTesting.AppEntityDefinition.viewAnnotations()` is a public consumer for those
+  annotations. The shipped interface returns entity + isSelected, without a frame property.
+  Apple requires an XCUITest bundle signed by the same development team as the target app;
+  this does not meet ipb's current no-XCTest/arbitrary-app goal.
+  [Apple test-framework session](https://developer.apple.com/videos/play/wwdc2026/295/).
+- The jailbreak project ios-mcp injects into SpringBoard and dynamically binds private AXRuntime
+  functions to query another PID's AX handles, attributes and hit tests. Its source requests
+  label/value/role/frame/children; source existence is not proof every fallback works, and its
+  README's claimed iOS 13–18 range does not establish iOS 27 support.
+  [Injection filter](https://github.com/witchan/ios-mcp/blob/38cafd5fbda7a4dcb3821b94cbb3523fc905c0b2/ios-mcp.plist),
+  [runtime bridge](https://github.com/witchan/ios-mcp/blob/38cafd5fbda7a4dcb3821b94cbb3523fc905c0b2/MCPAXAttributeBridge.m),
+  [node attributes](https://github.com/witchan/ios-mcp/blob/38cafd5fbda7a4dcb3821b94cbb3523fc905c0b2/MCPAXNodeSource.m#L2843).
+  This remains AX. FLEX instead recursively reads real `UIView.subviews` inside the target process;
+  it requires app integration or injection, not a remote UIKit-object API.
+  [FLEX hierarchy implementation](https://github.com/FLEXTool/FLEX/blob/63a6f588841e94e4c3adaa045ff16eb8163f0bb4/Classes/ViewHierarchy/TreeExplorer/FLEXHierarchyTableViewController.m#L122).
+- Recommended next discriminator: trace Accessibility Inspector's complete attribute-query path
+  through Apple's AXAudit daemon. The
+  [pymobiledevice3 implementation](https://github.com/doronz88/pymobiledevice3/blob/10194d12e7cf17453887b7ac3d46e1b85b5a057a/pymobiledevice3/services/accessibilityaudit.py)
+  exposes focus traversal plus inspector section/attribute types. Its `ElementRectValue_v1` belongs
+  to audit issues; it does not prove ordinary focus entries contain frames or a full tree.
+  Capture real requests/replies and verify stock iOS 27 geometry before choosing an implementation.
+
 ## Remaining work
 
 1. Complete the supported release-matrix gate with an available host/device pair.
