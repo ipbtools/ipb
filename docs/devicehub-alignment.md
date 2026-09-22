@@ -107,8 +107,14 @@ performed. A caption-only AX CLI result is not proof that the system lacks geome
   outline, but returned display geometry without a structured element rectangle. Normalized-point
   hit-test probes returned nil; their arguments were constructed from host disassembly, not captured
   from a successful Inspector hit test. See [captured protocol](protocol.md#accessibility-inspector-and-axaudit-2026-09-22).
-  Next: reproduce Inspector's point-query setup and establish the target detail restriction with a
-  controlled comparison before promising arbitrary-app trees, coordinates or element-based actions.
+  A follow-up focus cycle in Lab exported 36 focus elements and a 131-node merged hierarchy, but
+  automatically scrolled the page and accumulated two distinct heading tokens. It is a temporal
+  union, not a complete snapshot. Recursive expansion stopped on a timeout; that run also returned
+  Lab's root while screenshots showed Settings. After restoring Lab, a fresh session had app-state
+  events but no focus seed within three seconds. These failures have no established root cause.
+  Next: establish target synchronization and query liveness, reproduce Inspector's point-query
+  setup, and characterize target detail restrictions before promising arbitrary-app full snapshots,
+  coordinates or element-based actions.
 
 ## Remaining work
 

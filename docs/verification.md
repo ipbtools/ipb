@@ -14,7 +14,7 @@ The latest native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with an u
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | Inspector's AXAudit property requests are captured; independent RSD/DTX queries read labels/traits and a 15-node partial hierarchy with class/address in Looktech Lab. Two Settings elements returned a single node and no class/address. Target-dependent detail restriction has no established cause. Frame/AXFrame and constructed normalized-point probes returned nil; preview screenshot showed an outline without structured element geometry. | Agent-researchable: reproduce successful Apple point queries, characterize hierarchy scope and target permissions. No arbitrary-app full-tree/coordinate claim or product command yet. See [current research](devicehub-alignment.md#ui-context-research); the older lockdown-only inference is superseded by the actual advertised and exercised RSD shim. |
+| **UI element / semantic context research** | Captured Inspector property requests work over RSD/DTX. A Lab focus cycle exported 36 focus elements / 131 merged hierarchy nodes, but auto-scrolled and accumulated distinct heading tokens: no atomic/full snapshot proof. A recursive probe timed out and returned Lab nodes while screenshots showed Settings; a fresh Lab session then lacked a focus seed. Target synchronization/liveness causes are unknown. Two earlier Settings queries had one node and no class/address. Element geometry remains unresolved. | Agent-researchable: establish target synchronization and bounded query behavior, characterize hierarchy completeness and target detail restrictions, then reproduce successful Apple point queries. No arbitrary-app full-tree/coordinate claim or product command yet. See [current research](devicehub-alignment.md#ui-context-research); the older lockdown-only inference is superseded by the exercised RSD shim. |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -4246,3 +4246,38 @@ Screenshots checked the actual element text and removal of the preview outline. 
 or device permission response was selected. The production CLI still has no UI-tree command.
 Next discriminators are a successful Apple hit-test capture, the focus hierarchy's completeness,
 and a controlled explanation of the Lab/Settings detail difference; element coordinates remain open.
+
+## 2026-09-22 — Page dump coverage and snapshot limitations
+
+Follow-up to `9109c06` on the same macOS 26.5.1 / Xcode 27 Beta 6 / iPhone 13 Pro iOS 27.0
+research pair. The user asked whether the complete page element tree can be dumped. No production
+code changed and no supported macOS 27 release gate was run.
+
+The bounded local probe sent `Direction.Next`, read only the descriptors supplied with each focus
+event, and merged `_AXHierarchyElementsAttribute` replies by the opaque element token. It stopped
+when the first focus token repeated: 36 unique focus tokens, 252 property queries, 131 merged nodes
+and 130 edges under a Looktech Lab root, in approximately 14.4 seconds. Both JSON and a readable
+tree were exported locally. Their `complete` field is false.
+
+The decisive limitations are observable, not hypothetical:
+
+- Before/after screenshots show that focus traversal auto-scrolled the page. The exported union
+  includes lower-page entries; it is not a dump of just the initial viewport or an atomic snapshot.
+- Two distinct UILabel tokens described the home heading. They were retained separately; caption
+  equality is not a safe identity rule. The cycle establishes traversal termination only, not a
+  census of hidden, ignored, unmaterialized or inaccessible views.
+- A second probe recursively queried discovered handles without further focus movement. It reached
+  99 nodes / 96 completed property replies before a four-second property timeout. Its screenshots
+  showed Settings, while the seed and returned hierarchy root named Looktech Lab. This is a target
+  mismatch observation, not a validated foreground-page dump; the synchronization cause is unknown.
+- After explicitly launching Lab and checking a settled screenshot, a new session received 189
+  `hostAppStateChanged:` events plus an event-type notification but no focus seed within three
+  seconds. The recursive approach therefore remains unvalidated; no automatic action replay or
+  protocol workaround was added.
+
+Raw requests, outputs and screenshots are local under `~/.local/state/ipb/20260922-ax-inspector/`:
+`page-dump.{json,txt}`, `page-dump-raw.jsonl`, `dump-before.png`, `dump-after.png`, and the separate
+`page-expand*` outputs. Monitoring was disabled in cleanup. The final screenshot confirmed Lab's
+home at the top with no preview outline. No AX activation or Settings toggle was performed.
+The next implementation needs an explicit target check, bounded query errors and an honest
+completeness/snapshot contract before this can become a reliable `ipb` command.

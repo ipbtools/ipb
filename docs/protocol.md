@@ -1468,6 +1468,27 @@ of this difference is not established; do not infer a signing/entitlement rule f
 
 ### Geometry and remaining unknowns
 
+**Page-dump follow-up on the same seed.** Moving focus with `Direction.Next` until an opaque
+element token repeated produced 36 distinct focus tokens. Querying each focus element's supplied
+read-only descriptors and merging hierarchy replies by token yielded 131 nodes / 130 observed
+edges under one Looktech Lab root. The 252 property reads took about 14.4 seconds including
+traversal. The result includes window/container structure, buttons, text, images and tab controls;
+the JSON and readable tree remain local research outputs, not a product command.
+
+This is a **temporal union**, not an atomic or completeness-verified tree. Before/after screenshots
+show that focus traversal automatically scrolled from the top to the lower part of the page.
+Two distinct UILabel tokens both described the home heading; equal labels must not be used to
+merge identities. A repeated focus token proves a traversal cycle, not coverage of ignored,
+unmaterialized or otherwise inaccessible views. Element bounds remain unresolved.
+
+A separate attempt to recursively query discovered hierarchy handles, without advancing focus
+after its seed, reached 99 nodes before a property timeout. Its before/after screenshots showed
+Settings while the returned root still named Looktech Lab: foreground pixels and the AX target
+can disagree in this probe. After relaunching and visually confirming Lab, a fresh session received
+app-state events but no focus seed within the three-second budget. Neither attempt validates a
+static full-tree algorithm. Target synchronization and query liveness require investigation;
+their causes are unknown, and app monitoring was disabled during cleanup.
+
 - `Frame` and `AXFrame` were **candidate names**, based on host-side strings; they were not advertised
   descriptors in these iOS focus events. Both returned nil in the tested Lab and Settings queries.
 - `deviceFetchElementAtNormalizedDeviceCoordinate:` exists in the host implementation and device
