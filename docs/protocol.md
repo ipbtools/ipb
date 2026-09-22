@@ -1390,3 +1390,102 @@ builder was already fixed. Both now share the byte construction with count 1 on 
 max 1 / identifier 0 / identity 0 / timestamp 0 remains unchanged. Host tests inspect actual framework-backed
 reports, and the installed real-device gate exercises tap/swipe/key/text again. Raw swipe probes
 are not promoted to verified high-level commands by this change.
+
+## Accessibility Inspector and AXAudit (2026-09-22)
+
+**Evidence boundary.** macOS 26.5.1 (25F80), Xcode 27 Beta 6, Accessibility Inspector 5.0
+(192.6), production iPhone 13 Pro / iOS 27.0 (24A437), Developer Mode and DDI services enabled.
+This is a research path, not an ipb command or the supported macOS 27 release gate.
+Apple's DTX message-construction arguments and property-reply objects were captured with LLDB;
+independent pymobiledevice3 11.10.2 requests then reproduced the reads. No XCTest runner,
+jailbreak, injected code or additional phone-side server was installed for these tests.
+
+### Transport and service discovery
+
+Host disassembly of Xcode's bundled `AccessibilityAuditDeviceManager.framework` shows
+`XDMDeviceMonitorEmbedded._connectToDevice:` calling `AMDeviceSecureStartService`, then
+`AMDServiceConnectionGetSocket` and `initWithConnectedSocket:disconnectAction:`. Its query path
+constructs `DTXMessage` and calls `sendControlAsync:replyHandler:`. These are **static** host facts;
+the AMDevice service-start argument was not captured in this run.
+
+The iPhone's **live RSD advertisement** contains:
+
+| Service | UsesRemoteXPC | Advertised entitlement | This run |
+| --- | --- | --- | --- |
+| `com.apple.accessibility.axAuditDaemon.remoteserver.shim.remote` | false | `com.apple.mobile.lockdown.remote.trusted` | Connected through `PreferredRsdTunnel` and exercised DTX control-channel reads |
+| `com.apple.accessibility.axAuditDaemon.remoteAXService` | true | `AppleInternal` | Advertisement only; not opened and no access outcome established |
+
+The working path is RSD tunnel → AXAudit remoteserver shim → DTX → Apple's AXAudit service.
+It is distinct from the HID feature/Mercury dictionaries above. The absence of an AX daemon in a
+DDI inventory or of CoreDevice linkage in one host framework cannot establish that AX is absent
+from RSD; the older lockdown-only architectural inference is superseded. `deviceApiVersion`
+returned **26** on this iOS 27 device; this number is not the OS version.
+
+### Focus, property descriptors and partial hierarchy
+
+`deviceCapabilities` advertised property reads, parameterized reads, focus navigation, preview,
+normalized-coordinate lookup and screenshot selectors. Advertisement does not establish effects.
+The independent probe used the existing pmd3 focus setup (`deviceSetAppMonitoringEnabled:`,
+`deviceInspectorSetMonitoredEventType:`, `deviceInspectorMoveWithOptions:`). The resulting
+`hostInspectorCurrentElementChanged:` event carries `AXAuditInspectorFocus_v1`, including:
+
+- `ElementValue_v1`: an `AXAuditElement_v1` whose `PlatformElementValue_v1` was 20 bytes here.
+  Treat the token as opaque; no lifetime or cross-session stability is established.
+- `CaptionTextValue_v1`, `SpokenDescriptionValue_v1`.
+- `InspectorSectionsValue_v1`: `AXAuditInspectorSection_v1` objects containing
+  `ElementAttributesValue_v1` descriptors. The caption-only CLI omits these descriptors.
+
+Inspector's captured read is `deviceElement:valueForAttribute:` with **two object arguments**:
+the transported element and the transported descriptor supplied by the device. Using `P(x)` below
+solely as shorthand for `{"ObjectType":"passthrough","Value":x}`, the captured hierarchy request is:
+
+```text
+element = {ObjectType: "AXAuditElement_v1", Value: P({
+  PlatformElementValue_v1: P(<opaque bytes>)
+})}
+attribute = {ObjectType: "AXAuditElementAttribute_v1", Value: P({
+  AttributeNameValue_v1: P("_AXHierarchyElementsAttribute"),
+  HumanReadableNameValue_v1: P("Hierarchy"),
+  DisplayAsTree_v1: P(true), DisplayInlineValue_v1: P(false),
+  IsInternal_v1: P(false), PerformsActionValue_v1: P(false),
+  SettableValue_v1: P(false), ValueTypeValue_v1: P(2)
+})}
+```
+
+Other captured/read descriptor names include `Label`, `Value`, `TraitsHumanReadable`, `Identifier`,
+`Hint`, `UserInputLabels`, `ElementClassName`, `ElementMemoryAddress` and
+`ElementViewControllerClassName`. Their type/flag values vary: reuse the received descriptor.
+Do not accidentally execute descriptors marked `PerformsActionValue_v1` while enumerating values.
+
+The hierarchy reply is recursively transported `AXAuditNode_v1`, containing
+`AuditElementValue_v1`, optional `ChildrenValue_v1`, `HumanReadableDescriptionValue_v1`,
+`HumanReadableRoleDescriptionValue_v1`, and `IsIgnoredValue_v1`.
+The Looktech Lab heading query returned 15 nodes, a `UILabel` class and its address; screenshot
+inspection confirmed the visible heading. This is a focus-related AX hierarchy, **not proof of a
+complete UIView dump or enumeration of all visible/offscreen nodes**. In Settings, two different
+focus entries returned labels/traits but only one hierarchy node and nil class/address. The cause
+of this difference is not established; do not infer a signing/entitlement rule from two apps.
+
+### Geometry and remaining unknowns
+
+- `Frame` and `AXFrame` were **candidate names**, based on host-side strings; they were not advertised
+  descriptors in these iOS focus events. Both returned nil in the tested Lab and Settings queries.
+- `deviceFetchElementAtNormalizedDeviceCoordinate:` exists in the host implementation and device
+  capabilities. Host disassembly packages a `CGPoint` in `NSValue`. A local Foundation archive
+  established `NS.pointval` + `NS.special=1` encoding. Constructed requests at three normalized
+  points returned nil, both before and after explicit inspector setup. No successful Apple
+  reference request was captured, so these negatives do not establish an unsupported API.
+- `deviceInspectorPreviewOnElement:` followed by `deviceCaptureScreenshot` returned a PNG plus
+  `displayBounds={{0,0},{390,844}}`, `displayNativeScale=3`, `rotationRadians=0`, and
+  `shouldFlipOutline=true`. The PNG was 1170×2532 and visibly outlined the selected text in green.
+  This reply had no `borderFrame` or structured element rectangle. Display geometry is not element
+  geometry. Preview was cleared and cleanup was checked with a fresh screenshot.
+- The `ElementRectValue_v1` seen in pmd3 belongs to **audit issues**, not to ordinary focus/node
+  values. It is not a substitute for a verified element-frame query.
+
+Host sources are under
+`Xcode-27.0.0-Beta.6.app/Contents/Applications/Accessibility Inspector.app/Contents/Frameworks/AccessibilityAuditDeviceManager.framework`
+and `Contents/SharedFrameworks/AccessibilityAudit.framework`.
+The upstream comparison is
+[pymobiledevice3 at 10194d12](https://github.com/doronz88/pymobiledevice3/blob/10194d12e7cf17453887b7ac3d46e1b85b5a057a/pymobiledevice3/services/accessibilityaudit.py),
+which lacks wrappers for these property/point queries and an `AXAuditNode_v1` decoder.

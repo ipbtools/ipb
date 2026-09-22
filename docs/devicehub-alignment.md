@@ -69,8 +69,9 @@ not a current prerequisite check. This local macOS 26 run is supplementary valid
 
 ## UI context research
 
-Source/SDK review on 2026-09-22; no device or jailbreak execution. The current product still has
-no element-query command. A caption-only AX CLI result is not proof that the system lacks geometry.
+SDK/source review and subsequent real-device AXAudit research on 2026-09-22. The current product
+still has no element-query command. No jailbreak, injection or phone-side helper installation was
+performed. A caption-only AX CLI result is not proof that the system lacks geometry.
 
 - Apple exposes structured onscreen context through `appEntityIdentifier`,
   `appEntityUIElementProvider` and `AppEntityUIElement` (identifier, local bounds, selection state,
@@ -95,12 +96,19 @@ no element-query command. A caption-only AX CLI result is not proof that the sys
   This remains AX. FLEX instead recursively reads real `UIView.subviews` inside the target process;
   it requires app integration or injection, not a remote UIKit-object API.
   [FLEX hierarchy implementation](https://github.com/FLEXTool/FLEX/blob/63a6f588841e94e4c3adaa045ff16eb8163f0bb4/Classes/ViewHierarchy/TreeExplorer/FLEXHierarchyTableViewController.m#L122).
-- Recommended next discriminator: trace Accessibility Inspector's complete attribute-query path
-  through Apple's AXAudit daemon. The
+- Accessibility Inspector's attribute-query path is now captured, and an independent pymobiledevice3
+  probe has read labels, traits, class/address and a 15-node partial hierarchy in Looktech Lab through
+  the advertised RSD `remoteserver.shim.remote` service. The
   [pymobiledevice3 implementation](https://github.com/doronz88/pymobiledevice3/blob/10194d12e7cf17453887b7ac3d46e1b85b5a057a/pymobiledevice3/services/accessibilityaudit.py)
-  exposes focus traversal plus inspector section/attribute types. Its `ElementRectValue_v1` belongs
-  to audit issues; it does not prove ordinary focus entries contain frames or a full tree.
-  Capture real requests/replies and verify stock iOS 27 geometry before choosing an implementation.
+  exposes focus traversal but omits the property-query wrapper and `AXAuditNode_v1` decoding used
+  in this probe. On two Settings elements the same queries returned labels/traits but only a single
+  hierarchy node and no class/address; the target-dependent restriction has no established cause.
+  `Frame`/`AXFrame` probes returned nil. Preview + screenshot drew the selected element's green
+  outline, but returned display geometry without a structured element rectangle. Normalized-point
+  hit-test probes returned nil; their arguments were constructed from host disassembly, not captured
+  from a successful Inspector hit test. See [captured protocol](protocol.md#accessibility-inspector-and-axaudit-2026-09-22).
+  Next: reproduce Inspector's point-query setup and establish the target detail restriction with a
+  controlled comparison before promising arbitrary-app trees, coordinates or element-based actions.
 
 ## Remaining work
 

@@ -336,7 +336,7 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Screen recording | `screenrecord` | `ipb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
 | Live screen stream | scrcpy (an on-device server) | `ipb stream` (own, JPEG frames) | no | no |
 | Interactive mirror | scrcpy | `ipb mirror` (own) | no | Device Hub, GUI only |
-| UI hierarchy | `uiautomator dump` | no (captions only via accessibility, no frames) | `ui describe-all` (simulator) | no |
+| UI hierarchy | `uiautomator dump` | no CLI yet; AXAudit research reads attributes/partial hierarchy, with target-dependent detail and unresolved frames ([protocol](docs/protocol.md#accessibility-inspector-and-axaudit-2026-09-22)) | `ui describe-all` (simulator) | no |
 | Install / uninstall | `install` / `uninstall` | `ipb install` / `ipb uninstall` (devicectl) | yes | `install app` / `uninstall app` |
 | Launch / kill / ps | `am start` / `am force-stop` / `ps` | `ipb launch` / `ipb kill <pid>` / `ipb ps` (devicectl) | launch / terminate | `process launch/signal`, `info processes` |
 | Open URL / deep link | `am start -a VIEW -d` | `ipb open <url>` (devicectl) | `open` | `process openURL` |
