@@ -142,24 +142,26 @@ performed. A caption-only AX CLI result is not proof that the system lacks geome
   `remoteAXService` was also advertised but closed during RemoteXPC handshake. See the dated
   verification record. AXAudit remains the demonstrated element-tree path.
 
-The current-target Lab element tree has now been obtained without installing a phone-side app.
-That closes the initial feasibility question for the verified seed, while arbitrary-app coverage,
-geometry and snapshot atomicity remain open. Requested Opus 5, Grok 4.7 and DeepSeek Flash
+Element trees have now been obtained without installing a phone-side app on two devices: the
+13 Pro's existing Lab page and, after Developer Mode/DDI became available, the 12 mini's
+SpringBoard and Calculator pages. The 12 mini yielded bounded, zero-nil graph closure twice per
+target; Calculator's 45-node tree was identical in both runs. This closes the initial
+feasibility question for those seeds. Arbitrary-app coverage, geometry and snapshot atomicity
+remain open. Requested Opus 5, Grok 4.7 and DeepSeek Flash
 consultations returned candidates; their suggestions were treated as hypotheses, not protocol
 evidence. A successful hierarchy RPC or a closed graph alone does not establish completeness.
 
 Pending experiments, in order of current evidence:
 
-1. Reproduce the real-PID root query on a different target/device, and characterize the AXAudit
-   developer-attribute boundary, query nil/timeout cases and target lifetime. On 2026-09-23 the
-   12 mini was unlocked, but CoreDevice rejected DDI mounting because Developer Mode was disabled
-   (Cryptex error 20). Its paired RSD tunnel advertised the AXAudit shim and accepted DTX transport,
-   then closed on `deviceCapabilities`. A separate direct hierarchy request also closed without
-   a reply; `os_trace_relay` did provide a live Settings PID without DDI. The AX closure's cause
-   is now localized by a physical-device `lockdownd` log to a missing
-   `axAuditDaemon.deviceservice.lockdown` Mach service. An iOS 26.5 simulator plist gates that
-   service on Developer Mode, but the physical iOS 27 plist and enabled-state A/B are unverified.
-   Enabling Developer Mode and repeating the same probes is the next discriminator.
+1. Convert the research-only PID-root and own-query-child traversal into a product command only
+   after defining foreground/target synchronization, partial-result reporting, node lifetime and
+   supported-device gates. On the 12 mini, the disabled-state `lockdownd` could not find the AXAudit
+   Mach service; enabling Developer Mode, rebooting and mounting DDI restored capabilities and
+   hierarchy reads. Those simultaneous changes do not isolate the exact launchd gate. Two
+   SpringBoard replies repeated a child within the same parent; deduplicate identical child
+   tokens before testing single-parent structure. A Calculator node press submitted without a
+   visible effect and candidate `Frame`/`AXFrame` reads returned nil, so geometry and node actions
+   remain research rather than a product contract.
 2. Decode the full XCTest automation client exchange only if further evidence shows its session
    can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
 3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006

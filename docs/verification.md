@@ -14,7 +14,7 @@ The latest native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with an u
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | A fresh real-PID root query on the 13 Pro yielded a stable 129-node/128-edge Lab home-page element tree in two runs, without focus or scroll movement and without a phone-side helper. It is an observed AX hierarchy, not a proven atomic/all-app snapshot; coordinates remain unproven. Simulator AXAudit filters/caps need physical cross-check. RSD advertised direct XCTest automation, but generic DTX and proxy handshakes timed out; remoteAXService closed during handshake. Mirroring has a distinct AXP-backed remote AX overlay on the Mac, not yet exercised live. | Agent-researchable: reproduce on an unlocked different device/app; distinguish target restrictions and element geometry before a product command. The 13 Pro lease was explicitly returned to LookInside. On the 12 mini CoreDevice rejected DDI mounting because Developer Mode is disabled (Cryptex error 20). AXAudit transport opens, but `lockdownd` cannot find its daemon Mach service and closes both tested read-only requests. A simulator plist gates the same service on Developer Mode; the physical setting-to-service causal A/B remains pending. The OS-trace service can list live PIDs without DDI, but no AX tree was read on this device. Manual Developer Mode enablement is pending. See [current research](devicehub-alignment.md#ui-context-research), [AXAudit limits](protocol.md#axaudit-root-handles-and-hierarchy-limits-2026-09-22) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | Runner-free AXAudit root expansion now works on two iOS 27 devices and different targets: 13 Pro Lab 129 nodes; 12 mini SpringBoard 444 nodes and Calculator 45 nodes. Each target was queried twice with zero nil/timeout replies and yielded a single-root observed tree. The SpringBoard replies needed exact duplicate-child deduplication. On the 12 mini, Developer Mode enablement, reboot and DDI mount changed the AXAudit service from a missing Mach endpoint to a working `axauditd`; this compound A/B does not isolate which step directly registers it. Screenshots matched the queried pages. Graph closure is not a proven atomic or all-view snapshot. Calculator `Frame`/`AXFrame` candidate reads were nil, and a submitted node press had no visible effect. | Initial no-phone-helper element-tree feasibility is verified; productizing it still needs target/foreground synchronization, lifecycle and coverage policy, element geometry or a validated node action path, and the supported macOS 27 gate. The 13 Pro remains leased to LookInside; 12 mini was returned to Home after testing. Direct XCTest automation and Mirroring AX are separate unproven alternatives. See [current research](devicehub-alignment.md#ui-context-research), [AXAudit evidence](protocol.md#physical-root-query-and-separate-mirroring-ax-channel-2026-09-23) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -4450,3 +4450,49 @@ bounded, filtered logs remain outside Git at
 `~/.local/state/ipb/20260922-element-research/12mini-ax-close-logs-info.json` and
 `12mini-ax-close-logs.json`; the local DDI was detached after offline inspection. No product
 code changed, so no build or smoke gate applies.
+
+## 2026-09-23 — Runner-free AX trees on the enabled 12 mini
+
+Host macOS 26.5.1 (25F80), Xcode 27 Beta 6 / CoreDevice 642.15; wired iPhone 12 mini, iOS 27.0
+24A437. The user enabled Developer Mode, restarted and confirmed it on the phone. Immediately
+afterward CoreDevice showed `developerModeStatus: enabled` but the tunnel was not ready. A bounded
+`bin/ipb -s 1D533177-5153-5A0C-9102-8D0A8ADDAEFB ps` completed after DDI startup. A fresh
+device listing then showed `ddiServicesAvailable: true` and a connected tunnel. No new phone app
+or XCTest Runner was installed by this task.
+
+The paired RSD service count rose from 62 in the disabled/no-DDI state to 85; both
+`testmanagerd.remote` entries appeared. The AXAudit DTX transport and `deviceCapabilities` both
+succeeded, and the process list contained `axauditd`. This is the successful side of the physical
+state A/B. Because Developer Mode, reboot and DDI mount happened together, it does not isolate
+which one directly registered the Mach service that was missing before.
+
+`ipb screenshot` showed the Home page. With fresh SpringBoard PID 204 and the captured read-only
+hierarchy descriptor, a single root request returned ten nodes. A 300-query experiment discovered
+373 handles but ended at its budget, so it was not counted as a tree closure. Two subsequent
+sessions queried **444/444 discovered handles** each, with zero nil and zero timeout replies;
+their own-query child graphs each had one root. Each session's raw replies duplicated the same
+child token twice inside two parent replies. Removing only those exact duplicate references
+yielded **444 nodes / 443 edges** with one parent per nonroot node and no unreachable handles.
+The token set and child sets matched between sessions. The clock text and order of seven children
+inside the Utilities folder changed, so the resulting serialized trees were not identical.
+Visible Home icons and dock matched the before/after screenshots; no focus motion was sent.
+
+For a second target, `ipb launch com.apple.calculator` started the preinstalled system app, which
+was not running beforehand. Screenshot showed a clear display (`0`) and the keypad. Fresh
+Calculator PID 2450 produced **45 nodes / 44 edges** in each of two independent, all-queried
+sessions, zero nil/timeouts. Their normalized tree content was identical and named the visible
+digits/operators, History and Change Mode. The two candidate attributes `Frame` and `AXFrame`
+returned nil on the `7 Keyboard Key`. pymobiledevice3's `AXAction-2010` press request was submitted
+for that token, but the screenshot still showed `0`; this does not establish a working node
+activation path or the exact reason it had no effect. The task then sent Home and verified the
+original Home page by screenshot. No app data was entered or changed.
+
+On that final Home page, advertised AXAudit queries `deviceRunningApplications` and
+`deviceCurrentState` returned `[]` and `0` respectively, so this probe did not obtain a
+foreground PID from AXAudit itself.
+
+These are observed AX hierarchy closures on the named pages, not proven atomic, complete UIKit
+view trees or arbitrary-app coverage. The research-only probes, raw DTX replies, normalized trees,
+candidate-attribute result and before/after screenshots remain outside Git under
+`~/.local/state/ipb/20260922-element-research/12mini-*`. Only documents changed in the repo;
+no production build, installation or `scripts/smoke_matrix.sh` gate applies to this research run.

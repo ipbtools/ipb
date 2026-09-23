@@ -1619,6 +1619,44 @@ the 12 mini's disabled Developer Mode, but the physical iOS 27 launchd plist has
 no enabled/disabled A/B was performed. Do not promote the inferred setting-to-service causality
 to a physical-device fact yet. No successful tree query was obtained on this device in that state.
 
+### 12 mini enabled-state AXAudit cross-target check (2026-09-23)
+
+After the user enabled Developer Mode and restarted the **same iPhone 12 mini** (iOS 27.0
+24A437), `ipb ps` succeeded and CoreDevice reported `ddiServicesAvailable=true`. RSD advertised
+85 services, including both `testmanagerd.remote` entries, versus 62 in the disabled/no-DDI
+state. `axauditd` was present in the process list, and `deviceCapabilities` now replied with
+`deviceElement:valueForAttribute:`. The physical before/after comparison establishes that the
+combined Developer Mode, reboot and DDI state change restores this AXAudit path. It does not
+isolate the precise launchd gate; the iOS 27 device plist remains unread.
+
+A screenshot showed the SpringBoard Home page. Its fresh PID 204 was obtained through the
+existing `os_trace_relay` `PidList` service. The seed-specific `<IQQ>(204,0,1)` app root plus the
+captured read-only `_AXHierarchyElementsAttribute` descriptor returned ten nodes in one request.
+A 300-query budget discovered 373 handles and stopped at its budget, so that result is partial.
+Two larger independent sessions each queried **444 discovered handles**, with zero nil or timeout
+replies and an observed closure. Each queried node's direct children were taken from its **own**
+reply, not from repeated ancestor context. Two parent replies each repeated one identical child
+token; deduplicating these exact duplicates yielded one connected **444-node/443-edge** tree per
+session. The sessions had the same token set, descriptions except the changing clock, and child
+sets; Utilities-folder child order differed. They were not byte-identical snapshots. Before/after
+screenshots showed the same Home icons and dock, with the expected clock change.
+
+For an ordinary foreground app, `ipb launch com.apple.calculator` opened the preinstalled
+Calculator without installing anything. A fresh PID 2450 root produced a **45-node/44-edge**
+single-root observed tree twice, with zero nil/timeout replies and identical normalized
+tree content. The keys `7`, `8`, `9`, operators, History and Change Mode matched the screenshot; the
+read-only queries did not move focus or press a key. Candidate `Frame` and `AXFrame` descriptors
+sent against the `7 Keyboard Key` both returned nil. A separate `AXAction-2010` press submitted
+through installed pymobiledevice3 11.10.2's `AccessibilityAudit.perform_press` did not change
+the calculator's displayed zero; submission was not a verified activation. The phone was
+returned to Home afterward. These two targets establish
+runner-free element-tree reads across SpringBoard and a system app on this device/seed, not an
+atomic/all-views snapshot, a usable element rectangle, or element-activation support.
+On the final Home page, the advertised read-only `deviceRunningApplications` returned `[]` and
+`deviceCurrentState` returned `0`; neither supplied a foreground PID in this check. The working
+root queries therefore used a separately observed process list plus screenshots for target
+selection. A production foreground-binding contract remains unresolved.
+
 A separate **offline** host path exists in macOS 26.5.1 (25F80), iPhone Mirroring 1.6,
 `ScreenSharingKit` dyld-cache image UUID `C6D042A9-EE7E-3F13-9599-69DD1CB1A572`.
 `ScreenContinuityUI` uses `ScreenSharingSession.accessibilityDataPublisher`,
