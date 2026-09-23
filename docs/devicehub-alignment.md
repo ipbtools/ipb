@@ -156,8 +156,10 @@ Pending experiments, in order of current evidence:
    (Cryptex error 20). Its paired RSD tunnel advertised the AXAudit shim and accepted DTX transport,
    then closed on `deviceCapabilities`. A separate direct hierarchy request also closed without
    a reply; `os_trace_relay` did provide a live Settings PID without DDI. The AX closure's cause
-   is not yet established; enabling Developer Mode and repeating the same probes is the next
-   discriminator.
+   is now localized by a physical-device `lockdownd` log to a missing
+   `axAuditDaemon.deviceservice.lockdown` Mach service. An iOS 26.5 simulator plist gates that
+   service on Developer Mode, but the physical iOS 27 plist and enabled-state A/B are unverified.
+   Enabling Developer Mode and repeating the same probes is the next discriminator.
 2. Decode the full XCTest automation client exchange only if further evidence shows its session
    can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
 3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006

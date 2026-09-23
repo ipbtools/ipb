@@ -1607,7 +1607,17 @@ state change before claiming causality. A subsequent bounded test obtained Setti
 from the already advertised `com.apple.os_trace_relay.shim.remote` `PidList` service without DDI.
 It sent a read-only `_AXHierarchyElementsAttribute` request on a fresh AXAudit DTX connection
 **without** capability preflight; the connection closed without an AX reply. Thus preflight alone
-does not explain the failure. No successful tree query was obtained on this device in that state.
+does not explain the failure. A bounded on-device `os_trace_relay` capture around a repeat request
+shows `lockdownd` activating the Mach name
+`com.apple.accessibility.axAuditDaemon.deviceservice.lockdown`, then reporting
+`failed to do a bootstrap look-up: xpc_error=[3: No such process]`; its socket closes without an
+AX reply. This directly places the immediate failure at service lookup on this physical device.
+Separately, the **iOS 26.5 simulator** runtime `iOS_23F77` contains
+`System/Library/LaunchDaemons/com.apple.accessibility.axAuditDaemon.deviceservice.plist` with the
+same Mach name and `LimitLoadToDeveloperMode=true`. That simulator metadata is consistent with
+the 12 mini's disabled Developer Mode, but the physical iOS 27 launchd plist has not been read and
+no enabled/disabled A/B was performed. Do not promote the inferred setting-to-service causality
+to a physical-device fact yet. No successful tree query was obtained on this device in that state.
 
 A separate **offline** host path exists in macOS 26.5.1 (25F80), iPhone Mirroring 1.6,
 `ScreenSharingKit` dyld-cache image UUID `C6D042A9-EE7E-3F13-9599-69DD1CB1A572`.
