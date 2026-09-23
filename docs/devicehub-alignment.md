@@ -112,9 +112,20 @@ performed. A caption-only AX CLI result is not proof that the system lacks geome
   union, not a complete snapshot. Recursive expansion stopped on a timeout; that run also returned
   Lab's root while screenshots showed Settings. After restoring Lab, a fresh session had app-state
   events but no focus seed within three seconds. These failures have no established root cause.
-  Next: establish target synchronization and query liveness, reproduce Inspector's point-query
-  setup, and characterize target detail restrictions before promising arbitrary-app full snapshots,
-  coordinates or element-based actions.
+  Rechecking individual replies shows 14–46 nodes per focus query; the app-root query already
+  occurred and returned only two nodes. The missing step is not simply querying the root once.
+  Cached iOS 27 AXRuntime serialization identifies an application-root handle from a real PID,
+  avoiding dependence on a focus event. On the returned 13 Pro, a bounded read of Lab PID 7720
+  twice reached the same 129-node/128-edge element tree, with every handle queried and no nil or
+  timeout. The tool used each node's own reply for its children; two extra edges in ancestor-context
+  replies would otherwise create false double parents. Before/after screenshots showed the same
+  Lab home page. This proves a usable tree for that page and build without a phone-side helper or
+  focus motion, not atomic capture or completeness across apps.
+  Offline iOS 26.5 simulator `axauditd` provides a concrete comparison: hierarchy replies contain
+  local children/siblings and an ancestor chain, child enumeration is capped, and attributes have
+  target-policy and focus-history filters. Its parameterized handler immediately returns nil.
+  These are simulator-specific constraints, not an established cause of the physical iOS 27
+  failures. See [root and hierarchy evidence](protocol.md#axaudit-root-handles-and-hierarchy-limits-2026-09-22).
 - Offline inspection of DDI 27A5252f / XCTest 25227 now traces XCTest snapshots to device
   `testmanagerd`: `XCTestSession` → `XCAXManager_iOS` → `XCTAutomationSupport` → AXRuntime's
   parameterized snapshot query. A separate `com.apple.dt.testmanagerd.remote.automation` service
@@ -124,10 +135,36 @@ performed. A caption-only AX CLI result is not proof that the system lacks geome
   `.remote` service instead creates a harness/control session; a successful control handshake is
   not proof of snapshot access. See [service and authorization evidence](protocol.md#xctest-snapshot-service-boundary-2026-09-22).
   This establishes a specific restricted implementation, not universal impossibility of a
-  runner-free AX reader. No live XCTest service connection was attempted while the phone was
-  exclusively loaned to LookInside. After its explicit return, first check RSD advertisement and
-  bounded service access; only an accessible automation endpoint justifies testing its capability
-  exchange and snapshot request. AXAudit target/liveness research remains an independent path.
+  runner-free AX reader. On the 13 Pro, RSD advertised the direct automation endpoint, but its
+  TCP connection did not answer a generic DTX capability handshake or a bounded proxy-channel
+  request; ordinary testmanagerd `.remote` completed the same DTX handshake. This does not prove
+  the direct endpoint's exact rejection reason or exclude a different Apple client exchange.
+  `remoteAXService` was also advertised but closed during RemoteXPC handshake. See the dated
+  verification record. AXAudit remains the demonstrated element-tree path.
+
+The current-target Lab element tree has now been obtained without installing a phone-side app.
+That closes the initial feasibility question for the verified seed, while arbitrary-app coverage,
+geometry and snapshot atomicity remain open. Requested Opus 5, Grok 4.7 and DeepSeek Flash
+consultations returned candidates; their suggestions were treated as hypotheses, not protocol
+evidence. A successful hierarchy RPC or a closed graph alone does not establish completeness.
+
+Pending experiments, in order of current evidence:
+
+1. Reproduce the real-PID root query on a different target/device, and characterize the AXAudit
+   developer-attribute boundary, query nil/timeout cases and target lifetime. On 2026-09-23 the
+   12 mini was unlocked, but CoreDevice rejected DDI mounting because Developer Mode was disabled
+   (Cryptex error 20). Its paired RSD tunnel advertised the AXAudit shim and accepted DTX transport,
+   then closed on `deviceCapabilities`. That closure's cause is not yet established; enabling
+   Developer Mode and repeating the same probe is the next discriminator.
+2. Decode the full XCTest automation client exchange only if further evidence shows its session
+   can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
+3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006
+   forwarding. The existing typed descriptor is not a generic numeric-attribute tunnel.
+4. Investigate iPhone Mirroring's separate accessibility channel if the AXAudit path is too
+   restricted. macOS 26.5.1 `ScreenSharingKit` uses `AXPHostCacheManager` and an
+   `AXPHostCacheOverlayView` whose `accessibilityChildren` returns translated remote AX children.
+   Host session authorization, payload bytes and external tree retrieval remain untested. No
+   Mirroring session was started in this investigation.
 
 ## Remaining work
 
