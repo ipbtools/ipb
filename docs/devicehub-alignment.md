@@ -154,8 +154,10 @@ Pending experiments, in order of current evidence:
    developer-attribute boundary, query nil/timeout cases and target lifetime. On 2026-09-23 the
    12 mini was unlocked, but CoreDevice rejected DDI mounting because Developer Mode was disabled
    (Cryptex error 20). Its paired RSD tunnel advertised the AXAudit shim and accepted DTX transport,
-   then closed on `deviceCapabilities`. That closure's cause is not yet established; enabling
-   Developer Mode and repeating the same probe is the next discriminator.
+   then closed on `deviceCapabilities`. A separate direct hierarchy request also closed without
+   a reply; `os_trace_relay` did provide a live Settings PID without DDI. The AX closure's cause
+   is not yet established; enabling Developer Mode and repeating the same probes is the next
+   discriminator.
 2. Decode the full XCTest automation client exchange only if further evidence shows its session
    can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
 3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006

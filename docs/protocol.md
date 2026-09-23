@@ -1603,7 +1603,11 @@ was present. The AXAudit DTX connection opened, then `deviceCapabilities` ended 
 `ConnectionTerminatedError: Channel is closed`. CoreDevice separately refused DDI installation
 with Cryptex error 20, explicitly citing disabled Developer Mode. This is an observed correlation,
 not proof that the AXAudit channel closed because of that setting; repeat after a Developer Mode
-state change before claiming causality. No tree query was sent to this device in that state.
+state change before claiming causality. A subsequent bounded test obtained Settings PID 1843
+from the already advertised `com.apple.os_trace_relay.shim.remote` `PidList` service without DDI.
+It sent a read-only `_AXHierarchyElementsAttribute` request on a fresh AXAudit DTX connection
+**without** capability preflight; the connection closed without an AX reply. Thus preflight alone
+does not explain the failure. No successful tree query was obtained on this device in that state.
 
 A separate **offline** host path exists in macOS 26.5.1 (25F80), iPhone Mirroring 1.6,
 `ScreenSharingKit` dyld-cache image UUID `C6D042A9-EE7E-3F13-9599-69DD1CB1A572`.
