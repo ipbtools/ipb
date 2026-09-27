@@ -165,6 +165,17 @@ PNG/logical ratio is 3, while `displayNativeScale` reports 2.88; any visual fall
 from image dimensions rather than assume that scale is the PNG ratio. See the
 [physical follow-up](protocol.md#element-geometry-and-action-follow-up-on-the-12-mini-2026-09-27).
 
+A second bounded attempt got past Inspector's target picker, but the Apple host failed before
+DTX: `AMDeviceConnect` and `AMDeviceStartSession` succeeded, while
+`AMDeviceSecureStartService("com.apple.accessibility.axAuditDaemon.remoteserver")` returned
+`kAMDRemoteConnectError`. The same service name opened through paired Python USB lockdown and
+reported 45 AXAudit capabilities, so the host failure does not establish a missing device
+service. A raw physical-device point request on that lockdown channel received a DTX `OK`
+without payload; there was no later message in four seconds, while a capability control returned
+an object. This corrects the ambiguity in the wrapper's `None` and bounds the callback
+hypothesis, but does not explain why the point had no element. See the
+[Apple-client boundary](protocol.md#apple-inspector-connection-and-point-reply-type-2026-09-27).
+
 Pending experiments, in order of current evidence:
 
 1. Convert the research-only PID-root and own-query-child traversal into a product command only
@@ -177,9 +188,10 @@ Pending experiments, in order of current evidence:
    token/action descriptor had no visible effect, and candidate `Frame`/`AXFrame` reads returned
    nil, so geometry and node actions remain research rather than a product contract. The next
    geometry discriminator is a bounded DTX capture of Accessibility Inspector on the physical
-   device; the local desktop control session could open Inspector but not operate its target
-   picker, so this capture remains undone. If the reference request cannot be captured, inspect
-   the physical iOS 27 daemon before trying more descriptor guesses.
+   device after isolating its host MobileDevice service-start failure. The target picker now
+   works, but this host has not reached AXAudit DTX through Apple's connection path. If a
+   reference request cannot be captured on a functioning host, inspect the physical iOS 27
+   daemon before trying more descriptor guesses.
 2. Decode the full XCTest automation client exchange only if further evidence shows its session
    can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
 3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006

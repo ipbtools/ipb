@@ -1700,12 +1700,42 @@ runtime evidence**. None of these experiments establishes an ordinary-node frame
   before/after screenshots were unchanged and the display stayed `0`. This excludes that one
   malformed serializer as the sole explanation; semantic activation is still unverified.
 
-Xcode's Accessibility Inspector could be opened, but its target picker was not operable through
-the available desktop control session (`elementHasNoFrame` / `noWindowsAvailable`), so this run
-did **not** capture Apple's own physical-device point or preview request. Do not treat the absence
-of such a capture as a negative protocol result. The physical iOS 27 `axauditd` executable was
-not present in the local Xcode symbol cache; the simulator implementation above is not proof of
-its physical-device geometry or permission policy.
+The initial desktop control attempt could open Xcode's Accessibility Inspector but not operate
+its target picker (`elementHasNoFrame` / `noWindowsAvailable`). A later attempt reached the picker
+and the connection failure below, so the UI issue is no longer the blocking boundary. The
+physical iOS 27 `axauditd` executable was not present in the local Xcode symbol cache; the
+simulator implementation above is not proof of its physical-device geometry or permission policy.
+
+### Apple Inspector connection and point-reply type (2026-09-27)
+
+After bringing Xcode 27 Beta 6 Accessibility Inspector's window to the front, its target menu
+listed the wired 12 mini, and selecting **only that phone** reached “Error connecting to device.”
+An LLDB trace of the selected host's `XDMDeviceMonitorEmbedded._connectToDevice:` showed
+`AMDeviceConnect` and `AMDeviceStartSession` returning **0**, followed by
+`AMDeviceSecureStartService` returning **-402652910 / 0xE8000112**. The call-site argument was
+the CFString `com.apple.accessibility.axAuditDaemon.remoteserver`; this host's MobileDevice
+`AMDErrorString` names that code `kAMDRemoteConnectError`. This is a concrete **Apple-host
+service-start failure before DTX**, not evidence about an element-frame reply. A separate
+`devicectl device info lockState` request failed while allocating the RSD device with
+`-402653181 / kAMDNoResourcesError`; their shared underlying cause is unproven.
+
+The physical device did accept the same **lockdown service name** through a paired USB
+pymobiledevice3 11.10.2 client (`autopair=False`): `StartService` returned an SSL-enabled port,
+and AXAudit DTX `deviceCapabilities` returned 45 entries. Its RSD shim remained readable and
+`deviceCaptureScreenshot` showed an unlocked App Library. Thus the Apple-client failure cannot
+be described as absence of the device service or a locked screen on this run; the difference
+between the host MobileDevice and Python connection paths still needs isolation.
+
+On that native lockdown DTX channel, two typed normalized-point requests returned `None` through
+pymobiledevice3. Inspecting the **raw** reply clarified that `None`: a request for `(0.7,0.4)`
+received message type **0 (`OK`)** with no payload at conversation index 1, rather than type 3
+(`OBJECT`) carrying a null element. No further DTX message or `host*` callback arrived during a
+bounded four-second observation window. A subsequent `deviceCapabilities` control received a
+type-3 object reply, confirming the recorder saw ordinary replies. Enabling the inspector and
+app monitoring also left a point request with an empty result. This narrows the tested path to
+an empty completion on this build/state; it does not establish why hit-testing found no element,
+or whether Apple's client uses additional target/cursor state. No Apple-client point or preview
+DTX payload was captured from the physical device.
 
 ### Separate iPhone Mirroring AX path (offline host, 2026-09-23)
 
