@@ -1657,6 +1657,58 @@ On the final Home page, the advertised read-only `deviceRunningApplications` ret
 root queries therefore used a separately observed process list plus screenshots for target
 selection. A production foreground-binding contract remains unresolved.
 
+### Element geometry and action follow-up on the 12 mini (2026-09-27)
+
+**Seed and proof layers:** macOS 26.5.1 (25F80), Xcode 27 Beta 6 / CoreDevice 642.15,
+physical iPhone 12 mini / iOS 27.0 (24A437), Developer Mode and DDI enabled. The host
+`AccessibilityAuditDeviceManager.framework` disassembly and iOS 26.5 simulator `axauditd`
+are **static comparisons**; the AXAudit DTX replies and screenshots below are **physical iOS 27
+runtime evidence**. None of these experiments establishes an ordinary-node frame API.
+
+- The host implementation of `XDMDeviceTransportBased
+  fetchElementAtNormalizedDeviceCoordinate:withCompletionBlock:` builds one `NSValue` with
+  Objective-C type `{CGPoint=dd}` and sends it with `sendControlAsync:replyHandler:`. Its reply
+  handler decodes the returned object. The **simulator-only** `XADAuditServer` implementation
+  reads that argument with `CGPointValue`, asks `XADInspectorManager` to hit-test, and completes
+  the DTX invocation with the result. Thus a `host*` event alone is not the expected answer on
+  these inspected implementations. On the physical 12 mini, two correctly typed point queries
+  over Calculator still returned nil; monitoring-change callbacks did not supply an element.
+  Apple's exact request on this phone has not been captured, so target/state or physical-daemon
+  differences remain open.
+- `deviceCaptureScreenshot` on the 12 mini returned `displayBounds={{0,0},{375,812}}` and
+  `displayNativeScale=2.88`, while its PNG was **1125×2436**. The PNG has three pixels per
+  reported logical point on each axis, not 2.88. Any screenshot-derived rectangle must use the
+  actual image dimensions and reported bounds, then account for rotation; multiplying a detected
+  pixel rectangle by `displayNativeScale` would misplace it on this seed.
+- AXAudit audits returned one Calculator issue with `ElementRectValue_v1={{16,234},{343,84}}`
+  and two SpringBoard issues with rectangle values. The SpringBoard issues were type 1007 and
+  carried no `AuditElementValue_v1` in the decoded result. These are **issue rectangles**, not
+  established bounds for corresponding ordinary tree nodes. Neither the 45-node Calculator tree
+  nor the 407-node App Library tree gained a per-node frame field. The cached physical iOS 27
+  `AccessibilityAudit.framework` also names `AXAuditIssue.elementRect` and
+  `AXAuditCategory addIssueWithClassification:auditElement:elementRect:elementDescription:`;
+  those symbols identify an issue-construction path, not a normal-node rectangle getter.
+- A prior 13 Pro Lab preview visibly outlined selected text, and one 12 mini Calculator capture
+  showed a green outline around the `7` key. However, direct-root-token and focus-token
+  `deviceInspectorPreviewOnElement:` trials on the 12 mini did not reliably outline the requested
+  node; several before/after PNG pairs were identical and another preview cleared the existing
+  outline. Screenshot differencing is therefore not yet a general node-to-rectangle method.
+- pymobiledevice3 11.10.2's `perform_press` serializes `PlatformElementValue_v1` without the
+  nested `Value` used by captured property requests; its earlier no-effect press was an
+  inconclusive action test. A follow-up used the **exact focus-event element and advertised
+  `AXAction-2010` descriptor** for Calculator `7` and `All Clear`. Both calls returned, but
+  before/after screenshots were unchanged and the display stayed `0`. This excludes that one
+  malformed serializer as the sole explanation; semantic activation is still unverified.
+
+Xcode's Accessibility Inspector could be opened, but its target picker was not operable through
+the available desktop control session (`elementHasNoFrame` / `noWindowsAvailable`), so this run
+did **not** capture Apple's own physical-device point or preview request. Do not treat the absence
+of such a capture as a negative protocol result. The physical iOS 27 `axauditd` executable was
+not present in the local Xcode symbol cache; the simulator implementation above is not proof of
+its physical-device geometry or permission policy.
+
+### Separate iPhone Mirroring AX path (offline host, 2026-09-23)
+
 A separate **offline** host path exists in macOS 26.5.1 (25F80), iPhone Mirroring 1.6,
 `ScreenSharingKit` dyld-cache image UUID `C6D042A9-EE7E-3F13-9599-69DD1CB1A572`.
 `ScreenContinuityUI` uses `ScreenSharingSession.accessibilityDataPublisher`,

@@ -151,6 +151,20 @@ remain open. Requested Opus 5, Grok 4.7 and DeepSeek Flash
 consultations returned candidates; their suggestions were treated as hypotheses, not protocol
 evidence. A successful hierarchy RPC or a closed graph alone does not establish completeness.
 
+A fresh Opus 5.5 review focused the geometry search on three discriminators: capture Apple's
+actual Inspector DTX exchange, test preview-outline differencing, and determine whether audit
+rectangles are ordinary element frames. The 2026-09-27 physical 12 mini checks found one
+Calculator and two SpringBoard **audit-issue** rectangles, but no mapping from an issue to an
+arbitrary tree node. Several targeted previews did not reproduce an outline; a node action
+re-encoded from the received focus token and descriptor still left Calculator unchanged.
+The host point-query method sends an `NSValue` `{CGPoint=dd}` and handles a direct DTX reply;
+the older suggestion that a nil reply necessarily means a missing `host*` callback is not
+supported by that implementation. Correctly typed point requests nevertheless returned nil on
+the physical device, so this is still an unresolved route. The 12 mini screenshot's actual
+PNG/logical ratio is 3, while `displayNativeScale` reports 2.88; any visual fallback must map
+from image dimensions rather than assume that scale is the PNG ratio. See the
+[physical follow-up](protocol.md#element-geometry-and-action-follow-up-on-the-12-mini-2026-09-27).
+
 Pending experiments, in order of current evidence:
 
 1. Convert the research-only PID-root and own-query-child traversal into a product command only
@@ -159,9 +173,13 @@ Pending experiments, in order of current evidence:
    Mach service; enabling Developer Mode, rebooting and mounting DDI restored capabilities and
    hierarchy reads. Those simultaneous changes do not isolate the exact launchd gate. Two
    SpringBoard replies repeated a child within the same parent; deduplicate identical child
-   tokens before testing single-parent structure. A Calculator node press submitted without a
-   visible effect and candidate `Frame`/`AXFrame` reads returned nil, so geometry and node actions
-   remain research rather than a product contract.
+   tokens before testing single-parent structure. Even a press made with the focus event's exact
+   token/action descriptor had no visible effect, and candidate `Frame`/`AXFrame` reads returned
+   nil, so geometry and node actions remain research rather than a product contract. The next
+   geometry discriminator is a bounded DTX capture of Accessibility Inspector on the physical
+   device; the local desktop control session could open Inspector but not operate its target
+   picker, so this capture remains undone. If the reference request cannot be captured, inspect
+   the physical iOS 27 daemon before trying more descriptor guesses.
 2. Decode the full XCTest automation client exchange only if further evidence shows its session
    can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
 3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006
