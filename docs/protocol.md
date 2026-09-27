@@ -1737,6 +1737,50 @@ an empty completion on this build/state; it does not establish why hit-testing f
 or whether Apple's client uses additional target/cursor state. No Apple-client point or preview
 DTX payload was captured from the physical device.
 
+### iPhone 13 Pro Apple Inspector and issue geometry (2026-09-28)
+
+On macOS 26.5.1 (25F80), Xcode 27 Beta 6 / Accessibility Inspector 5.0 (192.6), CoreDevice
+642.15 / DDI 27A5252f, the wired iPhone 13 Pro on iOS 27.0 (24A437) accepted Apple's
+Inspector target and completed an audit of `PDUIApp`. The UI showed nine warnings (one Contrast,
+five Dynamic Type, three Hit Region). This is **runtime evidence** that the Apple client can
+establish an effective AXAudit session on this physical device/host seed, unlike the 12 mini
+service-start result above.
+It is not a trace of Apple's individual DTX audit or point request.
+
+Through the independent paired pymobiledevice3 11.10.2 RSD shim (`autopair=False`),
+`deviceCapabilities` returned 45 entries. `deviceAllSupportedAuditTypes` advertised the string
+`testTypeHitRegion`; `deviceBeginAuditTypes:` with `["testTypeHitRegion"]` returned three
+`AXAuditIssue_v1` objects through `hostDeviceDidCompleteAuditCategoriesWithAuditIssues:`.
+Each issue contained both `ElementRectValue_v1` and `AuditElementValue_v1`. The first rectangle
+was `{{12.666666666666666, 167}, {43.111111111111114, 8.5555555555555429}}`, with a
+20-byte `PlatformElementValue_v1` token. Sending that token back inside the captured
+`AXAuditElement_v1`/passthrough wrapper to `deviceElement:valueForAttribute:` returned the
+label `进一步了解…`; the other two issue tokens returned `接受并继续` and `关闭FaceTime通话`.
+`Frame` and `AXFrame` requests on all three returned nil. The direct normalized-point requests
+at `(0.5,0.5)` and `(0.7,0.4)` also returned high-level nil. These message shapes and values
+are **runtime evidence** on the stated seed, recorded in the local observation summary cited by
+[the dated verification](verification.md#2026-09-28--iphone-13-pro-apple-inspector-and-audit-issue-geometry).
+
+Thus an audit issue can associate its own rectangle with an element token, but that does not
+establish a rectangle getter for ordinary tree nodes. The Inspector Quick Look preview showed
+a Home-screen image with a green box although the selected target was `PDUIApp` and the first
+token's label was not a Home icon. Treat overlay-to-current-screen alignment as unverified.
+The next decisive comparison is an Apple-client 13 Pro point selection and its DTX reply.
+
+A bounded 40-second LLDB interception of the Apple client's
+`objc_msgSend$messageWithSelector:objectArguments:` path then recorded **43 outbound
+selectors** while selecting `13 Pro > All processes` and enabling inspection scope. The
+observed setup included `deviceSetAuditTargetPid:` with `0`,
+`deviceSetAppMonitoringEnabled:` with `1`, `deviceDidGetTargeted`,
+`deviceInspectorSetMonitoredEventType:` with `2` and `deviceInspectorShowVisuals:` with `1`.
+The capture did **not** contain `deviceFetchElementAtNormalizedDeviceCoordinate:`: no
+on-device/mirror pointer hit-test was triggered during that window. Replaying these observed
+setup calls in one direct Python session, then querying `(0.5,0.5)`, still returned nil. The
+trace establishes this subset of Apple's setup, not the complete state needed for a point
+reply. The debugger detached and the direct session disabled monitoring and visuals afterward.
+The next capture must actually trigger Apple's point-selection UI while its physical-device
+session is running.
+
 ### Separate iPhone Mirroring AX path (offline host, 2026-09-23)
 
 A separate **offline** host path exists in macOS 26.5.1 (25F80), iPhone Mirroring 1.6,

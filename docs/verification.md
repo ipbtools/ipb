@@ -2,9 +2,10 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-09-27. This section is overwritten; dated records below are append-only.**
-The latest AXAudit native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with an unlocked
-wired 12 mini on iOS 27.0 (24A437). It does not replace the declared macOS 27 release gate.
+**Updated 2026-09-28. This section is overwritten; dated records below are append-only.**
+The latest AXAudit native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with unlocked
+wired iPhone 12 mini and 13 Pro devices on iOS 27.0 (24A437). It does not replace the declared
+macOS 27 release gate.
 
 ### Remaining work, in recommended order
 
@@ -14,7 +15,7 @@ wired 12 mini on iOS 27.0 (24A437). It does not replace the declared macOS 27 re
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | Runner-free AXAudit root expansion works on two iOS 27 devices and targets: 13 Pro Lab 129 nodes; 12 mini SpringBoard 444 and Calculator 45 nodes on 2026-09-23. A fresh 12 mini App Library/Calculator read reached 407/45 nodes on 2026-09-27. Graph closure is not an atomic/all-view snapshot. Calculator `Frame`/`AXFrame` candidate reads and two typed point lookups were nil. Audits returned one Calculator and two SpringBoard **issue** rectangles, without a demonstrated mapping to arbitrary node bounds. A selected-element outline can appear, but arbitrary-node preview was not repeatable on 12 mini. A native lockdown point query returned a DTX OK with no payload and no later message in four seconds. Even a press with the copied focus token and advertised action descriptor left Calculator unchanged; the earlier pymobiledevice3 serializer was also malformed. | Initial no-phone-helper tree feasibility is verified; productizing it still needs target/foreground synchronization, lifecycle/coverage policy, a demonstrated per-node geometry or action path, and the supported macOS 27 gate. Next discriminator: isolate the Apple host's AXAudit service-start failure, then capture its physical-device DTX interaction or inspect the physical iOS 27 daemon. The picker worked on retry, but Inspector failed before DTX with kAMDRemoteConnectError; the same lockdown service worked through pymobiledevice3. The 13 Pro remains leased to LookInside; 12 mini was returned to Home. See [current research](devicehub-alignment.md#ui-context-research), [geometry follow-up](protocol.md#element-geometry-and-action-follow-up-on-the-12-mini-2026-09-27) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | Runner-free AXAudit root expansion works on two iOS 27 devices and targets: 13 Pro Lab 129 nodes; 12 mini SpringBoard 444 and Calculator 45 nodes on 2026-09-23. A fresh 12 mini App Library/Calculator read reached 407/45 nodes on 2026-09-27. Graph closure is not an atomic/all-view snapshot. The 12 mini's Apple Inspector connection failed before DTX with `kAMDRemoteConnectError`, but the same Xcode Inspector ran an audit on the 13 Pro on 2026-09-28, returning nine warnings. Three `testTypeHitRegion` issues on the 13 Pro each carried both `AuditElementValue_v1` and `ElementRectValue_v1`; querying one issue token returned a label. These are **issue** rectangles, not demonstrated bounds for arbitrary tree nodes: `Frame`/`AXFrame` reads and normalized-point queries remained nil. The audit target was `PDUIApp` while its preview screenshot showed Home, so screenshot-to-element coherence is also unproven. A bounded Apple-client selector trace captured target/monitoring setup but no point request; replaying that setup still left a direct point query nil. The 12 mini's point request received a raw DTX OK without payload, and a copied focus-token press had no visible effect. | Initial no-phone-helper tree feasibility is verified. Productizing it still needs target/foreground synchronization, lifecycle/coverage policy, a demonstrated per-node geometry or action path, and the supported macOS 27 gate. Next: trigger and capture an actual 13 Pro Apple Inspector point-selection request, then compare the 12 mini's service-start failure under the same host. The 13 Pro was used for this bounded run at the user's request and Inspector was restored to its prior Simulator target afterward; this does not assume the separate LookInside device allocation has ended. See [current research](devicehub-alignment.md#ui-context-research), [13 Pro audit follow-up](protocol.md#iphone-13-pro-apple-inspector-and-issue-geometry-2026-09-28) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -4595,3 +4596,52 @@ The connection trace, bounded script and DTX metadata stay outside Git under
 `~/.local/state/ipb/20260922-element-research/12mini-20260927-point-wire.json`; the current
 unlocked-screen screenshot is `12mini-20260927-regrab.png` beside the latter. Only documents
 changed; no build, install or smoke gate applies.
+
+## 2026-09-28 — iPhone 13 Pro Apple Inspector and audit-issue geometry
+
+Host macOS 26.5.1 (25F80), Xcode 27 Beta 6 / Accessibility Inspector 5.0 (192.6), CoreDevice
+642.15 / DDI 27A5252f; wired iPhone 13 Pro / iOS 27.0 (24A437), CoreDevice UUID
+`7F2FE6E9-5423-552A-A2A2-C499F1D8672F`. The user requested this 13 Pro check after the
+12 mini's host connection failure. No LookInside process was found running locally, and this
+run did not assume a permanent change to the phone's separate allocation. The
+`devicectl device info lockState` command reported `passcodeRequired: false` and
+`unlockedSinceBoot: true`. Before/after `ipb screenshot` images showed the same unlocked Home
+page apart from the clock.
+`ipb doctor` confirmed the DDI, five HID services, wired transport and connected tunnel.
+
+Unlike the 12 mini, Xcode's Accessibility Inspector accepted the 13 Pro target. Selecting its
+`PDUIApp` target and running Apple Audit returned **nine warnings**: one Contrast, five Dynamic
+Type, three Hit Region. Expanding the first Hit Region warning showed “Current size is 43 x 9”.
+Its Quick Look preview showed a green rectangle on a Home-screen screenshot. That screenshot
+does **not** prove the warning element was visible on Home: the selected audit target was
+`PDUIApp`, and its later element label was not a Home icon. The Apple-client result proves that
+this host/device pair can complete an AXAudit request; the 12 mini service-start failure is
+not a universal host failure. Its device/state-dependent cause remains unknown.
+
+Using paired pymobiledevice3 11.10.2 with `autopair=False`, AXAudit reported 45 capabilities.
+Typed normalized-point queries at `(0.5,0.5)` and `(0.7,0.4)` both returned high-level `None`.
+The advertised audit type is the string `testTypeHitRegion`: passing numeric classification
+`100` instead timed out after 25 seconds. With the string, the audit returned **three issues**.
+Each carried `ElementRectValue_v1` **and** `AuditElementValue_v1`; for example, the first had
+rect `{{12.666666666666666, 167}, {43.111111111111114, 8.5555555555555429}}` and a
+20-byte element token. Re-encoding that token as the captured `AXAuditElement_v1` wrapper let
+`deviceElement:valueForAttribute:` return the label `进一步了解…`. The other two labels were
+`接受并继续` and `关闭FaceTime通话`. Direct `Frame` and `AXFrame` queries returned nil for all three.
+Passing pymobiledevice3's deserialized element object back directly raised
+`DTXNSCodingError`; the wire wrapper is required for that follow-up query.
+
+This establishes a token-to-rectangle association for **audit issues on this target**, not a
+general node geometry getter or a safe screen coordinate for arbitrary clicks. The Apple-client
+audit did not exercise Inspector's normalized-point lookup, so its request/reply remains the
+next capture target. A 40-second LLDB trace of the functioning Apple client's outbound selector
+path recorded 43 calls while selecting `13 Pro > All processes` and enabling inspection scope.
+It included `deviceSetAuditTargetPid: 0`, app monitoring, `deviceDidGetTargeted`, monitored event
+type `2` and `deviceInspectorShowVisuals: 1`, but no normalized-point request: the capture did
+not trigger an actual pointer hit test. Replaying that observed setup in a direct session still
+left a `(0.5,0.5)` point query nil; the session then disabled visuals and monitoring. LLDB
+detached normally. The Inspector target and tab were restored to their prior
+`Simulator > Photos` / Inspection state after the run. No device input, app launch, install or
+production code change occurred. Local evidence is
+`~/.local/state/ipb/20260928-13pro-axaudit/observations.json`,
+`apple-inspector-dtx.jsonl`, `before.png`, `after.png` and `final.png`; only research documents
+changed, so no build/install/smoke gate applies.

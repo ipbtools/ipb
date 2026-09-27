@@ -176,6 +176,23 @@ an object. This corrects the ambiguity in the wrapper's `None` and bounds the ca
 hypothesis, but does not explain why the point had no element. See the
 [Apple-client boundary](protocol.md#apple-inspector-connection-and-point-reply-type-2026-09-27).
 
+At the user's request, the same Xcode Inspector was then tested against the unlocked wired
+13 Pro. Its `PDUIApp` audit completed with nine warnings, proving that this host can establish
+an effective Apple AXAudit session on that phone. Direct AXAudit `testTypeHitRegion` on the
+13 Pro returned three issue records that paired element tokens with rectangles; one token also
+returned a label when re-encoded into the captured wire wrapper. `Frame`/`AXFrame` and direct
+point lookups still returned nil. The audit's Home-screen Quick Look image did not match the
+selected `PDUIApp` target's issue label, so it is not a verified screen-to-element mapping.
+The 12 mini Apple connection failure is therefore not a universal host failure; its
+device/state-dependent cause and arbitrary-node geometry remain open. See the
+[13 Pro follow-up](protocol.md#iphone-13-pro-apple-inspector-and-issue-geometry-2026-09-28).
+
+A bounded Apple-client selector trace on the 13 Pro captured target PID `0`, app monitoring,
+targeted notification, event type `2` and inspection visuals. It did not capture a point query
+because the pointer was not moved over an inspectable device view. Replaying this setup in a
+direct session still produced a nil point reply, so these selectors alone do not explain the
+missing element. The next capture must trigger an actual Apple point selection.
+
 Pending experiments, in order of current evidence:
 
 1. Convert the research-only PID-root and own-query-child traversal into a product command only
@@ -187,11 +204,10 @@ Pending experiments, in order of current evidence:
    tokens before testing single-parent structure. Even a press made with the focus event's exact
    token/action descriptor had no visible effect, and candidate `Frame`/`AXFrame` reads returned
    nil, so geometry and node actions remain research rather than a product contract. The next
-   geometry discriminator is a bounded DTX capture of Accessibility Inspector on the physical
-   device after isolating its host MobileDevice service-start failure. The target picker now
-   works, but this host has not reached AXAudit DTX through Apple's connection path. If a
-   reference request cannot be captured on a functioning host, inspect the physical iOS 27
-   daemon before trying more descriptor guesses.
+   geometry discriminator is a bounded capture of an actual **13 Pro Apple Inspector** point
+   selection and its reply, beyond the now-captured target/monitoring setup. Compare its
+   service-start path with the 12 mini failure separately. If no reference point reply can be captured,
+   inspect the physical iOS 27 daemon before trying more descriptor guesses.
 2. Decode the full XCTest automation client exchange only if further evidence shows its session
    can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
 3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006
