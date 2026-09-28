@@ -188,10 +188,19 @@ device/state-dependent cause and arbitrary-node geometry remain open. See the
 [13 Pro follow-up](protocol.md#iphone-13-pro-apple-inspector-and-issue-geometry-2026-09-28).
 
 A bounded Apple-client selector trace on the 13 Pro captured target PID `0`, app monitoring,
-targeted notification, event type `2` and inspection visuals. It did not capture a point query
-because the pointer was not moved over an inspectable device view. Replaying this setup in a
-direct session still produced a nil point reply, so these selectors alone do not explain the
-missing element. The next capture must trigger an actual Apple point selection.
+targeted notification, event type `2` and inspection visuals. That run did not exercise a
+pointer hit test and captured no point query. Replaying the observed setup in a direct session
+still produced a nil point reply, so these selectors alone do not explain the missing element.
+
+A further 13 Pro control selected foreground Calculator explicitly in Apple Inspector (its
+process appeared after `ipb launch com.apple.calculator`). Injected taps opened Weather from
+Device Hub's mirror and Calculator's History sheet from `ipb`, but Inspector continued to show
+no selected element. A bounded host trace recorded only null focus/preview and section
+descriptors during an All-processes target change; two touch windows had no hit on the traced
+point/focus methods. This narrows the missing trigger to Inspector's selection path for these
+injected touches; it does not rule out a human finger touch. The latest Apple audit outlines
+were empty, so the documented issue-double-click path still lacks a reference capture. See
+the [dated follow-up](verification.md#2026-09-28--13-pro-point-selection-and-foreground-app-control).
 
 Pending experiments, in order of current evidence:
 
@@ -204,10 +213,12 @@ Pending experiments, in order of current evidence:
    tokens before testing single-parent structure. Even a press made with the focus event's exact
    token/action descriptor had no visible effect, and candidate `Frame`/`AXFrame` reads returned
    nil, so geometry and node actions remain research rather than a product contract. The next
-   geometry discriminator is a bounded capture of an actual **13 Pro Apple Inspector** point
-   selection and its reply, beyond the now-captured target/monitoring setup. Compare its
-   service-start path with the 12 mini failure separately. If no reference point reply can be captured,
-   inspect the physical iOS 27 daemon before trying more descriptor guesses.
+   geometry discriminator is a bounded capture of a **human finger** point selection with the
+   13 Pro's foreground app explicitly targeted. Synthetic HID taps and Device Hub mirror clicks
+   moved the UI but did not trigger the traced Inspector selection method. If a warning-bearing
+   audit target is available, also double-click an issue and trace its element handoff. Compare
+   the 12 mini's service-start failure separately. If neither reference path yields a point
+   reply, inspect the physical iOS 27 daemon before trying more descriptor guesses.
 2. Decode the full XCTest automation client exchange only if further evidence shows its session
    can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
 3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006

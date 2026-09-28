@@ -1778,8 +1778,39 @@ on-device/mirror pointer hit-test was triggered during that window. Replaying th
 setup calls in one direct Python session, then querying `(0.5,0.5)`, still returned nil. The
 trace establishes this subset of Apple's setup, not the complete state needed for a point
 reply. The debugger detached and the direct session disabled monitoring and visuals afterward.
-The next capture must actually trigger Apple's point-selection UI while its physical-device
-session is running.
+That run did not exercise the point-selection UI; the later injected-input controls are
+recorded below.
+
+### 13 Pro point-selection follow-up (2026-09-28)
+
+**Same seed, runtime evidence.** Apple's
+[Inspector instructions](https://developer.apple.com/documentation/accessibility/inspecting-the-accessibility-of-screens)
+say to choose a device/app, enable point inspection, and tap an iOS element. On this host,
+Device Hub's 13 Pro `View Screen` mirror accepted a click on the Weather icon and opened
+Weather, but the separately targeted Inspector continued to show `None` for the selected
+element. A 50-second Apple-client LLDB trace around a change to `13 Pro > All processes`
+recorded 15 calls/callbacks on the three selected methods. They included
+`deviceSetAuditTargetPid: 0`, repeated `deviceInspectorFocusOnElement: <null>` and
+`deviceInspectorPreviewOnElement: <null>`, and three
+`hostInspectorCurrentElementChanged:` values containing section descriptors but no
+`ElementValue_v1`. It recorded neither a call to
+`fetchElementAtNormalizedDeviceCoordinate:withCompletionBlock:` nor a selector for a point
+fetch. A second bounded trace while tapping the phone at `(0.5,0.5)` under that target had
+zero hits on these methods.
+
+For a foreground-app control, `ipb launch com.apple.calculator` made `计算器` appear in the
+Inspector's 13 Pro process menu. With that explicit target and point mode enabled,
+`ipb tap 0.10 0.08` opened Calculator's History sheet, proving the injected touch reached
+the app; the Inspector fields stayed `None`, and a third 50-second trace again had zero hits
+on the selected point/focus methods. The intercepted method set is not a complete DTX trace.
+These runs show that **these injected touches and the Device Hub mirror click did not trigger
+Apple's element-selection path**; they do not establish what a human finger touch would do.
+The prior nine-warning `PDUIApp` audit remains valid, but rerunning the audit on the current
+`PDUIApp` and Calculator targets gave an empty result outline, so the documented
+[audit-issue double-click route](https://developer.apple.com/documentation/accessibility/performing-accessibility-audits-for-your-app)
+could not be exercised here. No ordinary-element point result
+or frame was obtained. Local trace and screenshots are listed in the
+[dated verification](verification.md#2026-09-28--13-pro-point-selection-and-foreground-app-control).
 
 ### Separate iPhone Mirroring AX path (offline host, 2026-09-23)
 
