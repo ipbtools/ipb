@@ -4693,3 +4693,27 @@ Local success/failure evidence is kept outside Git in
 their bounded LLDB detach output and the absent trace file; the absence is meaningful only
 for the three selected breakpoints. No build/install/smoke gate applies to this research-only
 document update.
+
+## 2026-09-28 — foreground Weather audit retest
+
+Same host/device seed and UUID as the two 13 Pro records above. After returning the phone to
+Home, `ipb launch com.apple.weather` failed with CoreDeviceError 10004 (“process identifier of
+the launched application could not be determined”); this is a launcher-result failure, not
+evidence that Weather could not run. `ipb tap 0.153 0.116` on the Home icon then opened the
+Weather welcome screen, confirmed by `weather-current.png`. Its choices were left untouched.
+With that screen foreground, Accessibility Inspector's 13 Pro process menu listed
+`PDUIApp (5965)` but no Weather entry. The process/UI relationship is not established by the
+menu alone. Selecting `PDUIApp` in the Audit tab, with all seven audit-type checkboxes enabled,
+and pressing **Run Audit** left the results outline empty. Thus there was no issue row to
+double-click; this does not invalidate the earlier successful nine-warning run.
+
+A bounded 50-second LLDB trace of the same three host methods around the audit retry recorded
+`deviceRunningApplications`, `deviceSetAuditTargetPid: 0`, null focus/preview calls,
+`deviceHighlightIssue:` and one section-descriptor focus callback. It did not record a
+`deviceBeginAuditTypes:` selector on that intercepted path. This is not a complete DTX trace,
+so the absence cannot by itself diagnose why the Audit UI stayed empty. Inspector was returned
+to the local Mac target with point mode off; `ipb home` restored the 13 Pro Home page,
+confirmed by `weather-final-home.png`. Local evidence is
+`~/.local/state/ipb/20260928-13pro-axaudit/weather-current.png`,
+`weather-final-home.png` and `point-inspector-audit-retry.jsonl`. No product source changed;
+no build/install/smoke gate applies.
