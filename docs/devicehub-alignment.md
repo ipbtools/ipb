@@ -287,15 +287,22 @@ record source identity, handlers, captures and limitations. A separate native ac
 attempt still has no getter result because debugger attachment stalled; the extra Apple Lab
 reference with zero incoming messages remains invalid as a physical control.
 
+**Latency constraint / revised priority:** the user rejected page-wide serial preview with
+“耗时太久了吧，一个个来不知道要多久，没有更直接的方案吗”. Preview is retained as a
+bounded single-target fallback and a proof of local geometry. Do not expand it into one
+render/screenshot transaction per page node or claim an unmeasured latency. The main goal is
+a device-side snapshot or an existing remote AX data/cache stream carrying node properties
+and geometry together. AXAudit issue batches cover reported problems, not every page node.
+
 **Next discriminators, in order:**
 
-1. Follow preview geometry first: compare multiple fresh nodes, stable/dynamic pages and
-   rotation, then distinguish frame/path padding and clipping. Prefer extracting already
-   computed geometry from a demonstrated transport/rendering path if one exists; otherwise
-   evaluate screenshot-difference bounds explicitly as an observation fallback. Do not expose
-   them as native Frame. The coordinate RPC now has a concrete native backend **91701** and
-   a 0.1 s cached-result window; trace that backend and CGPoint decoding before another live
-   hit-test probe. Its success on iOS is still unproven despite the method's presence.
+1. Prioritize the separate iPhone Mirroring AX stream and its host cache: the inspected code
+   receives accessibilityDataPublisher data and exposes translated accessibility children.
+   Trace message decoding, cache node fields, frame access and actual session authorization.
+   A remote AX stream is established static evidence; independent-client access, arbitrary-app
+   coverage and a bulk rectangle export remain unverified. Keep the existing testmanagerd
+   direct snapshot RPC as the second structured candidate, with its internal-policy/session
+   gates explicitly tracked. Do not repeat generic handshakes without a new protocol clue.
 2. Resolve the existing-app debugger attachment before attempting native `accessibilityFrame`.
    Retain a fresh PID/address and explicit stopped-target proof; a hang or vanished old PID is
    not a Frame denial. Treat this as a development-app-only fallback, separately from a generic
@@ -307,6 +314,21 @@ reference with zero incoming messages remains invalid as a physical control.
    token lifetime and frame/action correlation, then pass the supported macOS 27 gate. A
    traversal cycle or graph closure is not completeness. Several app-state PIDs can report
    Foreground Running together; last-event-wins is not a validated foreground resolver.
+
+For occasional single-node selection, the coordinate RPC's concrete backend **91701** and
+0.1 s cache remain a useful lead; they do not replace a page snapshot. Inspect the backend and
+CGPoint decoding before another hit-test probe. The physical screenshot handler also hides
+visuals and supplies CGRectZero to the platform screenshot method, so it is not a demonstrated
+shortcut for retrieving the current cursor rectangle.
+
+WDA is a separate existing bulk option if a signed Runner is accepted: current upstream
+`/source?format=json` takes an application snapshot and recursively emits nodes including rect
+([source handler](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Commands/FBDebugCommands.m),
+[tree serialization](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Categories/XCUIApplication%2BFBHelpers.m)).
+It has not been tested on this project's current iOS 27 device. Preinstalled startup avoids
+rebuilding each session but still requires a signed Runner; current Appium documentation also
+requires working RemoteXPC on iOS 27 rather than the devicectl launch fallback
+([preinstalled WDA](https://appium.github.io/appium-xcuitest-driver/latest/guides/run-preinstalled-wda/)).
 
 Keep Apple service-start failures separate from DTX/API/semantic results. A menu highlight
 or one successful capability response does not validate the target. Accept a matching focus

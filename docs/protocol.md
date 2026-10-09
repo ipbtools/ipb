@@ -2188,6 +2188,13 @@ at `0x100008734`. It passes frame/path/context to rendering at `0x100008924`. Ne
 two handlers calls the task-port predicate. This is local geometry consumption, not a Frame
 response to the host.
 
+The physical server's `_deviceCaptureScreenshot` at `0x1000092f4` first calls
+`hideVisualsSynchronously` at `0x10000931c`, then supplies **CGRectZero** to the platform plugin's
+`screenshotInfoForTransportWithFrame:` at `0x100009344–354`. It does not read the renderer's
+`_currentCursorFrame` getter at `0x100008994`. Thus the screenshot selector is not a demonstrated
+direct export of the preview rectangle; the pixel-difference control below used ipb's separate
+devicectl screenshot path, which retained the overlay.
+
 A fresh Calculator History token (PID 51502, identifier SidebarButton) was received on a new
 connection. With the daemon still logging developer permission NO, the host sent
 `deviceInspectorShowVisuals:(true)` and `deviceInspectorPreviewOnElement:(received element)`.
