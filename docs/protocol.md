@@ -1812,6 +1812,60 @@ could not be exercised here. No ordinary-element point result
 or frame was obtained. Local trace and screenshots are listed in the
 [dated verification](verification.md#2026-09-28--13-pro-point-selection-and-foreground-app-control).
 
+### AXAudit recorder and route reassessment (offline, 2026-10-09)
+
+This is an **offline reinspection**, not new phone evidence. Current host metadata is macOS
+26.5.1 (25F80), Xcode 27 Beta 6 / Inspector build 192.6. Historical device results above retain
+their original seeds; no device connection, current PID or iOS build was refreshed here.
+
+The retained 9/28 `trace.lldb` sets only the outbound
+`objc_msgSend$messageWithSelector:objectArguments:` breakpoint. Although its Python callback
+contains incoming reply handling, the script never attaches that branch. The later
+`point-trace.lldb` additionally observes one focus callback and the host point method, not all
+DTX replies or device events. Their global counters advance before selector filtering, disable
+breakpoints at a cap without a disable record, and have no trial/footer marker. Therefore zero
+hits or an absent output file do not prove that no AXAudit message traversed the device session.
+This source defect is reproducible by inspecting the retained scripts, without rerunning phones.
+
+**Host disassembly evidence:** in
+`/Applications/Xcode-27.0.0-Beta.6.app/Contents/Applications/Accessibility Inspector.app/Contents/Frameworks/AccessibilityAuditDeviceManager.framework/Versions/A/AccessibilityAuditDeviceManager`
+(arm64 UUID `4395FC8E-A200-3221-87D7-E607746BBBBE`),
+`fetchElementAtNormalizedDeviceCoordinate:withCompletionBlock:` at unslid `0x9184` receives
+CGPoint in `d0/d1` and the completion block in `x2`; it boxes `{CGPoint=dd}` before constructing
+the DTX request. The retained `point_trace.py` incorrectly describes `x2` as the point. This
+would corrupt coordinate recording if the breakpoint fires; it does not explain a zero hit.
+The observed caller at `XDMDeviceSIM._updateCurrentElementForMousePoint:` checks Simulator
+resolution and converts a Simulator window point before invoking the method. This is a concrete
+Simulator caller, not an exhaustive proof that no physical caller exists. Local sources are
+`20260922-ax-inspector/manager.disassembly.txt:3141–3355,8406–8459` and
+`20260928-13pro-axaudit/point_trace.py:30–31` beneath `~/.local/state/ipb/`.
+
+The already-examined iOS 26.5 **Simulator** daemon also has
+`eventManager:eventToHighlightPoint:` and event-monitor setup that enables snarfing for types
+1/2, with stop-on-touch-up for type 2 (`sim-axauditd-annotated.txt:103–118,1423–1482` in
+`20260922-element-research/`). **Inference:** physical iOS selection might push a focus event
+without a host point RPC; its implementation and monitoring lifetime need real-device capture.
+Do not require a host point-call hit as the sole success criterion.
+
+Shipped Objective-C metadata in
+`/Applications/Xcode-27.0.0-Beta.6.app/Contents/SharedFrameworks/DTXConnectionServices.framework/Versions/A/DTXConnectionServices`
+provides `DTXConnection sendMessage:fromChannel:sendMode:syncWithReply:replyHandler:`,
+`_routeMessage:` and `_scheduleMessage:toChannel:`, plus `DTXMessage` routing/type/status getters.
+These are candidate bidirectional recording points, not proof that a new recorder is complete.
+Use the loaded slice UUID and symbol resolution; an entry-stage identifier need not equal its
+final serialized routing value. Raw archives/serializer ABI and capture overhead remain to be
+validated before claiming byte-exact wire coverage.
+
+Two historical evidence corrections constrain the next experiments. Valid focus records in
+`20260922-ax-inspector/probe-events.jsonl:4`, `settings-attribute-results.jsonl:5` and
+`settings-next-attribute-results.jsonl:4` advertise `AXAction-2010`, Activate and
+`PerformsActionValue_v1=true`; blank sections without a selected token do not establish that
+actions are universally unavailable. Conversely, `page-expand-lab-raw.jsonl:48,58,87,151,167`
+reports Foreground Running for Lab, SpringBoard, PDUIApp, InputUI and AccessibilityUIServer
+within roughly 66 ms of receiving events. An app-state notification alone is not a verified
+unique frontmost-PID resolver. The [capture plan](devicehub-alignment.md#axaudit-capture-plan)
+requires a successful selection/action reference and coherent target/token/screen controls.
+
 ### Separate iPhone Mirroring AX path (offline host, 2026-09-23)
 
 A separate **offline** host path exists in macOS 26.5.1 (25F80), iPhone Mirroring 1.6,

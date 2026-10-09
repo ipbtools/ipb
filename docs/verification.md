@@ -2,10 +2,11 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-09-28. This section is overwritten; dated records below are append-only.**
-The latest AXAudit native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with unlocked
-wired iPhone 12 mini and 13 Pro devices on iOS 27.0 (24A437). It does not replace the declared
-macOS 27 release gate.
+**Updated 2026-10-09. This section is overwritten; dated records below are append-only.**
+The latest AXAudit native-runtime evidence remains the September records on macOS 26.5.1 /
+CoreDevice 642.15 with unlocked wired iPhone 12 mini and 13 Pro devices on iOS 27.0 (24A437).
+The October 9 work rechecked raw sources and host framework metadata only; it did not refresh
+phone state or device allocation. Neither replaces the declared macOS 27 release gate.
 
 ### Remaining work, in recommended order
 
@@ -15,7 +16,7 @@ macOS 27 release gate.
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | Runner-free AXAudit root expansion works on two iOS 27 devices and targets: 13 Pro Lab 129 nodes; 12 mini SpringBoard 444 and Calculator 45 nodes on 2026-09-23. A fresh 12 mini App Library/Calculator read reached 407/45 nodes on 2026-09-27. Graph closure is not an atomic/all-view snapshot. The 12 mini's Apple Inspector connection failed before DTX with `kAMDRemoteConnectError`, but the same Xcode Inspector ran an audit on the 13 Pro on 2026-09-28, returning nine warnings. Three `testTypeHitRegion` issues on the 13 Pro each carried both `AuditElementValue_v1` and `ElementRectValue_v1`; querying one issue token returned a label. These are **issue** rectangles, not demonstrated bounds for arbitrary tree nodes: `Frame`/`AXFrame` reads and normalized-point queries remained nil. The audit target was `PDUIApp` while its preview screenshot showed Home, so screenshot-to-element coherence is unproven. New 13 Pro controls showed that Device Hub's mirror click and `ipb` taps reached Weather/Calculator, yet did not select an element in Inspector or invoke the traced host point method, even with Calculator explicitly chosen as the foreground target. This is a negative result for injected input, not for a human touch. The 12 mini's point request received a raw DTX OK without payload, and a copied focus-token press had no visible effect. | Initial no-phone-helper tree feasibility is verified. Productizing it still needs target/foreground synchronization, lifecycle/coverage policy, a demonstrated per-node geometry or action path, and the supported macOS 27 gate. Next: capture a human finger selection on the explicitly targeted 13 Pro Calculator, then compare the 12 mini's service-start failure under the same host. If a live audit returns an issue again, double-click it and trace the element handoff. The 13 Pro run ended on Home with Inspector's point mode off and its physical-device target released; the earlier Simulator target was unavailable to reselect. This does not assume the separate LookInside device allocation has ended. See [current research](devicehub-alignment.md#ui-context-research), [13 Pro point follow-up](protocol.md#13-pro-point-selection-follow-up-2026-09-28) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | Historical runner-free root reads reached 13 Pro Lab 129 nodes and 12 mini SpringBoard/Calculator 444/45 nodes, then App Library/Calculator 407/45. Graph closure is not an atomic/all-view snapshot. Apple Inspector failed before DTX on the 12 mini (`kAMDRemoteConnectError`) but completed a nine-warning 13 Pro audit. Three issues carried token+rect; one token returned a label, while the target/preview screen disagreed. This is issue geometry, not arbitrary-node bounds. Candidate `Frame`/`AXFrame` and point queries had no value; the 12 mini raw point reply was empty DTX OK. Injected input reached apps without recorded Inspector selection. October offline review confirmed incomplete receive/reply coverage, silent trace caps and a wrong point-register decoder; the known host point caller is Simulator-specific. Physical touch and a possible device-push route remain untested. Activate is advertised in valid historical focus records, but action effect remains unverified. Several PIDs report Foreground Running together, so that event alone cannot select one frontmost PID. | Agent-fixable first: repair/validate the bounded bidirectional recorder, then obtain a coherent fresh focus baseline, human finger versus injection control, and Apple selection/Activate reference. Use the original **12 mini allocation**; 13 Pro requires renewed availability/allocation confirmation. Physical finger input requires an operator; current readiness is unconfirmed. Diagnose Apple service start separately; run issue handoff only after a complete current audit actually returns an issue. Product tree work still requires target synchronization, coverage/lifetime policy and the macOS 27 gate. See [R0–R3 capture plan](devicehub-alignment.md#axaudit-capture-plan), [offline evidence corrections](protocol.md#axaudit-recorder-and-route-reassessment-offline-2026-10-09) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -4717,3 +4718,65 @@ confirmed by `weather-final-home.png`. Local evidence is
 `~/.local/state/ipb/20260928-13pro-axaudit/weather-current.png`,
 `weather-final-home.png` and `point-inspector-audit-retry.jsonl`. No product source changed;
 no build/install/smoke gate applies.
+
+## 2026-10-09 — AXAudit direction review and recorder evidence correction
+
+Baseline `codex/devicehub-alignment` / `ec4fa4ae24d441c112647be087729c33d330eda2`.
+This is an offline review, not a device run. Current host reads show macOS 26.5.1 (25F80),
+Xcode 27 Beta 6 / Inspector build 192.6 and pymobiledevice3 11.10.2. No phone enumeration,
+connection, input, Inspector launch or current device/PID/lock state check occurred. The 12 mini
+allocation remains the default; the 13 Pro's older temporary tests do not establish ownership
+today. No app/firmware/protocol consumer was changed, so build/install/smoke gates do not apply.
+
+At the user's request, independent `claude-opus-5` and `gpt-6-astra` reviews assessed the direction
+and next capture design (**source: peer**, not new runtime proof). Both read retained probe/trace
+sources and results; Astra also read screenshots and checked local framework metadata. Opus
+declared that some large sources were read through excerpts/summaries. Its CLI finished with
+`subtype=success`, `is_error=false`, `permission_denials=[]`; model usage records the requested
+Opus 5 plus CLI auxiliary reading/context processing. Main-session arbitration reopened the
+decisive raw sources rather than adopting every peer assertion.
+
+Confirmed recorder problem: the 9/28 main script installs only the outgoing-construction
+breakpoint despite having unused reply-handling code. The point script adds some focus callbacks
+but is not a complete receive/reply trace. It reads `x2` as point data; host disassembly shows
+`d0/d1` contain CGPoint and `x2` is the completion block. Counters advance before filtering and
+silently disable breakpoints at their cap, with no persistent trial/footer record. This explains
+why the previous files cannot establish complete negative coverage; the register bug does not
+explain zero hits. Rerunning device touches was unnecessary to establish these source defects.
+The Apple-client recorder repair and live positive controls remain **pending**, not verified fixes.
+
+The known host point caller belongs to `XDMDeviceSIM`. Simulator daemon code supplies a competing
+touch-monitor/device-event route; its physical iOS 27 counterpart is unverified. Future selection
+success may be an incoming event and must not require a host point RPC. Two peer overclaims were
+also corrected: valid historical focus events advertise Activate, and several app-state events
+report Foreground Running for different PIDs within a short receive window. Neither empty
+sections nor a last-arriving app-state event can establish missing actions or a unique frontmost
+PID. The [protocol reassessment](protocol.md#axaudit-recorder-and-route-reassessment-offline-2026-10-09)
+retains specific script/disassembly/JSONL references and proof boundaries.
+
+The current [R0–R3 plan](devicehub-alignment.md#axaudit-capture-plan) starts with recorder validity,
+then a single-client focus baseline and human-finger/injected-input comparison, Apple's ordinary
+selection/preview/Activate reference, and only then a current issue's highlight/Inspection handoff.
+Each comparison requires coherent target/PID/token/screenshots and fresh tokens; action submission
+is never automatically replayed. Apple pre-DTX service failure is diagnosed separately. A
+completed zero-issue audit is valid and skips issue handoff. No new ordinary-node rectangle,
+semantic action effect, physical-touch behavior or phone capability is claimed by this review.
+
+A Git-external Python recorder was then prepared against the installed pymobiledevice3 11.10.2
+source. It copies accepted outgoing chunks and completed/partial incoming reads before object
+decoding, records markers/boundaries/footer and decodes archived streams offline. A bounded
+local TCP loopback fixture passed: five messages in each direction were byte-identical to the
+peer transcript, a large reply reassembled across fragments, request/reply identifiers and
+signed wire channels survived, and a nested typed element token/event was preserved. Empty
+type-0 OK, encoded-null type-3 object and invalid archive decode were distinguishable. Separate
+fixtures verified a zero-traffic footer, explicit byte-budget failure, partial-read retention
+and hook restoration. This is **local recorder validation only**, not device/Apple-client
+coverage or a live-overhead measurement. Writer acceptance/drain does not prove device receipt.
+No new phone session was opened after these fixtures.
+
+Raw reviews, metadata and main arbitration stay outside Git at
+`~/.local/state/ipb/20261009-axaudit-direction/` (`opus-review.json`, `opus-review.md`,
+`astra-review.md`, `merged-review.md`, `raw-capture-index.json`, `dtx-runtime-methods.json`).
+Local recorder/decoder and loopback results (`dtx_record.py`, `dtx_decode.py`,
+`check_recorder.py`, `recorder-fixture-*/result.json`) remain there as ad hoc preparation.
+Repository changes contain only condensed confirmed problems, current plan and evidence limits.
