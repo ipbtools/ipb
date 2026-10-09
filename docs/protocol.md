@@ -2111,9 +2111,9 @@ The pointer interpretation follows Apple's [dyld cache format](https://github.co
 and [shared-cache fixup definition](https://github.com/apple-oss-distributions/dyld/blob/main/include/mach-o/fixup-chains.h),
 also checked against the Xcode 27 SDK header. Thus this physical framework's predicate is
 `task_for_pid(mach_task_self_, pid, &task) == KERN_SUCCESS`. It is a task-port success check,
-not a literal entitlement-key comparison. The concrete physical property/action/parameterized
-handlers remain unavailable: neither matching cached symbols nor either inspected DDI image
-contains `axauditd`. The iOS 26.5 Simulator action gate is still separate evidence.
+not a literal entitlement-key comparison. This cache/DDI investigation did not supply the
+standalone daemon. The following firmware investigation resolves the matching physical
+property/action/parameterized handlers; the older Simulator comparison remains separate evidence.
 
 **Geometry remains open:** no Frame was received through AXAudit in this development-app
 control. The current UIKit SDK declares native `accessibilityFrame` in screen coordinates,
@@ -2122,3 +2122,85 @@ addresses for this bounded follow-up, but debugger attachment did not yield a us
 target and no class/Frame getter executed. This is unverified, not a negative Frame result.
 The extra Apple Inspector attempt also remained at Connecting to target; its four outgoing
 messages and zero incoming messages do not form a physical selection/action reference.
+
+### AXAudit physical daemon handlers, permission logs and element preview (2026-10-09)
+
+**Seed/source:** macOS 26.5.1 (25F80), Xcode 27 B6 / Inspector 192.6 / CoreDevice 642.15 /
+DDI 27A5252f, the allocated physical iPhone14,2 running iOS 27.0 **24A437**. Doctor again
+reported an unlocked wired device and no failures. This is supplemental research, not the
+supported macOS 27 release gate.
+
+The daemon was extracted read-only from the OS filesystem of Apple's
+[iPhone14,2 27.0 / 24A437 restore firmware](https://updates.cdn-apple.com/2026FallFCS/3337f675-bd6c-49e2-9d4a-7b59095d07e5/iPhone14,2_27.0_24A437_Restore.ipsw).
+BuildManifest and SystemVersion confirm the product/build. The exact ZIP member
+`043-69835-656.dmg.aea` has 8,321,499,136 bytes, a verified central-directory CRC32 of
+`6da9e705` and computed SHA256 `39153f89b2d38930fbf9eee2a235b510d35ed064f00c1663ff1452693f23b935`.
+The whole IPSW was not downloaded or hash-verified. AEA decryption and a read-only APFS parser
+supplied `/System/Library/PrivateFrameworks/AccessibilityAudit.framework/Support/axauditd`:
+179,312 bytes, SHA256 `5278c0dc4dc62cc8801840e047381924a50cdae246abf67ec986522a6e66aec8`,
+arm64e Mach-O UUID **08B6FBF3-3EF9-34FD-B86F-8DCA4E4D6616**. Live daemon-only syslog reports
+the **same image and process-image UUID**, linking the static binary to this phone's running
+daemon. All addresses below are unslid addresses in this executable, not Simulator addresses.
+
+**Disassembly/metadata evidence:** `otool -ov/-tvV`, `nm -m` and ipsw 3.1.732 annotated
+disassembly/chained fixups resolve the following paths. Local source references are in the
+[dated verification](verification.md#2026-10-09--13-pro-physical-axauditd-handlers-permission-logs-and-preview).
+
+| Entry/source | Concrete behavior on this seed |
+| --- | --- |
+| `XADInspectorManager element:valueForParameterizedAttribute:withObject:completion:` at `0x1000058ec` | Five instructions invoke the supplied completion with nil. No parameterized AX request occurs. The server entry at `0x10000a5b4` decodes and forwards to this method. Thus advertising this RPC does not expose XCTest's parameterized snapshot attribute 95006. |
+| `element:valueForAttribute:completion:` at `0x100005350` | Compares a fixed set of names: Label, Header, Hint, UserInputLabels, Traits, ElementClassName, ElementMemoryAddress, ElementViewControllerClassName, Identifier, TraitsHumanReadable, Value and the four imported human-readable/hierarchy attributes. The final comparison at `0x1000058c4` sends unknown names to nil at `0x100005480`. There is no Frame, AXFrame, Position or Bounds branch and no generic name-to-native-attribute forwarding. |
+| `_developerOnlyAttributes` at `0x100002f7c` and constant array at `0x100019248` | The array count at `0x100019250` is 3; its chained-fixup targets are the ClassName, MemoryAddress and ViewControllerClassName strings at `0x1000186f0/710/730`. Their ordinary-property reads require `AuditDoesAllowDeveloperAttributes` at `0x100005450`; a false result reaches nil through `0x100005478–480`. The human-readable class-name branch separately checks the same predicate at `0x100005820`. |
+| Property result processing at `0x1000054ac–53c` | With developer permission false, NSString and NSAttributedString results of length at least 65 are truncated to the first **64 UTF-16 code units**. This is a static bound, not a measured long-text example or a claim that every nested string is truncated. |
+| Property focus-history filter at `0x1000053ac–3fc` | An element that differs from the current focus but is already in focused-element history completes nil. A cached token is therefore not an unrestricted permanent read handle. |
+| `allowDeveloperActionsOnElement:` at `0x100004a1c` and action manager at `0x100004a60` | Resolve the element PID, then call the task-port predicate. False branches at `0x100004ac8` skip native action execution. Recognized `AXAction-` four-character suffixes invoke native `performAction:` at `0x100004b40` when their integer value is in 2000..10000; the native return value is discarded. Custom-action suffixes instead supply the value for action 2021. All paths invoke the same void completion at `0x100004bb0`. |
+| Server action block `sub_10000a194` / completion `sub_10000a2ac` | The RPC's third argument is discarded; `0x10000a278` explicitly passes nil to the manager. Completion at `0x10000a2b0–2b8` supplies nil return value and nil error irrespective of the manager's action path. Empty OK cannot distinguish permission denial, unrecognized action or native action outcome. Changing only the null/0 third argument cannot repair that distinction on this seed. |
+| Hierarchy helper `sub_10000511c`, child helper `sub_100004fb8` | Builds a parent chain and selected child/sibling context, not a recursive all-view snapshot. Parent traversal checks the task-port predicate at `0x10000527c` and stops on denial. Child serialization adds index 50 before stopping at `0x100005090`, so each such collection is capped at **51** entries. This now has physical-device binary evidence. |
+| `fetchElementAtNormalizedDeviceCoordinate:` at `0x100005b6c` | Passes the received CGPoint unchanged to systemWideElement's `elementForAttribute:parameter:` with native numeric attribute **91701** at `0x100005c58–64`. Requests within **0.1 s** return the previous cached result; the constant is at `0x1000115a8`. The server reads CGPointValue at `0x10000ad68`. No coordinate scaling or explicit platform guard occurs in these two handlers. This does not establish that backend 91701 works on iOS; the earlier nil result remains unresolved. |
+
+The daemon's embedded entitlements include `com.apple.accessibility.api`,
+`com.apple.accessibility.axauditd`, `com.apple.accessibility.voiceover`, QuartzCore global/secure
+capture and SpringBoard debug applications. Neither `task_for_pid-allow` nor `get-task-allow`
+is present in this dictionary. These literals alone do not explain kernel task-port policy.
+
+**Runtime permission discriminator:** paired USB AXAudit and daemon-only OsTrace syslog were
+recorded together using pymobiledevice3 11.10.2. The focus-builder at `0x100003bb4` calls the
+same resolved task-port predicate, then emits its YES/NO at `0x100003c24`:
+
+| Current matching focus | Daemon log | Reads using received descriptors |
+| --- | --- | --- |
+| Calculator PID **51502**, History / SidebarButton | `allowDeveloperAttributes: NO` | Label=历史记录; ClassName, MemoryAddress and Controller=nil. |
+| Existing Lab PID **51452**, gear button | `allowDeveloperAttributes: YES` | Label=齿轮形状; ClassName=SwiftUI.AccessibilityNode; MemoryAddress=0x15b013840; Controller=nil. |
+
+This establishes the predicate's actual outcome during these selections and its agreement
+with property filtering. It strengthens the authorization explanation for the earlier
+Calculator/Lab action difference; it does not isolate which entitlement/kernel policy causes
+task_for_pid success, or retroactively trace the earlier action invocation. No semantic action
+was sent in these probes. An initial same-session switch to Lab produced no matching focus
+and stopped before Lab reads; a fresh Lab session with app monitoring enabled succeeded.
+Those state changes do not isolate the initial selection failure's cause.
+
+**Geometry available to preview, with a positive physical control:**
+`previewOnElement:` at `0x100004980` obtains the transported native element and calls
+`XADDisplayManager setCursorFrameForElement:` at `0x1000049e0`. The latter clears cached frame
+and visible frame, refreshes native attribute **2003**, and calls the native **frame** getter
+at `0x100008734`. It passes frame/path/context to rendering at `0x100008924`. Neither of these
+two handlers calls the task-port predicate. This is local geometry consumption, not a Frame
+response to the host.
+
+A fresh Calculator History token (PID 51502, identifier SidebarButton) was received on a new
+connection. With the daemon still logging developer permission NO, the host sent
+`deviceInspectorShowVisuals:(true)` and `deviceInspectorPreviewOnElement:(received element)`.
+The screenshot shows the matching top-left History control highlighted, while 7 and the page
+remain unchanged. Before/after raster differences above channel threshold 8, 16 or 32 all
+occupy the half-open pixel box **[54,147,174,267)** in 1170×2532 images: approximately
+**x=18, y=49, width=40, height=40** logical points under the previously confirmed scale 3.
+This is an **overlay extent measured from pixels**, not a transported CGRect or proof of
+the element's exact accessibilityFrame. No audit issue was needed for this ordinary control.
+
+**Inference/next boundary:** element-specific preview plus screenshot comparison is a viable
+geometry fallback candidate on this seed, including this permission-denied system app.
+Dynamic content, overlay padding/path, occlusion, scrolling, rotation and token lifetime still
+need controls before any reusable bounds API. The renderer's internal geometry and backend
+91701 are concrete investigation targets; more guessed Frame names cannot bypass these
+fixed handlers. A full page snapshot and a runner-free XCTest snapshot session remain unproven.

@@ -7,10 +7,13 @@ The latest AXAudit runtime work is October 9 on macOS 26.5.1 / Xcode 27 B6 /
 CoreDevice 642.15 with an unlocked wired 13 Pro on iOS 27.0 (24A437). The user explicitly
 allocated the 13 Pro to this round and confirmed real finger input. Finger and injected
 selection, Apple property/action requests and an issue-to-Inspection handoff are now captured.
-A follow-up establishes a real Activate effect and class/address reads on the installed
-development Lab app, and resolves the physical framework's task-port predicate. Ordinary-node
-bounds and the Calculator no-effect cause remain unresolved. This does not replace the
-declared macOS 27 release gate.
+A follow-up establishes a real Activate effect on the installed development Lab app. The
+matching physical axauditd is now extracted, its UUID agrees with live syslog, and current
+Calculator/Lab focus logs confirm NO/YES task-port predicates. Ordinary Frame is absent from
+the fixed property dispatcher and parameterized reads complete nil. A received ordinary
+Calculator element can nevertheless be preview-highlighted and localized by screenshot
+difference. This is overlay geometry, not a native bounds response or a complete tree.
+Kernel policy and broader coverage remain open; this does not replace the macOS 27 release gate.
 
 ### Remaining work, in recommended order
 
@@ -20,7 +23,7 @@ declared macOS 27 release gate.
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | Historical root reads produced partial graphs, not atomic/all-view snapshots. October 9 confirmed finger and injected History taps both pushed matching focus without a host point RPC; monitoring then resets to 0. Apple and direct Calculator Activate each completed empty OK without opening History. A current issue token/PID/identifier/rect, Apple focus+lock and screenshot highlight agree; this establishes issue geometry only. The existing Lab reports get-task-allow=true; fresh PID 51300 gear focus returns class/address, and one captured Activate opens Settings despite the same empty OK. Raw 24A437 caches resolve the framework predicate to task_for_pid(mach_task_self_, pid, &task)==success. Concrete daemon callers/kernel policy are untraced, so the app comparison does not isolate the permission cause. No ordinary Frame was advertised; app-debugger attachment stalled before a getter. An extra Apple reference had no incoming messages and is invalid for physical action claims. | Agent-fixable: obtain the matching physical axauditd handlers and trace their authorization/property branches; resolve existing-app debug attachment separately for a development-only native Frame fallback. The semantic action control is already positive. Preserve DTX connection identity and fresh PID/address/token. The user chose **“用 13 pro 吧”**; refresh future ownership. No extra finger cooperation is pending. Product tree work still needs target/coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [development-app follow-up](protocol.md#axaudit-development-app-action-and-resolved-task-port-predicate-2026-10-09) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | Selection, issue association and one Lab activation are positive; graphs remain partial. Physical 24A437 axauditd UUID matches live logs. Fixed ordinary reads omit Frame; parameterized reads directly return nil. Properties/actions/parent traversal check the resolved task-port predicate; current Calculator PID 51502 logs NO and Lab PID 51452 YES, matching nil vs populated class/address reads. Action completion hides denial/native outcome and ignores the RPC value argument. Nondeveloper text is capped at 64 UTF-16 units and child serialization at 51. Ordinary Calculator History preview succeeds despite NO, yielding a screenshot overlay box around that token's control. Exact native frame, kernel authorization policy and generic tree completeness remain unproven. Native app-debugger Frame getter never executed. | Agent-fixable: follow renderer geometry and evaluate preview-difference coverage/padding/dynamic content; trace coordinate backend 91701 and its 0.1 s cache before another hit-test. Do not keep guessing Frame names. Debugger attachment is a separate development-only fallback. Preserve connection/PID/token identity, explicit overlay provenance and cleanup. The user chose **“用 13 pro 吧”**; refresh future ownership. No extra finger cooperation is pending. Product tree work still needs target/coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [physical handlers](protocol.md#axaudit-physical-daemon-handlers-permission-logs-and-element-preview-2026-10-09) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -4912,3 +4915,78 @@ Decisive sources are `lab-control-1791535376764185000/decoded.jsonl` (request/re
 2 MiB data prefix is explicitly incomplete; the full 225,280,000-byte cache was used for the
 slide-chain check. See [current protocol](protocol.md#axaudit-development-app-action-and-resolved-task-port-predicate-2026-10-09)
 for symbol addresses, UUIDs and source definitions. Raw data and success-only evidence are not committed.
+
+## 2026-10-09 — 13 Pro physical axauditd handlers, permission logs and preview
+
+**Scope/seed:** doctor again passed with no failures on macOS 26.5.1 (25F80), Xcode 27 B6 /
+Inspector 192.6 / CoreDevice 642.15 / DDI 27A5252f, unlocked wired iPhone14,2 iOS 27.0
+(24A437), UUID `7F2FE6E9-5423-552A-A2A2-C499F1D8672F`. Only the allocated 13 Pro was
+operated. No Runner, installation, certificate or device security change. This is research;
+no production code/build/release-matrix smoke was changed or run.
+
+**Firmware source and extraction:** fetch BuildManifest/Restore and the exact OS ZIP member
+from Apple's iPhone14,2 / 24A437 restore URL with bounded HTTP ranges. The member length and
+central-directory CRC matched; the whole IPSW was not downloaded/hash-verified. ipsw 3.1.732
+decrypted AEA, and isolated libfsapfs-python 20260921 extracted the target and SystemVersion
+read-only from Rave24A437.D63OS. The standalone axauditd is 179,312 bytes, SHA256
+`5278c0dc4dc62cc8801840e047381924a50cdae246abf67ec986522a6e66aec8`, arm64e UUID
+`08B6FBF3-3EF9-34FD-B86F-8DCA4E4D6616`. It is the OS daemon, not a DDI/Simulator executable.
+The tooling was isolated in the owned research directory on mounted CSVolume; native volume
+mount attempts failed/stalled, their owned process was ended and the attached image detached.
+The successful extraction used no mount or privilege change. Existing unrelated images stayed mounted.
+
+**Decisive static findings:**
+
+- The parameterized-property manager invokes completion(nil) directly. Ordinary reads use a
+  finite name dispatcher with no geometry branch or generic native-attribute forwarding.
+  The three developer-only ordinary names are ClassName, MemoryAddress and Controller;
+  their task-port check and denied-nil branch are concrete. A different noncurrent element
+  already in focus history is also filtered. Nondeveloper NSString/NSAttributedString results
+  are truncated to 64 UTF-16 units. These limits have binary evidence, not new coverage tests.
+- Actions check the same task-port predicate before native execution. The server discards
+  the RPC value argument; denial, unknown action and attempted action converge on a void
+  completion with nil result/error. Thus the earlier empty OK is not an outcome signal, and
+  changing null/0 alone does not solve it. No action was replayed this round.
+- Hierarchy builds a parent/context chain with permission-filtered parents and child collections
+  capped at 51. Coordinate fetch uses backend 91701 with unchanged CGPoint and a 0.1 s cache;
+  the actual iOS backend semantics/success remain unresolved.
+- Preview consumes the native frame after refreshing attribute 2003 and draws frame/path/context.
+  Neither inspected preview/renderer entry checks the developer predicate. Exact source
+  addresses and source identities are condensed in the [protocol](protocol.md#axaudit-physical-daemon-handlers-permission-logs-and-element-preview-2026-10-09).
+
+**Runtime reproduction/results:** use paired USB AccessibilityAudit plus daemon-PID-only
+OsTrace syslog, pymobiledevice3 11.10.2. Refresh app PID, enable inspection, select the target,
+use monitoring 0 and Next, then accept only an incoming focus token containing that PID.
+Property reads reuse its received typed element/descriptors. No semantic action is sent.
+
+- Calculator PID 51502 / History / SidebarButton returned Label=历史记录 and nil class/address/
+  controller, while daemon focus logs explicitly reported allowDeveloperAttributes: NO.
+  Live image_uuid and process_image_uuid both match the extracted daemon. The first session
+  switched to Lab without app monitoring and got no matching focus; it stopped before Lab
+  property reads (rc1), cleaned state and decoded 94 messages without stream errors.
+- A separate fresh Lab session with app monitoring enabled received PID 51452's gear token,
+  Class=SwiftUI.AccessibilityNode, Address=0x15b013840 and nil Controller. The same daemon
+  explicitly logged YES. It completed rc0 with 39 decoded messages and no stream errors.
+  This verifies the current predicate outcomes, not their underlying kernel/entitlement cause
+  or which state change repaired the first selection attempt.
+- A fresh Calculator session again matched History and NO. Capture baseline with visuals
+  false, then ShowVisuals(true), Preview(received element), capability barrier and screenshot.
+  The matching button was highlighted while 7 and the page stayed unchanged. Pixel differences
+  above thresholds 8/16/32 all occupy [54,147,174,267) in 1170×2532 images: approximately
+  (18,49,40,40) logical points at scale 3. This is raster overlay extent, not a returned
+  CGRect/accessibilityFrame. No audit issue was used. This probe completed rc0 with 68
+  decoded messages and no stream errors; it establishes one ordinary-node preview control.
+
+**Cleanup/limits:** all three captures sent monitor 0, visuals false, focus nil, preview nil,
+app monitoring false, target 0 and Inspector enable 0; each completed a 45-capability barrier
+without cleanup errors and closed owned sockets. Final screenshots visually confirm no
+Calculator outline, preserved 7 and the original Home page. No new LLDB/Inspector process or
+owned filesystem mount remains. Dynamic pages, offscreen nodes, path/padding, rotation and
+full-tree/native-rectangle coverage remain unverified.
+
+Raw firmware/tools remain at `/Volumes/CSVolume/ipb-research/20261009-axaudit-daemon/`;
+small sources/probes/captures remain at `~/.local/state/ipb/20261009-axaudit-daemon/`.
+Local `handoff.md` maps member/build/hash metadata, annotated functions/fixups and the three
+captures (`gate-log-1791542324353629000`, `gate-log-1791542548267708000`,
+`gate-log-1791542591137522000`) to their boundaries. Raw logs, scripts, screenshots and
+success-only evidence are not committed; historical dated records remain unchanged.

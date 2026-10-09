@@ -258,28 +258,51 @@ focus at PID 51300 returned `SwiftUI.AccessibilityNode` and its address, and one
 Activate/null/expected-reply request opened Settings. It returned the same empty OK as the
 earlier Calculator no-effect. The raw 24A437 dyld subcache now resolves
 `AuditDoesAllowDeveloperAttributes` to `task_for_pid(mach_task_self_, pid, &task) == KERN_SUCCESS`.
-This supports a permission-related distinction but does not isolate its cause: the physical
-daemon caller and kernel authorization decision remain untraced. No ordinary Frame was
-advertised in the Lab control. A native `accessibilityFrame` follow-up stopped before executing
-any getter because debugger attachment did not produce a usable target. The extra Apple
-reference stayed at Connecting to target and yielded no incoming phone messages; it cannot
-replace the valid direct control. See the [current follow-up protocol](protocol.md#axaudit-development-app-action-and-resolved-task-port-predicate-2026-10-09)
-and [dated verification](verification.md#2026-10-09--13-pro-development-app-action-and-task-port-predicate).
+The matching physical daemon has now been extracted from Apple's iPhone14,2 / 24A437 firmware;
+its Mach-O UUID matches the live daemon's syslog UUID. Concrete callers check the predicate
+for developer properties, actions and parent traversal. Current paired captures report NO for
+Calculator PID 51502 and YES for Lab PID 51452, agreeing with their class/address reads.
+The kernel policy causing task-port success remains untraced; literal get-task-allow alone
+is not the proven cause. No extra semantic action was sent to repeat the earlier controls.
+
+**Physical daemon boundary, now resolved:** ordinary reads use a fixed attribute-name dispatch
+with no Frame/Position/Bounds branch; unknown names complete nil. Parameterized reads directly
+complete nil. The action server discards its third argument, and denied/attempted actions all
+complete without a semantic outcome. Nondeveloper string results are limited to 64 UTF-16
+code units; hierarchy serialization caps child collections at 51 and filters parent traversal.
+These are now physical iOS 27 findings, superseding the Simulator-only comparison for this
+seed. More guessed ordinary Frame names or parameterized snapshot requests add no value here.
+
+**Ordinary-element preview, positive:** the physical renderer refreshes native frame attribute
+2003 and consumes the element's frame without the task-port predicate in the inspected path.
+On Calculator, previewing a freshly received History token highlighted that specific button
+despite developer permission NO. Before/after screenshots isolate a 120×120 pixel overlay
+at (54,147), approximately (18,49,40,40) logical points at scale 3. This is measured overlay
+geometry, not a returned native CGRect. It required neither an audit issue nor activation.
+Cleanup removed the highlight, preserved Calculator 7 and restored the original Home page.
+
+The [physical daemon protocol](protocol.md#axaudit-physical-daemon-handlers-permission-logs-and-element-preview-2026-10-09)
+and [dated verification](verification.md#2026-10-09--13-pro-physical-axauditd-handlers-permission-logs-and-preview)
+record source identity, handlers, captures and limitations. A separate native accessibilityFrame
+attempt still has no getter result because debugger attachment stalled; the extra Apple Lab
+reference with zero incoming messages remains invalid as a physical control.
 
 **Next discriminators, in order:**
 
-1. Obtain the concrete physical iOS 27 `axauditd` property/action/parameterized handlers from
-   a version-matched system binary or runtime source. Both inspected 27A5252f DDI images and
-   the cached extracted framework lack that daemon. The task-port predicate itself is resolved;
-   now trace its callers and how denied actions/properties complete. Determine whether ordinary
-   geometry is gated, omitted or confined to audit/preview. More guessed Frame names and
-   Simulator nil stubs do not resolve this question.
+1. Follow preview geometry first: compare multiple fresh nodes, stable/dynamic pages and
+   rotation, then distinguish frame/path padding and clipping. Prefer extracting already
+   computed geometry from a demonstrated transport/rendering path if one exists; otherwise
+   evaluate screenshot-difference bounds explicitly as an observation fallback. Do not expose
+   them as native Frame. The coordinate RPC now has a concrete native backend **91701** and
+   a 0.1 s cached-result window; trace that backend and CGPoint decoding before another live
+   hit-test probe. Its success on iOS is still unproven despite the method's presence.
 2. Resolve the existing-app debugger attachment before attempting native `accessibilityFrame`.
    Retain a fresh PID/address and explicit stopped-target proof; a hang or vanished old PID is
    not a Frame denial. Treat this as a development-app-only fallback, separately from a generic
-   phone observation API. The semantic activation control is already positive; repeating it
-   without a new permission discriminator adds little. Do not install a Runner or change
-   certificates merely to repeat the probe. Refresh exclusive 13 Pro ownership before another run.
+   phone observation API. The semantic activation control and current YES/NO predicate logs
+   are already positive; repeating activation adds little. Kernel authorization remains a
+   separate question. Do not install a Runner or change certificates merely to repeat the
+   probe. Refresh exclusive 13 Pro ownership before another run.
 3. Before productizing tree traversal, define target synchronization, partial-result policy,
    token lifetime and frame/action correlation, then pass the supported macOS 27 gate. A
    traversal cycle or graph closure is not completeness. Several app-state PIDs can report
