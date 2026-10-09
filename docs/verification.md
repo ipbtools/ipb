@@ -14,6 +14,12 @@ the fixed property dispatcher and parameterized reads complete nil. A received o
 Calculator element can nevertheless be preview-highlighted and localized by screenshot
 difference. This is overlay geometry, not a native bounds response or a complete tree.
 Kernel policy and broader coverage remain open; this does not replace the macOS 27 release gate.
+The latest offline follow-up resolves Mirroring's initial/incremental AX schema, Frame **21**
+(native iOS attribute **2003**) and the physical cache producer. Its code matches the Apple
+24A437 firmware, and a synthetic host archive roundtrip passes. `ScreenContinuityShell` is a
+shipped session entry point; actual phone AX packets and independent session access remain
+unverified. External Mac AX remote-content permission and the phone command-line entitlement
+are separate checks. No new phone operation occurred in this follow-up.
 
 ### Remaining work, in recommended order
 
@@ -23,7 +29,7 @@ Kernel policy and broader coverage remain open; this does not replace the macOS 
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | Selection, issue association and one Lab activation are positive; graphs remain partial. Physical 24A437 axauditd UUID matches live logs. Fixed ordinary reads omit Frame; parameterized reads directly return nil. Properties/actions/parent traversal check the resolved task-port predicate; current Calculator PID 51502 logs NO and Lab PID 51452 YES, matching nil vs populated class/address reads. Action completion hides denial/native outcome and ignores the RPC value argument. Nondeveloper text is capped at 64 UTF-16 units and child serialization at 51. Ordinary Calculator History preview succeeds despite NO, yielding a screenshot overlay box around that token's control. Exact native frame, kernel authorization policy and generic tree completeness remain unproven. Native app-debugger Frame getter never executed. | Agent-fixable: prioritize the separate Mirroring AX stream/cache and the gated testmanagerd bulk snapshot path. The user rejected page-wide serial preview due to latency; retain it only as a single-target fallback. Coordinate backend 91701 remains a separate hit-test lead. Do not keep guessing Frame names. Debugger attachment is a separate development-only fallback. Preserve connection/PID/token identity, explicit overlay provenance and cleanup. The user chose **“用 13 pro 吧”**; refresh future ownership. No extra finger cooperation is pending. Product tree work still needs target/coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [physical handlers](protocol.md#axaudit-physical-daemon-handlers-permission-logs-and-element-preview-2026-10-09) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | AXAudit selection, issue association, Lab activation and ordinary Calculator preview are positive; graphs remain partial. Physical handlers omit ordinary Frame, return nil for parameterized reads and gate properties/actions/parents on task-port permission. Action completion hides the native outcome; nondeveloper text/children remain capped at 64 UTF-16 units/51. Preview geometry is an overlay measurement. Mirroring has a separate bulk tree/Frame schema and physical producer matched to Apple 24A437 code; native Frame is AXP 21 → iOS 2003, included in the priority batch. A synthetic host codec passes. External Mac AX reads check remoteDeviceContent; phone command-line access checks a different entitlement and exposes no dump. Physical packet reception, independent session access and full coverage remain unproven. Native app-debugger Frame getter never executed. | Agent-fixable: trace ScreenContinuityShell / AngelServer activation and clientNeedsAccessibility into the Mirroring producer; capture/decode initial and incremental data with device-space geometry. Keep testmanagerd snapshot second. The user rejected page-wide serial preview due to latency; retain it only as a single-target fallback. Backend 91701 remains a separate hit-test lead. Do not keep guessing Frame names. Preserve connection/PID/token identity and cleanup. The user chose **“用 13 pro 吧”**; refresh future ownership. No extra finger cooperation is pending. Product work still needs target/coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [bulk path](protocol.md#mirroring-bulk-ax-schema-frame-and-physical-server-2026-10-09), [physical AXAudit handlers](protocol.md#axaudit-physical-daemon-handlers-permission-logs-and-element-preview-2026-10-09) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -5013,3 +5019,43 @@ an application snapshot and recursively serializes rect/children. The official p
 documentation still requires signing, and specifies RemoteXPC instead of devicectl launch on
 current iOS 27. These are upstream source/documentation facts, not a local WDA device result.
 Links and the revised research order are retained in [the current plan](devicehub-alignment.md#axaudit-capture-plan).
+
+## 2026-10-09 — Mirroring bulk AX schema, Frame and physical producer (offline)
+
+**Scope:** macOS 26.5.1 / 25F80, iPhone Mirroring 1.6 / 98.5; physical-side static sources
+are iPhone14,2 / iOS 27.0 / 24A437. Read-only binary analysis and host-local synthetic codec
+execution only. No device enumeration/connection/input, Mirroring launch, phone installation,
+production build or supported-matrix smoke occurred.
+
+**Resolved implementation:** the host handles type-11 tree responses with initial/additional/
+destroyed data, caches multiple-attribute node responses, and exposes Frame 21. Original
+physical APT metadata maps 21 to native attribute 2003 and includes it in both priority and
+full attribute batches. Physical SSK starts AXPRemoteCacheManager, whose background generation
+and initial/additional response callbacks are present. Full APT and SSK instruction sections
+match the decrypted Apple SystemCryptex bytes, with matching image UUIDs in the retained
+physical cache table. This establishes a shipped bulk producer and schema; it does not
+establish full-page completeness or a current received rectangle.
+
+**Remaining entry boundary:** original MainOS extraction identifies ScreenContinuityShell
+2.0 / 114.56, its AngelServer session imports, Rapport event-handling strings and signed
+accessibility/RemoteDisplay permissions. Physical metadata also resolves the local command-line
+interface to ping/state/stop, with a remote-token entitlement check. That interface exposes no
+tree method. Host HIServices independently checks remoteDeviceContent for external AX reads;
+codesign distinguishes VoiceOver's entitlement from Inspector's inspection entitlement.
+Neither finding closes independent network-session authentication.
+
+**Codec check actually executed:** a native secure archive/unarchive of one synthetic node
+preserves numeric attribute 21 and the deliberately chosen rectangle {{18,49},{40,40}}.
+The retained output reports one node, 1,136 bytes and pass=YES. These values are synthetic;
+no AX transport manager/session was instantiated and no phone bytes were decoded.
+
+**Local references:** small probes, hashes, decoder metadata and disassembly are under
+`~/.local/state/ipb/20261009-mirroring-ax/`; `handoff.md` maps them to the source and proof layer.
+Apple images remain under `/Volumes/CSVolume/ipb-research/20261009-mirroring-ax/`.
+Native SystemCryptex mounting failed with Permission denied; no owned attachment was left.
+The successful decryption is in `cryptex/043-68607-705.dmg`; the earlier partial output outside
+that directory is invalid and was not analyzed. The standalone Swift dump reported unresolved
+cross-image pointers despite rc0; it was not accepted as a parsed result. Relevant fields and
+method names were instead decoded from the original cache mappings with Apple's layout source.
+Raw material and success-only evidence remain outside Git. Exact seeds, sources, addresses
+and the revised discriminator are recorded in [the protocol](protocol.md#mirroring-bulk-ax-schema-frame-and-physical-server-2026-10-09).

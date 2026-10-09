@@ -297,10 +297,21 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
 **Next discriminators, in order:**
 
 1. Prioritize the separate iPhone Mirroring AX stream and its host cache: the inspected code
-   receives accessibilityDataPublisher data and exposes translated accessibility children.
-   Trace message decoding, cache node fields, frame access and actual session authorization.
-   A remote AX stream is established static evidence; independent-client access, arbitrary-app
-   coverage and a bulk rectangle export remain unverified. Keep the existing testmanagerd
+   now has a resolved initial/incremental tree schema, secure archive fields and Frame **21**
+   in the priority attribute batch. Physical iOS 27 code maps this to native attribute **2003**;
+   its `AXPBackedAccessibilityServerPrimitives` starts `AXPRemoteCacheManager`, which generates
+   the tree in the background. Full instruction sections match the original Apple firmware.
+   The synthetic host codec preserves a node rectangle, but no phone tree has been received.
+   Trace `ScreenContinuityShell` / `AngelServer` session activation and the
+   `clientNeedsAccessibility` subscription into this producer, then capture/decode actual
+   initial and incremental packets. Validate target identity, geometry space, coverage and
+   cancellation. The external Mac AX `remoteDeviceContent` entitlement gate is distinct from
+   network-session authentication; Inspector's `inspection` entitlement does not establish
+   access to this content. The phone command-line interface has its own entitlement check and
+   exposes only ping/state/stop, so it is not a dump shortcut. See the
+   [resolved bulk path](protocol.md#mirroring-bulk-ax-schema-frame-and-physical-server-2026-10-09).
+   Independent-client access, arbitrary-app coverage and a bulk rectangle export remain
+   unverified. Keep the existing testmanagerd
    direct snapshot RPC as the second structured candidate, with its internal-policy/session
    gates explicitly tracked. Do not repeat generic handshakes without a new protocol clue.
 2. Resolve the existing-app debugger attachment before attempting native `accessibilityFrame`.
@@ -334,8 +345,9 @@ Keep Apple service-start failures separate from DTX/API/semantic results. A menu
 or one successful capability response does not validate the target. Accept a matching focus
 push as selection evidence, keep empty OK distinct from object-null/error/timeout, never pair
 across connections by identifier alone, and clean up each session. Generic XCTest handshakes
-still have not established a runner-free snapshot session. iPhone Mirroring's host AX cache
-remains a separate static lead with untested authorization and external retrieval.
+still have not established a runner-free snapshot session. iPhone Mirroring's bulk producer,
+schema and Frame field are now resolved static evidence, with a synthetic codec control;
+session authorization, received physical trees and external retrieval remain untested.
 
 ## Remaining work
 

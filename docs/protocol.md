@@ -1882,6 +1882,130 @@ children. This is executable host code for an NSAccessibility tree backed by rem
 Mirroring session authentication, AX payload schema and access by an independent host client were
 not tested. No Mirroring session was started.
 
+### Mirroring bulk AX schema, Frame and physical server (2026-10-09)
+
+**Evidence boundary:** static Apple code/metadata plus a **synthetic host codec** experiment.
+No phone request, Mirroring session, received phone tree or latency measurement occurred in
+this follow-up. The earlier unknown payload schema is narrowed below; independent session
+authorization, app coverage and a complete page export remain open.
+
+**Source identity:** host macOS **26.5.1 / 25F80**, iPhone Mirroring **1.6 / 98.5**.
+Host dyld-cache image UUIDs: AccessibilityPlatformTranslation (APT)
+`8BA4B0B3-D1F0-37F7-ABDB-EBE916DE97AA`, ScreenSharingKit (SSK)
+`C6D042A9-EE7E-3F13-9599-69DD1CB1A572`, HIServices
+`34C40608-353D-3A06-BBF1-6B927CB8B39D`. Their paths are respectively
+`/System/Library/PrivateFrameworks/AccessibilityPlatformTranslation.framework/Versions/A/AccessibilityPlatformTranslation`,
+`/System/Library/PrivateFrameworks/ScreenSharingKit.framework/Versions/A/ScreenSharingKit` and
+`/System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/HIServices.framework/Versions/A/HIServices`.
+Phone-side source is **iPhone14,2 / d63ap, iOS 27.0 / 24A437**, from the
+[Apple restore image](https://updates.cdn-apple.com/2026FallFCS/3337f675-bd6c-49e2-9d4a-7b59095d07e5/iPhone14,2_27.0_24A437_Restore.ipsw).
+Only its selected components were downloaded, not the whole IPSW. SystemCryptex member
+`043-68607-705.dmg.aea` has ZIP CRC32 `edf9a7c1` and SHA256
+`d95887e94062dbef7fd0082828126dc148f2c856129f49d0f4abd9f20268bed2`.
+After successful AEA decryption, complete `__text` sections from the matching local
+DeviceSupport symbol files were found byte-for-byte in the Apple image:
+
+The physical cache images are
+`/System/Library/PrivateFrameworks/AccessibilityPlatformTranslation.framework/AccessibilityPlatformTranslation`
+and `/System/Library/PrivateFrameworks/ScreenSharingKit.framework/ScreenSharingKit`.
+
+| Physical framework | Image UUID | Matched instruction bytes |
+| --- | --- | --- |
+| AccessibilityPlatformTranslation | `AA0429D2-50DA-3B83-9C2A-A8D9E752581D` | 88,520; SHA256 `55d93d1e1f9def1b562e3fd6868018f6c787754b44b209b833880037ebf89027` |
+| ScreenSharingKit | `6AA674A8-B0DC-3B87-AF55-B92FE8DE286B` | 2,530,132; SHA256 `e00b0045ea82c5030e8035cf206fc4e283a7cd705542b137dca3b46e084a80b8` |
+
+DeviceSupport files are reorganized symbol files, not original signed standalone dylibs.
+External selector stubs, shared-cache method names, the attribute table and priority arrays
+were resolved separately from the original Apple image's cache mappings. Direct method-list
+names/types use the shared selector buffer, not the method entry as their base; see Apple's
+[ObjCVisitor implementation](https://github.com/apple-oss-distributions/dyld/blob/main/common/ObjCVisitor.cpp)
+and [ObjC optimization header](https://github.com/apple-oss-distributions/dyld/blob/main/common/DyldSharedCache.h).
+
+**Bulk transport and cache:** host `AXPHostCacheManager._processPlatformTranslationResponse:withToken:`
+(`0x1D99F76D4`, discriminator comparison at `0x1D99F7734`) routes responses with
+`associatedRequestType == 11` into tree handling. This is a **response discriminator**, not
+evidence that sending request type 11 requests a snapshot. `AXPTranslator.handleUpdatedAXTree:`
+(`0x1D99F29E4`) reads `resultData.treeDump` and `treeDumpType`, handles the exported string
+values `AXPTreeDumpTypeInitialDump`, `AXPTreeDumpTypeAdditionalData` and
+`AXPTreeDumpTypeTreeDestroyed`, and maintains the tree by `bridgeDelegateToken`.
+Initial data replaces the tree; additional data merges node attributes; destruction removes
+cached data. `updateMacPlatformElementCacheForUpdatedTreeDumpResponse:` (`0x1D99F30D0`) handles
+multiple-attribute responses (`associatedRequestType == 5`) and populates node caches through
+`AXPMacPlatformElement._cacheAXTreeDumpResult:attribute:` (`0x1D99DF148`).
+
+Native secure-coding fields are explicit, rather than guessed from strings alone:
+
+| Archived class | Keys | Host encoder |
+| --- | --- | --- |
+| `AXPTranslationObject` | `pid`, `isApplicationElement`, `didPopuldateAppInfo` (Apple spelling), `objectID`, `bridgeDelegateToken`, `rawElementData` | `0x1D99F6A18` |
+| `AXPTranslatorRequest` | `parameters`, `requestType`, `actionType`, `attributeType`, `clientType`, `translation` | `0x1D99F8C14` |
+| `AXPTranslatorResponse` | `resultData`, `error`, `attribute`, `notification`, `associatedRequestType`, `associatedNotificationObject`, `associatedTranslationObject` | `0x1D99FB030` |
+
+The host `AXFrame` mapping is **21** (`_attributeTypeForMacAttribute:` at `0x1D99DBA08`,
+confirmed by host-local metadata invocation); `AXChildren=8`, `AXParent=41`, `AXPosition=43`,
+`AXSize=48`, `AXRole=45`, `AXValue=53`, `AXIdentifier=25`, `AXEnabled=27`.
+Physical `AXPTranslator_iOS.attributeFromRequest:` (`0x24FE0E8A0`) indexes the table at
+`0x24FE22D20`; entry 21 maps to native iOS attribute **2003**. Frame is included in the
+28-entry priority array (`0x275E8C600`) and 99-entry full array (`0x275E8C630`), whose values
+match the inspected host arrays. This is evidence that Apple's bulk implementation includes
+geometry among its priority fields; it does not prove every node actually supplies a rectangle.
+Host `accessibilityFrame` (`0x1D99DCE18`) obtains `AXFrame` and calls `rectValue`.
+Postprocessing (`0x1D99DE294`, conversion at `0x1D99DF918`) asks the bridge delegate to convert
+platform coordinates into Mac system coordinates. A future export must retain which coordinate
+space it reports instead of treating Mac screen coordinates as phone points.
+
+**Physical producer:** SSK's `AXPBackedAccessibilityServerPrimitives.startAccessibility`
+body at `0x2A188EF88` loads `AXPRemoteCacheManager` through the class reference at
+`0x2C807C810` (resolved class `0x2718626F8`), calls `init` at `0x2A188F034`,
+`setTransportDelegate:` at `0x2A188F040` and `start` at `0x2A188F1D8`.
+Its receive-handler and send-data delegate methods are at `0x2A188F918` and `0x2A188F644`.
+Physical APT `AXPRemoteCacheManager.start` (`0x24FE197B8`) configures the translator's
+`requestResolvingBehavior=2`, cached client type and runtime delegate, then registers its
+transport receive handler. `_sendAXHierachyOnBackgroundQueue` (`0x24FE1A2E4`, Apple spelling)
+calls `generateAXTreeDumpTypeOnBackgroundThread:completionHandler:` at `0x24FE1A434`.
+Initial/additional callbacks are at `0x24FE1A6BC` / `0x24FE1AB68`; response sending is at
+`0x24FE1AD80`. Default cached client type is 1; the translator distinguishes Oneness (1) and
+DevicesApp (2). The latter is a static alternative, not a demonstrated USB subscription.
+
+The same physical SSK's Swift field metadata identifies `AngelServer.accessibilityPrimitives`,
+`accessibilityMessageProducer` and `axPrimitivesDataSubscription` (descriptor `0x2A1A4695C`),
+plus `AccessibilityMessage.accessibilityData` / `clientNeedsAccessibility`
+(`0x2A1A46E04`). The same restore image's MainOS member `043-69835-656.dmg.aea`
+(previously extracted for the physical AXAudit analysis) also contains
+`/Applications/ScreenContinuityShell.app/ScreenContinuityShell` (**2.0 / 114.56**, SHA256
+`ee98211c952f6be6d147a97e0ad20432ca3f92184844420e483d63195bc324f5`).
+Its imports and event-handler strings identify `AngelServer.startUp`, `bootstrapSession`,
+`ScreenContinuityAngel.awaitServerReadiness` and `com.apple.rapport.matching`.
+Its signed entitlements include `com.apple.accessibility.api`, `com.apple.RemoteDisplay` and
+AXBackBoardServer lookup. This identifies a shipped session entry point; the complete runtime
+chain from the incoming session event to AX subscription has not been observed.
+
+**Two distinct permission boundaries:** on the host, cached-tree modes route through
+`_AXPClientIsEntitledForRemoteDeviceContent` (`0x1D99F1B80`) and HIServices
+`_AXCurrentRequestCanAccessRemoteDeviceContent` (`0x187BB1B30`). HIServices
+`_isConnectionAllowedAPIAccess` checks the requesting audit token's
+`com.apple.private.accessibility.remoteDeviceContent` entitlement (`0x187BB231C`–`0x187BB2328`)
+and records the result at `0x187BB23A8`. Inspection permission has a separate flag.
+Current codesign metadata shows this remote-content entitlement on **VoiceOver**, while both
+installed Accessibility Inspectors expose `inspection` but lack `remoteDeviceContent`.
+Self requests and other branches exist; this is a gate on external Mac AX queries, not proof
+that an independently authenticated network client cannot decode incoming bytes.
+
+On the phone, `CommandLineServerInterface` exposes only ping, current session state and stop
+(method list `0x2A1A2B5A8`). `AngelServer.listener:didReceiveConnection:withContext:`
+(`0x2A18257E8`, body `0x2A182736C`) checks the remote token with `hasEntitlement:` for
+`com.apple.ScreenContinuityShell.commandline` at `0x2A18274A4`, branching on the result at
+`0x2A18274B4`. This local command-line interface is neither a discovered remote service nor
+a tree-dump API. Mirroring session authentication remains a separate unresolved boundary.
+
+**Synthetic codec result:** native secure archive/unarchive preserved one type-5 node inside
+a type-11 initial-tree response, including numeric attribute 21 with an `NSValue` rectangle.
+The 1,136-byte archive returned one node and `{{18,49},{40,40}}`; these are deliberately chosen
+synthetic values, not a physical readout. No manager/transport session was instantiated.
+The next useful experiment is an authenticated AX data capture at the SSK/AXP boundary,
+with initial/incremental packet correlation and original device-space Frame validation.
+Local raw evidence and probe references are in the [dated verification](verification.md#2026-10-09--mirroring-bulk-ax-schema-frame-and-physical-producer-offline).
+
 ## XCTest snapshot service boundary (2026-09-22)
 
 **Static evidence only.** Inspected the arm64 slices in the Mac-local image
