@@ -3,10 +3,12 @@
 ## Open items — current state (living section)
 
 **Updated 2026-10-09. This section is overwritten; dated records below are append-only.**
-The latest AXAudit native-runtime evidence remains the September records on macOS 26.5.1 /
-CoreDevice 642.15 with unlocked wired iPhone 12 mini and 13 Pro devices on iOS 27.0 (24A437).
-The October 9 work rechecked raw sources and host framework metadata only; it did not refresh
-phone state or device allocation. Neither replaces the declared macOS 27 release gate.
+The latest AXAudit runtime work is October 9 on macOS 26.5.1 / Xcode 27 B6 /
+CoreDevice 642.15 with an unlocked wired 13 Pro on iOS 27.0 (24A437). The user explicitly
+allocated the 13 Pro to this round and confirmed real finger input. Finger and injected
+selection, Apple property/action requests and an issue-to-Inspection handoff are now captured.
+Ordinary-node bounds and observed Activate effect remain unresolved. This does not replace
+the declared macOS 27 release gate.
 
 ### Remaining work, in recommended order
 
@@ -16,7 +18,7 @@ phone state or device allocation. Neither replaces the declared macOS 27 release
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | Historical runner-free root reads reached 13 Pro Lab 129 nodes and 12 mini SpringBoard/Calculator 444/45 nodes, then App Library/Calculator 407/45. Graph closure is not an atomic/all-view snapshot. Apple Inspector failed before DTX on the 12 mini (`kAMDRemoteConnectError`) but completed a nine-warning 13 Pro audit. Three issues carried token+rect; one token returned a label, while the target/preview screen disagreed. This is issue geometry, not arbitrary-node bounds. Candidate `Frame`/`AXFrame` and point queries had no value; the 12 mini raw point reply was empty DTX OK. Injected input reached apps without recorded Inspector selection. October offline review confirmed incomplete receive/reply coverage, silent trace caps and a wrong point-register decoder; the known host point caller is Simulator-specific. Physical touch and a possible device-push route remain untested. Activate is advertised in valid historical focus records, but action effect remains unverified. Several PIDs report Foreground Running together, so that event alone cannot select one frontmost PID. | Agent-fixable first: repair/validate the bounded bidirectional recorder, then obtain a coherent fresh focus baseline, human finger versus injection control, and Apple selection/Activate reference. Use the original **12 mini allocation**; 13 Pro requires renewed availability/allocation confirmation. Physical finger input requires an operator; current readiness is unconfirmed. Diagnose Apple service start separately; run issue handoff only after a complete current audit actually returns an issue. Product tree work still requires target synchronization, coverage/lifetime policy and the macOS 27 gate. See [R0–R3 capture plan](devicehub-alignment.md#axaudit-capture-plan), [offline evidence corrections](protocol.md#axaudit-recorder-and-route-reassessment-offline-2026-10-09) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | Historical root reads produced partial graphs, not atomic/all-view snapshots. October 9 bounded byte recorders and fresh 13 Pro sessions proved both confirmed finger and injected History taps produce matching device focus pushes, without a host point RPC; monitoring then resets to 0. Apple actual PID 51031 / monitoring 2 also selects History and reads ordinary properties. Apple Activate and a fresh-token Apple-shaped direct action each return empty OK without opening History; root cause unknown. A complete current Apple audit returned one output-field issue whose token/PID/identifier/rect, double-click focus+lock and screenshot highlight agree. This establishes issue geometry only; no ordinary Frame descriptor/query followed. | Agent-fixable: trace the physical iOS 27 property/parameterized handler and action authorization branch, then compare an existing known debuggable-app control. Preserve DTX connection identity: Mac AXFrame replies share IDs with phone traffic. The user chose **“用 13 pro 吧”** for this round; future ownership must be refreshed. No extra finger cooperation is pending. Product tree work still needs target/coverage/lifetime policy and the macOS 27 gate. See [current R0–R3 results and next discriminators](devicehub-alignment.md#axaudit-capture-plan), [captured protocol](protocol.md#axaudit-physical-selection-action-and-issue-handoff-2026-10-09) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -4780,3 +4782,68 @@ Raw reviews, metadata and main arbitration stay outside Git at
 Local recorder/decoder and loopback results (`dtx_record.py`, `dtx_decode.py`,
 `check_recorder.py`, `recorder-fixture-*/result.json`) remain there as ad hoc preparation.
 Repository changes contain only condensed confirmed problems, current plan and evidence limits.
+
+## 2026-10-09 — 13 Pro AXAudit finger, injection, Apple action and issue handoff
+
+**Scope/seed:** research only on macOS 26.5.1 (25F80), Xcode 27 B6 / Inspector 192.6,
+CoreDevice 642.15, DDI 27A5252f, paired unlocked wired iPhone 13 Pro (iPhone14,2),
+iOS 27.0 (24A437). CoreDevice UUID `7F2FE6E9-5423-552A-A2A2-C499F1D8672F`;
+USB UDID `00008110-0014711C3CC3801E`. `ipb doctor` passed unlock/Developer Mode/DDI/
+HID prerequisites. The user explicitly selected this phone; this session did not operate the
+12 mini. Direct AXAudit used paired USB lockdown / pmd3 11.10.2. Calculator PID 51031
+was refreshed through OsTraceService and matched focus/issue tokens. Existing value 7 retained.
+
+**Reproduction and decisive results:**
+
+- Open Calculator with `ipb -s <UUID> launch com.apple.calculator`. With one direct AX client,
+  obtain matching Next focus at monitoring 0, then arm type 2 and visuals. Actual SupportedEventTypes
+  reply is integer 2, CanNavWhileMonitoring is false. The operator confirmed a real History tap;
+  an independent session then used one `ipb -s <UUID> tap 0.10 0.08`. Each received matching
+  `hostInspectorCurrentElementChanged:` followed by monitoring 0 before host cleanup. No host
+  normalized-point fetch was sent. The finger capture decoded 41 messages cleanly; the injection
+  capture decoded 44 complete messages including selection and the cleanup capability barrier,
+  then retained a final inbound
+  header without its body when the session closed. Its offline decoder reports that terminal
+  incomplete read explicitly; it is not an empty success or full-stream-completeness proof.
+  The fully captured selection window disproves an inherent injected-input restriction.
+- Validate the native loaded arm64e DTX slice before attaching to Apple Inspector. The first
+  fixture failed on a recorder callback bookkeeping error; it is invalid evidence. The corrected
+  fixture matched its native transmitter sink byte-for-byte in both recording paths (647 bytes)
+  and decoded typed token/routing. Live Apple captures resumed and detached cleanly without
+  budget disable or capture errors. Incoming parser bodies are assembled, not raw fragmented wire;
+  preserve the original last-fragment header and validate internal body length before derived decoding.
+- Record before target selection. The first Apple attempt stayed blank with target 0/incomplete
+  monitoring setup. A subsequent actual target 51031 request and monitoring 2 led to a successful
+  injected History selection. Ten read-only properties and one-node hierarchy were populated as
+  described in the protocol; no ordinary Frame. A fresh direct token reproduced these reads without
+  an explicit Enable=1 request in that post-Apple state; this does not prove cold-start requirements.
+- Apple's Perform sent an expected-reply Activate with null value, then received type-0 empty OK.
+  The phone screenshot still showed 7 without History. A new independent direct session used its
+  own matching token and the captured descriptor/null/reply shape once, also received empty OK,
+  and showed no activation effect. This is not a successful click. The pmd3 convenience wrapper's
+  differing token/null/reply shape is not a sufficient explanation. Permission cause remains unknown.
+- Direct and Apple audits each completed all seven advertised types and returned one output-field
+  issue: `StandardInputView;value:7`, classification 1000, rect `{{16,243},{358,88}}`. Apple single-click
+  transported the issue array with `deviceHighlightIssues:`; double-click switched to Inspection,
+  sent the issue element to FocusOnElement and LockOnCurrentElement, and received the same token/
+  PID/identifier. Apple screenshot metadata (390×844, scale 3, rotation 0) and native 1170×2532 PNG
+  agree with the highlighted output area (48,729,1074,264). Subsequent reads supplied ordinary
+  descriptors/hierarchy but no Frame. This closes coherent issue association, not arbitrary-node geometry.
+- Mac-target Frame messages were also captured on a different DTX connection. Pairing solely by
+  message ID creates false matches; offline analysis preserves parser/transmitter identity and
+  isolates phone traffic. Apple ordinary-reference and issue captures decode 288/199 messages
+  across their captured connections with no decode errors after the explicit assembly treatment.
+
+**Cleanup/limits:** close the Inspector started for this investigation; clear monitoring, visuals,
+focus, preview, app monitoring, target and Inspector enable in a bounded direct session, perform
+capability barrier and close sockets. The final cleanup capture likewise retains an incomplete
+terminal inbound header after the barrier, explicitly reported by offline decoding. Fresh screenshot
+confirmed Calculator 7 without outlines; Home restored the original page and was visually checked. All owned LLDB sessions detached.
+No production code, app installation, certificate or release-matrix smoke changed/ran.
+
+Local reproduction tools, raw bytes, summaries and screenshots remain outside Git at
+`~/.local/state/ipb/20261009-13pro-axaudit/`; the local handoff lists individual captures and
+connection mappings. Decisive sources include `apple-reference-2/decoded.jsonl` (phone transmitter
+`0x73df841d0`, parser `0x7404a1680`, action 123 and its reply), `apple-issue-handoff/phone-only.jsonl`
+(audit begin 194, issue-array highlight 195, focus 199, lock 200, completion 202 / focus event 204),
+and the independent direct-reference summary. Historical dated records remain unchanged.

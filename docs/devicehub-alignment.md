@@ -204,79 +204,76 @@ the [dated follow-up](verification.md#2026-09-28--13-pro-point-selection-and-for
 
 ### AXAudit capture plan
 
-**Reviewed 2026-10-09; planned, not a new device result.** Independent `claude-opus-5` and
-`gpt-6-astra` assessments (source: peer) both recommend continuing AXAudit. Main-session review
-of their decisive raw sources confirmed a recording gap: the 9/28 main trace intercepts outbound
-construction only; the later trace adds some focus callbacks but not complete DTX receive/reply
-coverage. Its point callback also reads `x2` (the completion block) instead of CGPoint in `d0/d1`.
-That bug would misrecord a future hit, but does not explain the previous zero hits. The known
-host point caller is in `XDMDeviceSIM`; a physical-device selection may arrive as a device event
-instead. This competing route remains unverified on physical iOS 27. See the
-[source and coverage reassessment](protocol.md#axaudit-recorder-and-route-reassessment-offline-2026-10-09).
+**Updated 2026-10-09 after real-device captures.** The independent `claude-opus-5` and
+`gpt-6-astra` assessments (source: peer) led to main-session verification of the old trace's
+missing receive coverage, silent caps and wrong CGPoint decoder. The known host point caller
+is Simulator code; physical selection must also be judged by device-pushed focus. The user
+then explicitly chose **“用 13 pro 吧”** for this round and confirmed a real finger tap.
+This overrides the earlier 12 mini allocation for these captures; refresh ownership and
+host/device/PID state before another round. Results are supplemental macOS 26.5.1 + Xcode
+27 B6 + iOS 27.0 research, not the macOS 27 release gate.
 
-Capture in this dependency order, using the original **12 mini allocation**. The 13 Pro requires
-fresh availability/allocation confirmation; its historical Apple-client success is not a current
-device lease. Re-read host/device builds, connection and target PID before each live run.
+1. **R0 — passed within the stated capture boundary.** Python raw stream copies/offline decode
+   passed local fixtures and retained live paired USB AXAudit message prefixes. In two session
+   closures a final inbound header lacked its body; the decoder reports that incomplete tail
+   explicitly, while selection and cleanup barriers are fully captured. A separate native Foundation
+   fixture verified the exact loaded arm64e DTX ABI and outgoing callback bytes before Apple
+   Inspector attachment. Bounded Apple runs retained outgoing serialization and incoming
+   assembled parser bodies, complete typed focus/attribute/action data and detach footers.
+   Incoming bodies do not preserve original fragmentation; a screenshot's last-fragment
+   header requires explicitly labelled post-assembly size normalization. Preserve parser/
+   transmitter identity: the Mac and phone can reuse message IDs. Detailed limits are in
+   [the tracing method](devicehub-tracing.md#axaudit-reference-capture-boundary).
+2. **R1 — finger and injection selection both positive.** Separate sessions first obtained
+   a fresh matching Calculator focus, then armed the observed monitoring type 2. The
+   confirmed finger tap and one `ipb tap 0.10 0.08` each pushed the History element without
+   a host point query, then pushed monitoring 0. Re-arm before another selection; navigation
+   used monitoring 0 because the actual CanNav reply was false. No inherent injected-input
+   filter is supported by these results. Old September failures remain un-root-caused;
+   initialization, target and daemon state changed together. Keep Calculator value 7.
+3. **R2 — Apple selection/property/action reference captured.** Actual target PID 51031 and
+   monitoring 2 preceded Apple's positive History selection. Ten ordinary property reads
+   matched an independent fresh-token direct session; no ordinary Frame was advertised or
+   requested. Apple Activate sends a null third argument and expects a reply. Both Apple
+   and a single direct Apple-shaped action received empty OK but did not open History.
+   This is a confirmed semantic no-effect on Calculator, not an action success or a proven
+   entitlement cause. The installed pmd3 wrapper's shape differs, but aligning it alone did
+   not establish activation. Do not automatically replay actions after empty OK.
+4. **R3 — current issue handoff positive.** Both audits completed seven advertised types and
+   returned one output-field issue. Apple's selected issue rectangle, transported token,
+   target PID, double-click focus/lock request, Inspection identifier and phone highlight
+   all matched the existing 7. The 390×844 logical / scale-3 screenshot agrees with the
+   issue rectangle. Inspection gained no ordinary Frame query or descriptor afterward.
+   This validates issue-to-element association only.
 
-1. **R0 — recording validity.** Prepare a bounded bidirectional DTX recorder, fixing point ABI
-   decoding. Preserve run/trial/action markers, timestamps, connection/channel identity,
-   identifier/conversation/type/status, nested typed arguments and token bytes. Outbound send-entry
-   IDs may not be final; correlate with serialization/transport before claiming wire routing.
-   If raw archives are not retained, label the result object-level rather than byte-exact. Always
-   write header/footer, including zero-event runs, resolved breakpoints, hit/filter/drop/disable
-   counts, expression errors/cost and resume/detach outcomes. A capability reply and normal focus
-   navigation before/after the trial are positive controls; setup must not silently exhaust the
-   capture budget. Ad hoc recorder and raw files stay outside Git.
-   A Python stream-copy/offline decoder is prepared and passed local loopback fixtures for
-   both directions, fragmented replies, typed token events, wire-channel signs, empty OK versus
-   encoded-null versus decode failure, zero-traffic footer, explicit budget failure, partial
-   reads and hook restoration. This validates the local recorder only; Apple-client hooks,
-   actual phone traffic and live timing impact remain pending.
-2. **R1 — low-interference selection baseline.** With one direct AXAudit client and no other AX
-   or mirror clients, identify foreground Calculator and its current PID/page. Read the advertised
-   monitored event types and actual settings replies; do not sweep guessed event values. One Next
-   step must yield a fresh matching token/label before comparing a **human finger** tap with one
-   injected tap on the reversible History control. Restore the same page/focus and confirm or
-   re-arm the observed monitoring state before each input; observe each window for at most five
-   seconds. A finger→injection→finger control can detect changing state. Without a physical
-   operator, the finger comparison remains pending. Preserve the existing Calculator value.
-3. **R2 — Apple ordinary-element reference.** Start recording before target selection. Record
-   actual target-PID requests (including any documented automatic `0` mode), live element-token
-   PID and simultaneous phone/Inspector screenshots. Next or Hierarchy selection is a positive
-   control, followed by physical touch, preview and Apple's actual attribute requests. Accept
-   either a reply or device push as selection evidence. Demonstrate Apple Activate opening the
-   History sheet, then obtain a fresh token for the same logical node in an independent direct
-   session and submit that captured action once. Do not reuse opaque tokens across sessions or
-   replay uncertain actions. If Apple still fails on the 12 mini before DTX, stop this phase at
-   the connection layer; it has produced no geometry result.
-4. **R3 — issue handoff, when available.** Require a current audit begin and completion on the
-   same target/page. If it returns an issue, capture token/PID/rect, single-click highlight and
-   double-click Inspection handoff. A completed zero-issue audit legitimately skips this phase.
-   Compare label and rectangle against actual PNG dimensions, logical bounds and rotation;
-   success remains issue-specific, not an ordinary-node rectangle contract. Do not repeatedly
-   switch to an unexplained `PDUIApp` target or accept welcome-screen choices to obtain warnings.
+The [current captured protocol](protocol.md#axaudit-physical-selection-action-and-issue-handoff-2026-10-09)
+records the request shapes and [dated verification](verification.md#2026-10-09--13-pro-axaudit-finger-injection-apple-action-and-issue-handoff)
+records reproduction, cleanup and local references. Raw probes remain outside Git. Inspector
+was closed, monitoring/visuals/preview/target were cleared, the Calculator value was checked,
+and the original Home page restored. No production AX feature was added.
 
-Diagnose Apple versus paired Python service start separately, retaining service name, options,
-session/SSL and concrete pre-DTX error. A different phone changes device and state together, not
-only hardware model. Do not blindly re-pair or reset daemons. Target/PID/screenshot disagreement
-invalidates the element comparison. Distinguish recording-invalid, pre-DTX failure, empty OK,
-object-null, remote error, timeout, selection event/reply and observed action effect. End each run
-by disabling its monitoring/visuals/preview, releasing its target, closing sockets and detaching;
-check restoration of the user's page/value.
+**Next discriminators, in order:**
 
-Ordinary-node geometry and actions remain research. Historical focus events **did** advertise
-Activate (`AXAction-2010`), but an advertised descriptor is not an observed effect. App-state
-events also exist, yet several PIDs report Foreground Running in one short receive window;
-last-event-wins is not a validated foreground resolver. Productizing the PID-root traversal
-requires target synchronization, partial-result policy, token lifetime and supported-device
-gates. Deduplicate identical child tokens within a parent before checking graph structure.
+1. Trace the physical iOS 27 AXAudit property/parameterized handler and permission branches
+   from a version-matched device binary or runtime source. Determine whether ordinary geometry
+   is intentionally gated, omitted from descriptors, or held only in the audit/preview path.
+   More guessed `Frame` names and Simulator nil stubs do not resolve this question.
+2. Compare one captured Activate on an already available, known debuggable app with the
+   built-in Calculator result, retaining actual signing/entitlement evidence and one semantic
+   before/after control. Validate the handler's authorization decision rather than assuming
+   `task_for_pid-allow` is the cause. App availability and exclusive device ownership must be
+   refreshed; do not install a Runner or change certificates merely to repeat the same probe.
+3. Before productizing tree traversal, define target synchronization, partial-result policy,
+   token lifetime and frame/action correlation, then pass the supported macOS 27 gate. A
+   traversal cycle or graph closure is not completeness. Several app-state PIDs can report
+   Foreground Running together; last-event-wins is not a validated foreground resolver.
 
-After the reference captures, determine the physical iOS 27 parameterized handler rather than
-guessing more frame descriptors or treating Simulator nil stubs as physical-device proof. The
-typed descriptor is not a generic numeric-attribute tunnel. XCTest remains conditional on an
-authorized session; generic DTX/proxy handshakes have not established one. iPhone Mirroring's
-separate `AXPHostCacheManager` / translated `accessibilityChildren` path remains an optional
-static lead; authorization, payloads and external retrieval are untested.
+Keep Apple service-start failures separate from DTX/API/semantic results. A menu highlight
+or one successful capability response does not validate the target. Accept a matching focus
+push as selection evidence, keep empty OK distinct from object-null/error/timeout, never pair
+across connections by identifier alone, and clean up each session. Generic XCTest handshakes
+still have not established a runner-free snapshot session. iPhone Mirroring's host AX cache
+remains a separate static lead with untested authorization and external retrieval.
 
 ## Remaining work
 

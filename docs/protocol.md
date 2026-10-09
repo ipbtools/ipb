@@ -1995,3 +1995,69 @@ success criterion. If the automation service is accessible, establish its protoc
 and valid element handles before attempting one snapshot. Connection establishment can itself
 request Automation Mode, so account for that state change and clean up the session. If this
 entry is unavailable, keep that seed-specific result and continue AXAudit target/liveness work.
+
+### AXAudit physical selection, action and issue handoff (2026-10-09)
+
+**Runtime seed:** macOS 26.5.1 (25F80), Xcode 27 Beta 6 / Inspector 192.6,
+CoreDevice 642.15, DDI 27A5252f; unlocked wired iPhone 13 Pro (iPhone14,2),
+iOS 27.0 (24A437), Calculator PID 51031. The user explicitly reassigned this round
+to the 13 Pro. Direct sessions used paired USB lockdown with pymobiledevice3 11.10.2.
+This is supplemental research, not the macOS 27 release gate. Condensed reproduction
+and local sources are in the [dated verification](verification.md#2026-10-09--13-pro-axaudit-finger-injection-apple-action-and-issue-handoff).
+
+**Selection is a device push on this physical seed.** A fresh Next focus supplied a
+matching Calculator token before each independent trial. The actual metadata replies
+were integer `2` for `deviceInspectorSupportedEventTypes` and `false` for
+`deviceInspectorCanNavWhileMonitoringEvents`; the integer is not an enumerated list.
+Navigation used monitoring 0, followed by monitoring 2 and visuals true. The operator's
+confirmed finger tap on History and one `ipb tap 0.10 0.08` each produced
+`hostInspectorCurrentElementChanged:` with caption `历史记录, 按钮` and a 20-byte
+token belonging to the current PID. Neither trial sent
+`deviceFetchElementAtNormalizedDeviceCoordinate:`. Each also received monitoring 0
+after selection, before host cleanup: re-arm monitoring before another point selection.
+The existing Calculator value 7 was preserved; selecting did not open History.
+
+Apple Inspector independently selected the same logical button after its **actual**
+target request became 51031 and it sent monitoring 2. Earlier blank UI in this round
+corresponded to target 0 and lacked that complete setup; a visible menu choice alone
+is insufficient target evidence. Apple queried the ten received read-only descriptors:
+Label=`历史记录`, Identifier=`SidebarButton`, traits/input labels populated, class/
+address/controller nil, hierarchy one node. A subsequent independent direct session
+with a newly received token reproduced these values. It sent no explicit
+`deviceInspectorEnable:1`; this was a post-Apple daemon state, not a cold-start test.
+The original September selection failure remains un-root-caused. The new positives
+disprove an inherent inability of injected touches to select elements on this seed.
+
+**Captured Apple action shape:** channel 0 DISPATCH, reply expected; selector
+`deviceElement:performAction:withValue:` with three object arguments: the freshly
+transported `AXAuditElement_v1` (including AccessibilityIdentifier), the received
+`AXAuditElementAttribute_v1` for `AXAction-2010` / Activate / PerformsAction=true /
+ValueType=1, and **NSNull**, not integer 0. Apple's reply was type-0 empty OK.
+One independent direct submission used a fresh matching element, the captured action
+descriptor, null value and reply expectation; it also received empty OK. Screenshots
+after both actions still showed Calculator 7, without the History sheet. Thus an
+advertised action and successful DTX completion do not establish activation effect.
+The installed pmd3 `perform_press` uses integer 0, no reply, and a different token
+wrapper; that is a source-level difference, not the cause of this result, since the
+Apple-shaped submission also had no observed effect. No permission/entitlement cause
+was established and no uncertain action was retried.
+
+**Issue geometry is now coherently associated.** Direct and Apple audits each completed
+the seven advertised audit types and returned one issue: classification 1000,
+`testTypeSufficientElementDescription`, identifier `StandardInputView;value:7`,
+`ElementRectValue_v1={{16, 243}, {358, 88}}`. Apple single-selection sent
+`deviceHighlightIssues:` with the transported issue array. Double-click then sent
+monitoring 0, visuals false, `deviceInspectorFocusOnElement:` with the issue's element,
+and **`deviceInspectorLockOnCurrentElement`**. The resulting focus callback had the
+same token/PID/identifier. Its label/value were nil; the identifier, displayed 7 and
+highlighted output area provide the cross-check. Apple's screenshot metadata was
+390×844 logical bounds, native scale 3, rotation 0; the 1170×2532 phone screenshot's
+highlight agrees with the issue rectangle (48,729,1074,264 in native pixels).
+
+Inspection read ordinary descriptors and hierarchy after the handoff; it did not
+request an ordinary Frame or gain a Frame descriptor. The issue rectangle is therefore
+associated with an element, but does not establish arbitrary-node bounds, a complete
+view tree or a native coordinate hit-test API. Mac-target AXFrame requests also occur
+in the retained Inspector capture on another DTX connection; they must not be paired
+with phone replies merely by message identifier. Incoming parser identity and outgoing
+transmitter identity are retained to prevent that false positive.
