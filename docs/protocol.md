@@ -1555,10 +1555,12 @@ Its Objective-C method metadata and selector stubs establish the following execu
 These paths explain why the simulator interface must not be treated as a generic AX proxy. They
 do **not** prove the physical iOS 27 daemon has the same filters, cap, fallback or nil handler.
 The cached iOS 27 AccessibilityAudit image contains base stubs rather than this concrete daemon.
-Its `AuditDoesAllowDeveloperAttributes` at `0x24fdcd750` also differs from the simulator predicate:
-it calls an unresolved shared-cache target at `0x2500f90b0` with process/task-like arguments and
-accepts a zero return. The image imports `task_for_pid` and `mach_task_self_`, but the call target
-has not been conclusively resolved; do not equate this with a verified entitlement rule.
+Its `AuditDoesAllowDeveloperAttributes` at `0x24fdcd750` also differs from the simulator predicate.
+The previously unresolved shared-cache call at `0x2500f90b0` was resolved against raw caches
+fetched from the physical 24A437 device on October 9: it branches to `task_for_pid`, and the
+first argument comes from `mach_task_self_`. The predicate accepts a zero return. See the
+[resolved predicate and development-app control](#axaudit-development-app-action-and-resolved-task-port-predicate-2026-10-09).
+This identifies the function, not every concrete daemon caller or the kernel's authorization rule.
 
 Physical probes use a fresh observed PID, validate every reply's process identity, stop on
 timeout, retain partial/nil results and avoid declaring an observed graph complete.
@@ -2061,3 +2063,62 @@ view tree or a native coordinate hit-test API. Mac-target AXFrame requests also 
 in the retained Inspector capture on another DTX connection; they must not be paired
 with phone replies merely by message identifier. Incoming parser identity and outgoing
 transmitter identity are retained to prevent that false positive.
+
+### AXAudit development-app action and resolved task-port predicate (2026-10-09)
+
+**Seed/source:** same macOS 26.5.1 / Xcode 27 B6 / CoreDevice 642.15 / DDI 27A5252f /
+physical iPhone14,2 iOS 27.0 **24A437** as the preceding capture. Device identity and unlock/
+Developer Mode were refreshed. No Runner, installation or certificate change was used.
+The [dated verification](verification.md#2026-10-09--13-pro-development-app-action-and-task-port-predicate)
+records the reproduction, negative attempts and local source references.
+
+**Runtime development-app control:** the device's InstallationProxy lookup reports existing
+Looktech Lab `ai.looktech.glasses.memo.lab` 1.20.0 (514), ProfileValidated=true and
+`get-task-allow=true`; it does not report `task_for_pid-allow` for that app. Calculator's returned
+entitlement dictionary has neither key. This is current installation-database evidence, not
+an independent extraction of the installed CodeDirectory/provisioning profile.
+
+A new direct USB AXAudit session explicitly enabled inspection, targeted the freshly observed
+Lab PID **51300**, used monitoring 0 and received the gear-button focus. It reused the received
+element and advertised descriptors. Class=`SwiftUI.AccessibilityNode` and
+Address=`0x1480f3200` were populated; Controller was nil. Label/traits/input labels and the
+hierarchy described the same gear control. The received sections still contained the ten
+ordinary read descriptors and Activate, with no ordinary Frame descriptor.
+
+Exactly one `deviceElement:performAction:withValue:` used the freshly transported element,
+its received `AXAction-2010` descriptor, null third argument and expected reply. On this
+connection request **18** received conversation-1 **type-0 empty OK**. The before/after
+screenshots show the Lab Home page changing to its Settings sheet. This establishes a real
+runner-free semantic activation for this development-app control. The preceding Calculator
+action had the same completion class but no visible effect. App/control, implementation and
+entitlements differ together; this is not a single-variable proof that `get-task-allow` causes
+the difference, nor a promise of activation across arbitrary applications. Empty OK still
+does not encode the semantic result.
+
+**Static physical predicate, now resolved:** the 13 Pro's RemoteFetchSymbols service supplied
+the matching raw dyld cache and subcaches through a paired userspace RSD tunnel. The raw
+cache image records match the cached AccessibilityAudit UUID
+`43AC666C-80EB-3B45-83D2-C8236CA7A958` and libsystem_kernel UUID
+`5A7DC6BE-551B-3B29-A928-A4079A90D4D2`.
+
+| Source | Decisive mapping |
+| --- | --- |
+| `AccessibilityAudit` at `0x24fdcd750` | Moves PID to argument 1, loads the task-port global through `0x2681b5678`, passes a local result address as argument 2, calls `0x2500f90b0`, returns true iff the return is zero. |
+| Raw `dyld_shared_cache_arm64e.47`, UUID `A0206327-4470-3275-89CD-5C4DEC7A42F4`, file offset `0x650b0` | `adrp x16, 0x237ef7000; add x16, x16, 0xcb4; br x16`: target `0x237ef7cb4`, matching the extracted libsystem_kernel export `task_for_pid`. |
+| Raw `.54.dylddata`, UUID `9028CF30-E253-3E43-BED5-B6C8908E84F7`, cell file offset `0xed678` | The cell is in the retained version-5 slide chain. Raw `0x100000f00b8078` decodes to the 34-bit runtime offset `0xf00b8078`; adding value_add `0x180000000` gives `0x2700b8078`, matching `mach_task_self_`. |
+
+The pointer interpretation follows Apple's [dyld cache format](https://github.com/apple-oss-distributions/dyld/blob/main/include/mach-o/dyld_cache_format.h)
+and [shared-cache fixup definition](https://github.com/apple-oss-distributions/dyld/blob/main/include/mach-o/fixup-chains.h),
+also checked against the Xcode 27 SDK header. Thus this physical framework's predicate is
+`task_for_pid(mach_task_self_, pid, &task) == KERN_SUCCESS`. It is a task-port success check,
+not a literal entitlement-key comparison. The concrete physical property/action/parameterized
+handlers remain unavailable: neither matching cached symbols nor either inspected DDI image
+contains `axauditd`. The iOS 26.5 Simulator action gate is still separate evidence.
+
+**Geometry remains open:** no Frame was received through AXAudit in this development-app
+control. The current UIKit SDK declares native `accessibilityFrame` in screen coordinates,
+which suggests an app-debugger route once a valid object is available. A fresh Lab focus supplied
+addresses for this bounded follow-up, but debugger attachment did not yield a usable stopped
+target and no class/Frame getter executed. This is unverified, not a negative Frame result.
+The extra Apple Inspector attempt also remained at Connecting to target; its four outgoing
+messages and zero incoming messages do not form a physical selection/action reference.

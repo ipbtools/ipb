@@ -248,21 +248,38 @@ host/device/PID state before another round. Results are supplemental macOS 26.5.
 
 The [current captured protocol](protocol.md#axaudit-physical-selection-action-and-issue-handoff-2026-10-09)
 records the request shapes and [dated verification](verification.md#2026-10-09--13-pro-axaudit-finger-injection-apple-action-and-issue-handoff)
-records reproduction, cleanup and local references. Raw probes remain outside Git. Inspector
-was closed, monitoring/visuals/preview/target were cleared, the Calculator value was checked,
-and the original Home page restored. No production AX feature was added.
+records reproduction, cleanup and local references. The follow-up below resolves the earlier
+framework call target and establishes a development-app action effect. Raw probes remain
+outside Git. No production AX feature was added.
+
+**Development-app/permission follow-up:** the existing Lab 1.20.0 (514) reports
+`get-task-allow=true` in the current device installation database. A fresh matching gear-button
+focus at PID 51300 returned `SwiftUI.AccessibilityNode` and its address, and one captured
+Activate/null/expected-reply request opened Settings. It returned the same empty OK as the
+earlier Calculator no-effect. The raw 24A437 dyld subcache now resolves
+`AuditDoesAllowDeveloperAttributes` to `task_for_pid(mach_task_self_, pid, &task) == KERN_SUCCESS`.
+This supports a permission-related distinction but does not isolate its cause: the physical
+daemon caller and kernel authorization decision remain untraced. No ordinary Frame was
+advertised in the Lab control. A native `accessibilityFrame` follow-up stopped before executing
+any getter because debugger attachment did not produce a usable target. The extra Apple
+reference stayed at Connecting to target and yielded no incoming phone messages; it cannot
+replace the valid direct control. See the [current follow-up protocol](protocol.md#axaudit-development-app-action-and-resolved-task-port-predicate-2026-10-09)
+and [dated verification](verification.md#2026-10-09--13-pro-development-app-action-and-task-port-predicate).
 
 **Next discriminators, in order:**
 
-1. Trace the physical iOS 27 AXAudit property/parameterized handler and permission branches
-   from a version-matched device binary or runtime source. Determine whether ordinary geometry
-   is intentionally gated, omitted from descriptors, or held only in the audit/preview path.
-   More guessed `Frame` names and Simulator nil stubs do not resolve this question.
-2. Compare one captured Activate on an already available, known debuggable app with the
-   built-in Calculator result, retaining actual signing/entitlement evidence and one semantic
-   before/after control. Validate the handler's authorization decision rather than assuming
-   `task_for_pid-allow` is the cause. App availability and exclusive device ownership must be
-   refreshed; do not install a Runner or change certificates merely to repeat the same probe.
+1. Obtain the concrete physical iOS 27 `axauditd` property/action/parameterized handlers from
+   a version-matched system binary or runtime source. Both inspected 27A5252f DDI images and
+   the cached extracted framework lack that daemon. The task-port predicate itself is resolved;
+   now trace its callers and how denied actions/properties complete. Determine whether ordinary
+   geometry is gated, omitted or confined to audit/preview. More guessed Frame names and
+   Simulator nil stubs do not resolve this question.
+2. Resolve the existing-app debugger attachment before attempting native `accessibilityFrame`.
+   Retain a fresh PID/address and explicit stopped-target proof; a hang or vanished old PID is
+   not a Frame denial. Treat this as a development-app-only fallback, separately from a generic
+   phone observation API. The semantic activation control is already positive; repeating it
+   without a new permission discriminator adds little. Do not install a Runner or change
+   certificates merely to repeat the probe. Refresh exclusive 13 Pro ownership before another run.
 3. Before productizing tree traversal, define target synchronization, partial-result policy,
    token lifetime and frame/action correlation, then pass the supported macOS 27 gate. A
    traversal cycle or graph closure is not completeness. Several app-state PIDs can report

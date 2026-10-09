@@ -7,8 +7,10 @@ The latest AXAudit runtime work is October 9 on macOS 26.5.1 / Xcode 27 B6 /
 CoreDevice 642.15 with an unlocked wired 13 Pro on iOS 27.0 (24A437). The user explicitly
 allocated the 13 Pro to this round and confirmed real finger input. Finger and injected
 selection, Apple property/action requests and an issue-to-Inspection handoff are now captured.
-Ordinary-node bounds and observed Activate effect remain unresolved. This does not replace
-the declared macOS 27 release gate.
+A follow-up establishes a real Activate effect and class/address reads on the installed
+development Lab app, and resolves the physical framework's task-port predicate. Ordinary-node
+bounds and the Calculator no-effect cause remain unresolved. This does not replace the
+declared macOS 27 release gate.
 
 ### Remaining work, in recommended order
 
@@ -18,7 +20,7 @@ the declared macOS 27 release gate.
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | Historical root reads produced partial graphs, not atomic/all-view snapshots. October 9 bounded byte recorders and fresh 13 Pro sessions proved both confirmed finger and injected History taps produce matching device focus pushes, without a host point RPC; monitoring then resets to 0. Apple actual PID 51031 / monitoring 2 also selects History and reads ordinary properties. Apple Activate and a fresh-token Apple-shaped direct action each return empty OK without opening History; root cause unknown. A complete current Apple audit returned one output-field issue whose token/PID/identifier/rect, double-click focus+lock and screenshot highlight agree. This establishes issue geometry only; no ordinary Frame descriptor/query followed. | Agent-fixable: trace the physical iOS 27 property/parameterized handler and action authorization branch, then compare an existing known debuggable-app control. Preserve DTX connection identity: Mac AXFrame replies share IDs with phone traffic. The user chose **“用 13 pro 吧”** for this round; future ownership must be refreshed. No extra finger cooperation is pending. Product tree work still needs target/coverage/lifetime policy and the macOS 27 gate. See [current R0–R3 results and next discriminators](devicehub-alignment.md#axaudit-capture-plan), [captured protocol](protocol.md#axaudit-physical-selection-action-and-issue-handoff-2026-10-09) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | Historical root reads produced partial graphs, not atomic/all-view snapshots. October 9 confirmed finger and injected History taps both pushed matching focus without a host point RPC; monitoring then resets to 0. Apple and direct Calculator Activate each completed empty OK without opening History. A current issue token/PID/identifier/rect, Apple focus+lock and screenshot highlight agree; this establishes issue geometry only. The existing Lab reports get-task-allow=true; fresh PID 51300 gear focus returns class/address, and one captured Activate opens Settings despite the same empty OK. Raw 24A437 caches resolve the framework predicate to task_for_pid(mach_task_self_, pid, &task)==success. Concrete daemon callers/kernel policy are untraced, so the app comparison does not isolate the permission cause. No ordinary Frame was advertised; app-debugger attachment stalled before a getter. An extra Apple reference had no incoming messages and is invalid for physical action claims. | Agent-fixable: obtain the matching physical axauditd handlers and trace their authorization/property branches; resolve existing-app debug attachment separately for a development-only native Frame fallback. The semantic action control is already positive. Preserve DTX connection identity and fresh PID/address/token. The user chose **“用 13 pro 吧”**; refresh future ownership. No extra finger cooperation is pending. Product tree work still needs target/coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [development-app follow-up](protocol.md#axaudit-development-app-action-and-resolved-task-port-predicate-2026-10-09) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -4847,3 +4849,66 @@ connection mappings. Decisive sources include `apple-reference-2/decoded.jsonl` 
 `0x73df841d0`, parser `0x7404a1680`, action 123 and its reply), `apple-issue-handoff/phone-only.jsonl`
 (audit begin 194, issue-array highlight 195, focus 199, lock 200, completion 202 / focus event 204),
 and the independent direct-reference summary. Historical dated records remain unchanged.
+
+## 2026-10-09 — 13 Pro development-app action and task-port predicate
+
+**Scope/seed:** refreshed `ipb -s <13-Pro-UUID> doctor` passed on macOS 26.5.1 (25F80),
+Xcode 27 B6 / Inspector 192.6 / CoreDevice 642.15 / DDI 27A5252f, wired unlocked
+iPhone14,2 iOS 27.0 (24A437), UUID `7F2FE6E9-5423-552A-A2A2-C499F1D8672F`.
+Only this user's allocated 13 Pro was operated. This is supplemental research, not the macOS 27 gate.
+
+**Reproduction/results:**
+
+- Official `devicectl device info apps --require-container-access` found the already installed
+  Lab. Scoped paired USB InstallationProxy lookup returned Lab 1.20.0 (514),
+  ProfileValidated=true and get-task-allow=true. Calculator's returned dictionary lacks that
+  key; installed signature bytes were not independently extracted. SwiftUIDemo also returned
+  get-task-allow=true but was not launched or action-tested.
+- Launch Lab, refresh its PID through OsTraceService, enable AX inspection, target that PID,
+  use monitoring 0 and Next to obtain a matching gear-button focus. An initial selection
+  attempt tapped the already focused gear under monitoring 2, received no second matching
+  focus and stopped before any property/action request. Its cause is not isolated; 94 messages
+  and cleanup decoded without errors. The following independent fresh-focus session succeeded.
+- At PID 51300, the ten received read-only descriptors returned gear label/traits/input labels,
+  Class=SwiftUI.AccessibilityNode, Address=0x1480f3200, nil Controller and a hierarchy containing
+  the same control. No ordinary Frame descriptor. One received AXAction-2010 descriptor with
+  null third argument and reply expectation was sent as request 18; its same-connection reply
+  was type-0 empty OK. Screenshots before/after show Home changing to Settings. All 66 messages
+  decoded without errors. This is semantic activation proof for that development-app control.
+  It does not isolate a permission cause for the prior Calculator no-effect.
+- Fetch the device's version-matched raw dyld files over a paired userspace RSD tunnel. The
+  primary cache image UUIDs match the extracted AccessibilityAudit and libsystem_kernel.
+  The missing branch island at 0x2500f90b0 in `.47` resolves to task_for_pid at 0x237ef7cb4;
+  the complete `.54.dylddata` version-5 slide chain resolves the global cell to mach_task_self_
+  at 0x2700b8078. The physical framework predicate is task_for_pid(self, pid, &task)==0.
+  Concrete daemon callers/kernel policy are still unknown. Both read-only 27A5252f DDI image
+  inventories and the cached symbols lack axauditd. A native Apple-tunnel RSD attempt reset
+  and a lease-backed attempt timed out before handshake; the independent userspace path worked.
+- An extra Apple Inspector reference remained at Connecting to target, with disabled target
+  menu items. Its bounded native recorder retained four outgoing messages and no incoming
+  messages, then detached successfully. No physical Lab selection/action was established.
+  Inspector was closed and a direct cleanup captured 17 complete messages, both capability
+  barriers and state clearing. No extra Apple Lab action was submitted.
+- For a possible development-only native Frame path, two fresh focus sessions retained matching
+  class/address (50/53 clean messages). Initial batch LLDB attachment did not produce a usable
+  target; the later interactive attempt reported the old PID unavailable. Relaunch produced
+  PID 51452/address 0x15b013840, with CoreDevice confirming that PID during attachment. The
+  interactive attach/status then stalled; no class or Frame getter executed. The owned stalled
+  LLDB was terminated, and a safe gear tap visibly opened Settings afterward, proving the app
+  was responsive. This is an unverified debugger route, not a Frame denial. The current UIKit
+  SDK's screen-coordinate accessibilityFrame declaration does not substitute for a device result.
+
+**Cleanup/limits:** clear monitor/visuals/focus/preview/app monitoring/target/enable with capability
+barriers; close owned sockets and Inspector, detach the native Apple tracer, end the stalled app
+debugger, and detach both owned host DDI mounts. Close the Lab Settings sheet, check Calculator's
+existing 7 without outlines and restore the original Home page. No production code, installation,
+certificate, security setting or release-matrix smoke changed/ran.
+
+Ad hoc probes, raw streams/caches, metadata, failed-attempt records and screenshots remain local at
+`~/.local/state/ipb/20261009-13pro-handler/`; `handoff.md` maps captures to evidence boundaries.
+Decisive sources are `lab-control-1791535376764185000/decoded.jsonl` (request/reply 18),
+`permission-resolved.json`, `cache-image-identity.json`, `permission-function.txt`,
+`permission-stub.txt`, `permission-target.txt` and the versioned cache manifests. The retained
+2 MiB data prefix is explicitly incomplete; the full 225,280,000-byte cache was used for the
+slide-chain check. See [current protocol](protocol.md#axaudit-development-app-action-and-resolved-task-port-predicate-2026-10-09)
+for symbol addresses, UUIDs and source definitions. Raw data and success-only evidence are not committed.
