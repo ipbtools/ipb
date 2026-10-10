@@ -69,6 +69,25 @@ not a current prerequisite check. This local macOS 26 run is supplementary valid
 
 ## UI context research
 
+**Current research result (2026-10-11):** prioritize Device Hub's separate **DevicesApp raw-DTX
+AX service**. An ordinary Python client on the paired local-network tunnel now reads native
+nodes, children and Frame 21 on the 13 Pro, without XCTest or installing a phone server.
+Calculator's initial bulk graph has 24 nodes/24 rectangles; explicit application reads match
+Settings main (13/13), Battery (32/32), Home (29/29) and ordinary 哔哩哔哩 (40/40, including
+its login modal/numeric keyboard). Fresh node-centre HID taps open the
+Calculator History sheet and Settings Battery page, with updated AX trees and screenshot
+confirmation. This is a working research probe, not an implemented product/MCP command.
+
+Automatic bulk/frontmost selection can return unrelated PDUIApp. A native system hit-test
+request instead selects the displayed application's PID on the tested pages; the pure-Python
+hit-test → application → attribute traversal reads Battery's 32-node graph in 941 ms including
+fresh tunnel/DTX setup and cleanup, excluding interpreter imports/app launch. Calculator main takes 740 ms and the ordinary third-party modal/keyboard takes 1744 ms.
+Its launch-splash hit test returns nil/error 8 before a later visible-page success.
+Centre hit testing still needs broader overlay/keyboard coverage. These findings supersede the earlier no-physical-tree
+research boundary below; Inspector and Mirroring remain distinct paths with their own limits.
+See [captured wire contract](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11) and
+[physical record](verification.md#2026-10-11--devicesapp-raw-dtx-tree-rectangles-and-explicit-application-control).
+
 SDK/source review and subsequent real-device AXAudit research on 2026-09-22. The current product
 still has no element-query command. No jailbreak, injection or phone-side helper installation was
 performed. A caption-only AX CLI result is not proof that the system lacks geometry.
@@ -296,173 +315,29 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
 
 **Next discriminators, in order:**
 
-1. Prioritize the separate iPhone Mirroring AX stream and its host cache: the inspected code
-   now has a resolved initial/incremental tree schema, secure archive fields and Frame **21**
-   in the priority attribute batch. Physical iOS 27 code maps this to native attribute **2003**;
-   its `AXPBackedAccessibilityServerPrimitives` starts `AXPRemoteCacheManager`, which generates
-   the tree in the background. Full instruction sections match the original Apple firmware.
-   The synthetic host codec preserves a node rectangle, but no phone tree has been received.
-   The `clientNeedsAccessibility` Bool now resolves through the physical consumer's protocol
-   table to AXP start/stop. Its outer ControlMessage envelope passes five native codec controls,
-   including a synthetic tree/Frame decode. Normal host subscription additionally checks
-   AX demand (`AXSSHasClientsWithAccessRemoteDeviceContent`) and server capability flag `0x2`;
-   the phone consumer must be activated with non-nil primitives. The October 10 live 13 Pro
-   run now completes manual Mac login, displays real phone pages and logs native control startup.
-   The user authorized temporary VoiceOver and it connects to Mirroring, but HIServices clears
-   its remote-content permission despite a successful entitlement lookup, while the current
-   client identification is 0. The AX-demand getter reads the calling process's connection cache;
-   separate Python queries do not establish Mirroring's demand. No physical AX archive is received.
-   The next live trace resolves this: two VoiceOver processes send ID **7**, but the ordinary
-   attribute route checks permission before storing that ID, filters the entitlement to 0,
-   then resets ID on return. A peer-filtered follow-up reads cached flags **0x0E** without
-   remote bit **0x10**, and remote permission remains 0 even after ID becomes 7. Mac-M2 is now
-   reachable on **macOS 27.2 / 26B5091g**; its HIServices retains the check/store/filter order
-   statically. The newer Mirroring layers still expose demand/start/stop/data plumbing;
-   inspected direct imports/dlsyms show no identification override. Other initialization
-   routes remain unverified. USB serial and CoreDevice UUID now identify the same 13 Pro on
-   Mac-M2, after the user confirms connection and trust. CoreDevice reports unsupported pairing
-   and an unavailable tunnel; this is not evidence that trust was omitted. Native Mirroring
-   launches but defaults to another phone, so its displayed error is excluded from 13 Pro
-   evidence. The user's account observation exposes the next prerequisite: native Mirroring
-   requires the same Apple Account with two-factor authentication on both ends. Establish an
-   eligible 13 Pro session before activating VoiceOver and running the prepared bounded taps;
-   do not substitute repeated USB pairing for this requirement. Account setup is user-owned.
-   CoreDevice enumeration is not a proven prerequisite for native Mirroring. The selected Xcode
-   reports **26.4 / 17E192**, although devicectl reports **642.15** and LLDB **2100.0.16.4**;
-   this mixed installation does not establish the Xcode 27 product gate prerequisite.
-   Repeated Welcome/tutorial toggling adds no new discriminator. The native
-   authentication broker is separately gated: an ordinary client's read-only inventory returns
-   permission error 111, and sharingd checks the private unlock-manager entitlement before the
-   authentication methods. An independent network client is still unproven. Continue tracing
-   legitimate establishment and transport framing. Validate target identity, geometry space, coverage and
-   cancellation. The external Mac AX `remoteDeviceContent` entitlement gate is distinct from
-   network-session authentication; Inspector's `inspection` entitlement does not establish
-   access to this content. The phone command-line interface has its own entitlement check and
-   exposes only ping/state/stop, so it is not a dump shortcut. See the
-   [resolved bulk path](protocol.md#mirroring-bulk-ax-schema-frame-and-physical-server-2026-10-09).
-   The [subscription follow-up](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10)
-   identifies the actual message nesting and activation gates; the annotation entitlement
-   string is not a discovered remote service.
-   Normal initialization is now checked through the permission-helper callers and the
-   AccessibilityBundles/AppKitAdditions loaders. Of 19 inspected direct permission routes,
-   18 install the incoming ID after the check and keyboard posting has no ID store. The
-   loaders provide no direct ID/cache writer, and `AXEnhancedUserInterface` only announces
-   demand if remote permission already
-   exists. Other indirect routes remain open, but repeated ordinary attribute/notification
-   probes have no new discriminator. The phone-side trace now reaches the continuity
-   session's `initializePlaybackServer(using:)`: its AX consumer is wrapped and installed
-   alongside `ControlMessageSession` into an actual `PlaybackServer` object. The next
-   concrete boundaries are **MediaTransportServerSession / MediaTransportControlStream**
-   (Rapport remote-display/stream objects) and **MCKBackedContinuityServerSession /
-   MCKControlStreamBackedControlTransport** (MediaContinuityKit session/control stream).
-   Trace these providers' constructors, normal listener authorization and session acceptance;
-   a conformance or object installation is not a working independent session. See the
-   [resolved provider path](protocol.md#mirroring-ax-consumer-installation-and-transport-providers-2026-10-11).
-   The normal entry controls now separate two outcomes: own-process Rapport discovery is
-   denied for missing com.apple.RemoteDisplay on both macOS 26.5.1 and 27.2; native macOS 27
-   MCK parameter/endpoint factories and both public and unchanged native-options application
-   service browsers reach ready. The service is com.apple.MediaContinuityKit.iPhoneMirroring,
-   with native personal scope, iPhone filtering and RSSI -70. Neither bounded observation
-   discovers an endpoint, so authentication and 13 Pro visibility remain unproven.
-   Original iOS control-listener name construction is now resolved separately from the
-   media-prerequisite provider's zero-port UDP listener. The latter is not an AX control
-   acceptance edge, and its useLLW0Interface must not be treated as shouldAdvertise.
-   Own-process Mac-M2 class metadata resolves actual session activation and makeControlStream
-   implementations. Later normal own-server activation (iPhoneMirroring, shouldAdvertise=false,
-   framework UUID service) fails with native missingDeviceID, and normal invalidate completes.
-   The actual macOS 27 control stack is PropertyList3<SessionMessage> over ApplicationServiceQUIC/IP;
-   it differs from the isolated UDP factories. The missing ID is the host's
-   IDSCopyLocalDeviceUniqueID, not the phone UUID. Normal CLI and GUI controls retain nil ID
-   and isConnecting=true/isConnected=false after five seconds, with isNonUIInstall=false;
-   the same ordinary CLI on local macOS 26 connects and gets a non-nil ID. A subsequent
-   instrumented own-process control sees prompt dictionary replies from desktop.auth on both
-   hosts, but granted=false on macOS 27 versus true on macOS 26. It reads no setupInfo contents
-   or ID values and agrees with the normal state controls. The service-side cause is now
-   confirmed for a fresh uninterposed own client: its PID-specific daemon log selects the
-   no-entitlement third-party rejection. Native code gates that branch with
-   IDS/EnforceFirstPartyListeners, measured true on Mac-M2 and false on local macOS 26,
-   then checks audit-token code-sign status; both saved daemon slices agree. This bounds
-   the normal host-IDS-dependent Server bootstrap. A separate normal outgoing Session
-   constructor succeeds with NetworkBackedControlConnectionVendor; activation against a
-   synthetic endpoint ID reaches a native timeout after 10.253 seconds, and invalidate
-   completes. Main static rechecking closes ApplicationService Browser2 → endpoint-ID
-   match → PropertyList3/ApplicationServiceQUIC/IP → Connection3 construction. The optional
-   constructor UUID is clientSessionID, not clientDeviceID. These results do not establish
-   actual phone visibility or admission, or exclude lower-layer policy. Later exact Mac-M2
-   SSK imports establish that native MCK client activation uses the same iPhoneMirroring
-   endpoint, nil clientSessionID and nil incoming media configurations. Its vendor selection
-   requires both RavenStreamContinuityKit and ContinuityDevice.supportsMediaContinuityKit.
-   The normal own-process native flag getter returns true on Mac-M2 without an override;
-   the 13 Pro capability value and native selected branch remain unmeasured. Corrected
-   original-phone branch-island decoding recovers 26 SSK-to-MCK code edges, rather than the
-   prior parser's empty result. Native phone MCK activation constructs Server with
-   shouldAdvertise=true, selecting the canonical iPhoneMirroring service name. Static default
-   Angel startup first awaits MediaTransport server activation; only its success branch
-   projects the optional MCK vendor, constructs and activates its wrapped server, then stores
-   secondContinuityServer. This closes static roles/name choice and supplies concrete capture
-   points, not live publication. A new parameters-only/browser PID control finds no matching
-   IDS first-party-enforcement event for either own process, although the browser again reaches
-   ready with zero endpoints for five seconds. Other admission checks are not excluded.
-   Next resolve the legitimate external Angel startup trigger, observe first-server success
-   and MCK publication in an eligible 13 Pro session, and measure the actual Mac capability/
-   provider choice. Follow with endpoint exchange, legitimate broker/alternate provider
-   access and control-stream acceptance. Do not assume an always-visible MCK listener.
-   No authentication success or phone session follows. Keep empty discovery
-   causes unseparated until a target-specific control distinguishes them. A native AX bench
-   dylib is rejected by platform library validation before its subscription can execute;
-   this loader result is not an AX protocol refusal. See the
-   [normal-entry findings](protocol.md#normal-mirroring-transport-entry-and-mck-discovery-2026-10-11).
-   Mark unresolved Swift/ObjC indirect calls explicitly; the single-image conformance scan
-   does not exclude external implementations or USB reuse. These offline tasks do not require
-   a Mac-M2 account change. Only after a concrete normal initialization or transport entry
-   justifies a live control, compare the two legitimate startup orders in an eligible 13 Pro session.
-   Record the same peer/port through permission cache, demand, capability, subscription and
-   an actual incoming archive, with bounded captures and restoration. The bulk receive path
-   is separate from ordinary attribute requests, but the default demand getter reads the
-   remote-content permission cache, so identification 0 is still a relevant upstream lead;
-   neither that failure nor a future permission success settles the entire session chain.
-   USB reuse requires a normal paired host entry, authorization, primitives/activation,
-   transport and a genuine initial archive. See the
-   [review arbitration](verification.md#2026-10-10--independent-ax-research-direction-reviews-and-arbitration).
-   Independent-client access, arbitrary-app coverage and a bulk rectangle export remain
-   unverified. Keep the existing testmanagerd
-   direct snapshot RPC as the second structured candidate, with its internal-policy/session
-   gates explicitly tracked. Do not repeat generic handshakes without a new protocol clue.
-2. Resolve the existing-app debugger attachment before attempting native `accessibilityFrame`.
-   Retain a fresh PID/address and explicit stopped-target proof; a hang or vanished old PID is
-   not a Frame denial. Treat this as a development-app-only fallback, separately from a generic
-   phone observation API. The semantic activation control and current YES/NO predicate logs
-   are already positive; repeating activation adds little. Kernel authorization remains a
-   separate question. Do not install a Runner or change certificates merely to repeat the
-   probe. Refresh exclusive 13 Pro ownership before another run.
-3. Before productizing tree traversal, define target synchronization, partial-result policy,
-   token lifetime and frame/action correlation, then pass the supported macOS 27 gate. A
-   traversal cycle or graph closure is not completeness. Several app-state PIDs can report
-   Foreground Running together; last-event-wins is not a validated foreground resolver.
+1. Finish **DevicesApp DTX target/coverage controls**, then define the product observation
+   contract. Keep one semantic request outstanding because captured unit type-5 replies lack
+   a node correlator. Use received handles and retain device/connection/PID identity, explicit
+   partial results, limits, page generation and token invalidation. Separate unsolicited type-11
+   trees from unit reads; notifications may have nil resultData. Prefer bulk when its root is
+   verified, and explicit application traversal otherwise. Do not assume centre hit testing is
+   a universal foreground resolver or graph closure proves every visible element is represented.
+2. Test persistent-session latency, rotation, scrolling/offscreen nodes, keyboard/system overlays
+   and more ordinary third-party apps. One Bilibili modal/keyboard graph is positive, while its
+   launch splash is temporarily unreadable. Direct AX semantic actions are a new separate hypothesis;
+   current node-centre actions use verified ipb HID. A one-off concurrent screenshot timeout has
+   no diagnosed cause; a later active-AX screenshot works. Stop-ack socket races are recorded.
+3. Verify the supported **macOS 27 + Xcode 27 + iOS 27** matrix before product integration.
+   The successful current AX client runs on supplementary macOS 26.5.1. Then extend the existing
+   session layer for CLI/MCP; no duplicated transport, Runner or new phone app is proposed.
 
-For occasional single-node selection, the coordinate RPC's concrete backend **91701** and
-0.1 s cache remain a useful lead; they do not replace a page snapshot. Inspect the backend and
-CGPoint decoding before another hit-test probe. The physical screenshot handler also hides
-visuals and supplies CGRectZero to the platform screenshot method, so it is not a demonstrated
-shortcut for retrieving the current cursor rectangle.
-
-WDA is a separate existing bulk option if a signed Runner is accepted: current upstream
-`/source?format=json` takes an application snapshot and recursively emits nodes including rect
-([source handler](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Commands/FBDebugCommands.m),
-[tree serialization](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Categories/XCUIApplication%2BFBHelpers.m)).
-It has not been tested on this project's current iOS 27 device. Preinstalled startup avoids
-rebuilding each session but still requires a signed Runner; current Appium documentation also
-requires working RemoteXPC on iOS 27 rather than the devicectl launch fallback
-([preinstalled WDA](https://appium.github.io/appium-xcuitest-driver/latest/guides/run-preinstalled-wda/)).
-
-Keep Apple service-start failures separate from DTX/API/semantic results. A menu highlight
-or one successful capability response does not validate the target. Accept a matching focus
-push as selection evidence, keep empty OK distinct from object-null/error/timeout, never pair
-across connections by identifier alone, and clean up each session. Generic XCTest handshakes
-still have not established a runner-free snapshot session. iPhone Mirroring's bulk producer,
-schema and Frame field are now resolved static evidence, with a synthetic codec control.
-The allocated 13 Pro's authentication and native video/control session now have live positive
-controls. Received physical AX trees, element rectangles and independent retrieval remain open.
+Mirroring/MCK admission, the host permission cache and development-app debugger getters are
+secondary investigations now that DevicesApp data is reachable. Their historical source and
+normal-entry controls remain in [protocol.md](protocol.md#normal-mirroring-transport-entry-and-mck-discovery-2026-10-11).
+The user rejected page-wide serial **preview/screenshot** (“耗时太久了吧，一个个来不知道要多久”).
+It remains a bounded single-target fallback. The working attribute traversal reads multiple
+properties per node without rendering an overlay; measured child walks are approximately
+0.22–1.42 seconds on the sampled pages. No uncertain input is replayed.
 
 ## Remaining work
 
