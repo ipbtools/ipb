@@ -388,10 +388,25 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    completes. Main static rechecking closes ApplicationService Browser2 → endpoint-ID
    match → PropertyList3/ApplicationServiceQUIC/IP → Connection3 construction. The optional
    constructor UUID is clientSessionID, not clientDeviceID. These results do not establish
-   actual phone visibility or admission, exclude lower-layer policy, or identify which
-   native host/phone owns the listener. Next resolve real phone publication, canonical versus
-   UUID service choice and endpoint exchange, then legitimate broker/alternate provider
-   access and control-stream acceptance.
+   actual phone visibility or admission, or exclude lower-layer policy. Later exact Mac-M2
+   SSK imports establish that native MCK client activation uses the same iPhoneMirroring
+   endpoint, nil clientSessionID and nil incoming media configurations. Its vendor selection
+   requires both RavenStreamContinuityKit and ContinuityDevice.supportsMediaContinuityKit.
+   The normal own-process native flag getter returns true on Mac-M2 without an override;
+   the 13 Pro capability value and native selected branch remain unmeasured. Corrected
+   original-phone branch-island decoding recovers 26 SSK-to-MCK code edges, rather than the
+   prior parser's empty result. Native phone MCK activation constructs Server with
+   shouldAdvertise=true, selecting the canonical iPhoneMirroring service name. Static default
+   Angel startup first awaits MediaTransport server activation; only its success branch
+   projects the optional MCK vendor, constructs and activates its wrapped server, then stores
+   secondContinuityServer. This closes static roles/name choice and supplies concrete capture
+   points, not live publication. A new parameters-only/browser PID control finds no matching
+   IDS first-party-enforcement event for either own process, although the browser again reaches
+   ready with zero endpoints for five seconds. Other admission checks are not excluded.
+   Next resolve the legitimate external Angel startup trigger, observe first-server success
+   and MCK publication in an eligible 13 Pro session, and measure the actual Mac capability/
+   provider choice. Follow with endpoint exchange, legitimate broker/alternate provider
+   access and control-stream acceptance. Do not assume an always-visible MCK listener.
    No authentication success or phone session follows. Keep empty discovery
    causes unseparated until a target-specific control distinguishes them. A native AX bench
    dylib is rejected by platform library validation before its subscription can execute;

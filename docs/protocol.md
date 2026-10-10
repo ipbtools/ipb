@@ -2543,15 +2543,83 @@ library validation. The handle stays nil and no bench send/publisher function ex
 Passive taps are detached without a new session hit. This is a failed loader preflight,
 not an AX protocol refusal or proof that all passive observation is unavailable.
 
-**Next discriminator:** establish which endpoint the phone's actual MCK provider publishes,
-whether it uses the canonical or UUID service name, and how native Mirroring chooses and
-exchanges that endpoint. Then resolve legitimate broker/provider access and acceptance into
-an actual control stream. Do not infer the native host/phone listener roles from wrapper names
-or treat the synthetic outgoing timeout as a successful independent entry.
+**Native client/server alignment:** subsequent original-code and exact-import controls close
+the roles and name choice for the native MCK branch. Mac-M2's shipped
+`/System/Library/PrivateFrameworks/ScreenSharingKit.framework/Versions/A/ScreenSharingKit`
+has UUID **06D891A4-6FCB-3949-887A-1EC073B2EE3B**, preferred base `0x2A4B96000`.
+Its MCK client calls `MediaContinuityEndpoint.init(usage:deviceID:)` at `0x2A4C43488`,
+using native iPhoneMirroring case **5** and its idsDeviceID field. At `0x2A4C43828` it calls
+`Session.init(usage:endpoint:clientSessionID:)` with nil optional UUID, then the exact native
+Session.activate thunk through descriptor `0x297587C88`, with nil incoming video/audio
+configurations. Branch islands and GOT targets are checked in an own process against exact
+export addresses, rather than nearest-symbol names. Thus the prior own outgoing fixture
+matches these native client choices; its synthetic endpoint ID still cannot select a phone.
+
+Native client-vending code first checks OnenessFeatureFlags case **4**,
+**RavenStreamContinuityKit**, at `0x2A4C3FD70`, then requires the ContinuityDevice Bool
+**supportsMediaContinuityKit** at `0x2A4C3FD8C–3FD90`. The exact exported getter at
+`0x2A4BEEACC` reads the same metadata field offset `+0x30`, independently identifying
+the checked field. Either failed check takes the alternate vendor branch. A normal own
+Mac-M2 control calls the native read-only feature getter and reports RavenStreamContinuityKit
+**true**, without an override. It does not measure native Mirroring's selected branch or
+the 13 Pro's capability value.
+
+Phone evidence comes from the original iOS **24A437** cache at
+`/Volumes/CSVolume/ipb-research/20261009-mirroring-ax/cryptex/043-68607-705.dmg`:
+ScreenSharingKit UUID **6AA674A8-B0DC-3B87-AF55-B92FE8DE286B**, preferred base
+`0x2A17BE000`; MediaContinuityKit UUID **9A3DABAB-BE8D-3581-9FB4-CEFE77D9CA4C**,
+preferred base `0x28EC57000`. Original-cache text matches the corresponding DeviceSupport
+text. The prior empty direct-edge scan was a decoder limitation: it omitted the phone's
+ADRP/ADD/BR islands. Corrected raw B/BL scanning and island decoding recover **26** MCK
+code edges; an empty scan was not evidence that native SSK never calls MCK.
+
+In phone `MCKBackedContinuityServer` activation, `0x2A19F5F38` injects native
+iPhoneMirroring case 5, `0x2A19F5F40` passes **shouldAdvertise=true**, and `0x2A19F5F48`
+calls native Server allocation `0x28EC85040`. That allocator forwards the same Bool to
+control-listener construction `0x28EC87F5C`; the stored Bool at `+0x91` is tested at
+`0x28EC88488`. The true branch uses canonical
+**com.apple.MediaContinuityKit.iPhoneMirroring**; the UUID suffix belongs to the false
+branch. Native Server.activate follows through descriptor `0x28ED846D8`, code
+`0x28EC898C4`. This establishes static phone listener role/name choice, not a running
+advertisement or successful connection.
+
+**Phone startup is sequenced in the resolved default-constructor path.** Constructor
+`0x2A187615C` creates MediaTransportContinuityServerVendor and MCKContinuityServerVendor,
+stored in ScreenContinuityAngel.firstContinuityServerVendor (`+0xA0`) and
+secondContinuityServerVendor (`+0xC8`). The first vendor is projected and invoked at
+`0x2A182EA64–EA98`, followed by wrapper activation. Its completion at `0x2A182EBE8`
+routes an error to `0x2A182EEFC`, and success to `0x2A182EC40`. Only the success path
+stores the first server (`+0x110`) and projects the optional second vendor at
+`0x2A182EC94–ECD0`. MCK vendor witness `0x2CF76B460 + 0x10` resolves to
+`0x2A17CEAC8 → 0x2A17CE624`, which constructs the MCK server and its scene wrapper.
+Wrapper activation `0x2A17C0DB4` projects wrappedServer (`+0x2B8`) and its witness
+(`+0x2C0`); the MCK activation witness resolves through descriptor `0x2A1A443C0`
+to `0x2A19F8EF0 → 0x2A19F52FC`. The queued closure descriptor `0x2A1A44410`
+resolves to `0x2A19FCAD0 → 0x2A19F59C4`, reaching the Server construction above.
+On second activation success, `0x2A182F268–F270` stores secondContinuityServer (`+0x120`).
+This is static sequencing, not proof the live 13 Pro entered it. The legitimate external
+trigger into this Angel startup and any prerequisites before first activation remain open.
+
+A new bounded own-browser policy discriminator separates configuration from starting a
+browser: parameters-only PID **71303** and browser PID **71308** both exit normally.
+The latter reaches ready, discovers zero endpoints for five seconds and cancels. Neither
+PID has a matching first-party-listener-enforcement daemon event in the narrow query;
+reject/allow counts are both zero. No ID, endpoint or full daemon message is retained.
+This does not reproduce the earlier IDS-getter rejection for the browser, and does not
+prove absence of other admission checks or phone publication. Empty discovery remains
+unexplained; a ready browser is not phone-session access.
+
+**Next discriminator:** resolve the normal external trigger into phone Angel startup and
+observe first-server activation → MCK activation/publication in an eligible 13 Pro session,
+alongside the Mac's actual supportsMediaContinuityKit value and selected provider. Then
+resolve legitimate broker/provider access, endpoint selection and acceptance into an actual
+control stream. Do not treat static canonical-name selection as live publication, or the
+synthetic outgoing timeout as a successful independent entry.
 Retain native personal scope and legitimate session authorization. A physical initial archive,
 native rectangles, coverage and latency are still required. The
-[dated record](verification.md#2026-10-11--normal-rapport-entry-mck-discovery-and-native-loader-preflight)
-maps local controls and cleanup.
+[initial record](verification.md#2026-10-11--normal-rapport-entry-mck-discovery-and-native-loader-preflight)
+and [native-alignment follow-up](verification.md#2026-10-11--native-mck-client-alignment-phone-server-sequencing-and-browser-policy-control)
+map local controls and cleanup.
 
 ## XCTest snapshot service boundary (2026-09-22)
 
