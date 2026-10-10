@@ -307,11 +307,17 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    including a synthetic tree/Frame decode. Normal host subscription additionally checks
    AX demand (`AXSSHasClientsWithAccessRemoteDeviceContent`) and server capability flag `0x2`;
    the phone consumer must be activated with non-nil primitives. The October 10 live 13 Pro
-   run now captures Sharing/Rapport enablement completion and reaches Mirroring Ready;
-   actual screen connection awaits manual Mac login, and temporary VoiceOver activation
-   awaits permission. These stages do not establish an AX subscription. Continue the
-   configured Mirroring session at these resolved boundaries, and trace its establishment,
-   authentication and transport framing. Validate target identity, geometry space, coverage and
+   run now completes manual Mac login, displays real phone pages and logs native control startup.
+   The user authorized temporary VoiceOver and it connects to Mirroring, but HIServices clears
+   its remote-content permission despite a successful entitlement lookup, while the current
+   client identification is 0. The AX-demand getter reads the calling process's connection cache;
+   separate Python queries do not establish Mirroring's demand. No physical AX archive is received.
+   Next inspect the normal client-identification setup/check ordering and compare the supported
+   macOS 27 host; repeated Welcome/tutorial toggling adds no new discriminator. The native
+   authentication broker is separately gated: an ordinary client's read-only inventory returns
+   permission error 111, and sharingd checks the private unlock-manager entitlement before the
+   authentication methods. An independent network client is still unproven. Continue tracing
+   legitimate establishment and transport framing. Validate target identity, geometry space, coverage and
    cancellation. The external Mac AX `remoteDeviceContent` entitlement gate is distinct from
    network-session authentication; Inspector's `inspection` entitlement does not establish
    access to this content. The phone command-line interface has its own entitlement check and

@@ -2059,9 +2059,11 @@ also exposes `plistEncoder` / `plistDecoder` (`0x2A1A48D88`).
 cache pointers, rather than trusting inaccurate names attached to retained disassembly's
 external calls. The getter resides in
 `/System/Library/PrivateFrameworks/AccessibilitySharedSupport.framework/Versions/A/AccessibilitySharedSupport`
-(UUID `FDC2353E-33CB-3E62-9530-1C8E226FCB1A`, image offset `0x35A98`). A host-local query
-returned **false** during this run; Mirroring was not running. This is neither an AXAudit
-result nor an independent network-client authorization result.
+(UUID `FDC2353E-33CB-3E62-9530-1C8E226FCB1A`, image offset `0x35A98`). A separate Python-process
+query returned **false** during this run; Mirroring was not running. The getter reads the
+calling process's AX connection cache, not a machine-wide VoiceOver status. Its result does
+not measure Mirroring's demand; see the live scope correction below. This is neither an
+AXAudit result nor an independent network-client authorization result.
 
 ScreenContinuityUI tests `currentStateNeedsAccessibility` at `0x80074` and guards creation of
 its AX primitives; `startAccessibility(remoteDeviceID:deviceSize:)` is called at `0x8075C`.
@@ -2115,11 +2117,78 @@ The user reports setting the iPhone passcode. Apple documents a passcode as a
 [Mirroring prerequisite](https://support.apple.com/en-eg/120421). Nevertheless, before and
 after setup a fresh Lockdown `all_values` query returns `PasswordProtected=false`. That raw
 key is not used here as authoritative proof that no passcode exists, nor as a causal
-explanation of Code 12. Host AX-demand queries remain false; VoiceOver has not been enabled
-and its permission request remains pending. No authentication credentials or token contents
+explanation of Code 12. At this initial-setup checkpoint, separate Python AX-demand queries
+return false and temporary VoiceOver permission is still pending; these queries do not measure
+Mirroring's process-local demand. No authentication credentials or token contents
 were dumped. Decoding the earlier synthetic archive still proves only decoder operation.
 Raw references and capture limits are in the
 [dated verification](verification.md#2026-10-10--13-pro-mirroring-first-setup-authentication-live).
+
+### Mirroring live control session and host AX permission failure (2026-10-10)
+
+**Scope:** the same macOS **26.5.1 / 25F80**, Mirroring **1.6 / 98.5** and allocated
+**13 Pro / iOS 27.0 / 24A437** as above. These observations do not establish macOS 27 behavior.
+After the user completes Mac login, Mirroring requests that the phone be locked. One explicit
+`ipb -s 7F2FE6E9-5423-552A-A2A2-C499F1D8672F lock` is sent. Native retries hit
+`unlockWithAuthenticationToken(Foundation.Data)` five times and fail with Sharing
+authentication **Code 10 / SFAuthenticationErrorCodeInternal**. Later native UI observations
+show the actual phone Home and Settings pages. The transition occurs after a debugger detach,
+but there is no controlled causal comparison establishing that debugging caused the failure.
+
+**Runtime logs, not decoded wire payloads:** at **10:53:48.744 CST**, the host receives server
+initialization with protocol version **6**, platform iPhone, build **24A437**, capabilities
+**31**. At **10:53:48.997**, phone `ScreenContinuityShell` receives client startup with protocol
+version **3**, platform Mac, build **25F80**, capabilities **7**, and HID device properties.
+Both sides log control stream **`com.apple.oneness.sessionAndHIDMessages`**. Phone Rapport
+also identifies service **`com.apple.MediaContinuityKit.iPhoneMirroring`**, `using_QUIC=YES`
+and an ephemeral port. The advertised server capabilities include `0x2`; this does not prove
+that the host AX consumer ran or that an AX archive was sent.
+
+**The host demand getter is process-local.** In shipped HIServices (UUID
+`34C40608-353D-3A06-BBF1-6B927CB8B39D`), `AXHasClientsWithAccessRemoteDeviceContent`
+(`0x187BB1B10`) counts bit `0x10` in `_gPortAccessStatusCache` via
+`_activeRemoteDeviceContentConnections` (`0x187BB6B54`). Its change notification uses the
+local CF notification center (`0x187BB3F38`). External Python getter results cannot substitute
+for observing this state inside Mirroring.
+
+**A genuine VoiceOver connection is observed, but its remote-content permission is cleared.**
+VoiceOver's shipped signature includes `com.apple.private.accessibility.remoteDeviceContent`.
+At **11:14:03.976–.993**, passive taps inside Mirroring capture:
+
+- `_appHasEntitlement` returning **true** for that exact entitlement (`0x187BB232C`);
+- the effective remote-content value becoming **false** (`0x187BB2370`);
+- `_setMachPortAccessStatus` (`0x187BB70EC`) receiving the actual VoiceOver PID **54576**,
+  general access **1**, protected-content **1**, inspection **1**, remote-content **0**.
+
+Disassembly between the first two taps (`0x187BB2330–2370`) preserves the remote entitlement
+for client-identification values **7–10**; otherwise it substitutes the Apple-internal-build
+flag. During this call the identification override, current-request identification and
+internal-build flag are all **0**, read from Mirroring memory with a validated PC slide.
+The client-identification globals are identified by the shipped
+`AXSetClientIdentificationOverride` and request getter code (`0x187BB1BE8–1C14`), not guessed
+from their values. [WebKit's SPI declaration](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/PAL/pal/spi/mac/HIServicesSPI.h)
+names value 0 as no active request and VoiceOver as 7; it does not prove why this host observed 0.
+The effective permission failure is established; the reason for the zero identification and
+behavior on a newer host remain open. No AX start, outgoing subscription or incoming archive
+is captured. This is a specific host-side blocker, not evidence that iOS has no tree/Frame path.
+
+**Independent host authentication has a separate enforced gate.** Current Sharing.framework
+(UUID `28F48BEF-DAD2-38A7-81D1-A467BA05589D`) routes
+`SFAuthenticationManager.requestEnablementForType:withIDSDeviceID:` and
+`authenticateForType:withOptions:` through `SFCompanionXPCManager.unlockManagerWithCompletionHandler:`
+to the corresponding `SDUnlockXPCSession` methods. Sharingd (arm64e UUID
+`8623E197-9333-3873-ADD5-8E5241CF041C`) creates this session at `0x100043A00`, while its
+`checkEntitlementWithHandler:` (`0x10000B124`, entitlement check `0x10000B178–190`) checks
+**`com.apple.private.sharing.unlock-manager`** on the current XPC caller before authentication
+operations (`0x100009A04`, `0x10000A094`). Native Mirroring carries this entitlement.
+A normal local probe obtains the broker connection, then a read-only eligible-device query
+returns **`SFAutoUnlockErrorDomain` / 111 / no permission**. No enablement, authentication,
+credential extraction or token replay is requested. This proves denial of the tested Apple
+broker path; it does not rule out every independent Rapport/network implementation.
+
+VoiceOver is restored **off** and all owned captures detach/close. No genuine phone AX archive
+or element rectangle has been received. Local references and limitations are recorded in the
+[dated verification](verification.md#2026-10-10--13-pro-control-session-voiceover-permission-and-authentication-broker-live).
 
 ## XCTest snapshot service boundary (2026-09-22)
 
