@@ -302,14 +302,21 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    its `AXPBackedAccessibilityServerPrimitives` starts `AXPRemoteCacheManager`, which generates
    the tree in the background. Full instruction sections match the original Apple firmware.
    The synthetic host codec preserves a node rectangle, but no phone tree has been received.
-   Trace `ScreenContinuityShell` / `AngelServer` session activation and the
-   `clientNeedsAccessibility` subscription into this producer, then capture/decode actual
-   initial and incremental packets. Validate target identity, geometry space, coverage and
+   The `clientNeedsAccessibility` Bool now resolves through the physical consumer's protocol
+   table to AXP start/stop. Its outer ControlMessage envelope passes five native codec controls,
+   including a synthetic tree/Frame decode. Normal host subscription additionally checks
+   AX demand (`AXSSHasClientsWithAccessRemoteDeviceContent`) and server capability flag `0x2`;
+   the phone consumer must be activated with non-nil primitives. Capture one genuine
+   configured Mirroring session at these resolved boundaries, and trace its establishment,
+   authentication and transport framing. Validate target identity, geometry space, coverage and
    cancellation. The external Mac AX `remoteDeviceContent` entitlement gate is distinct from
    network-session authentication; Inspector's `inspection` entitlement does not establish
    access to this content. The phone command-line interface has its own entitlement check and
    exposes only ping/state/stop, so it is not a dump shortcut. See the
    [resolved bulk path](protocol.md#mirroring-bulk-ax-schema-frame-and-physical-server-2026-10-09).
+   The [subscription follow-up](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10)
+   identifies the actual message nesting and activation gates; the annotation entitlement
+   string is not a discovered remote service.
    Independent-client access, arbitrary-app coverage and a bulk rectangle export remain
    unverified. Keep the existing testmanagerd
    direct snapshot RPC as the second structured candidate, with its internal-policy/session

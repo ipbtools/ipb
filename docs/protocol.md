@@ -2006,6 +2006,83 @@ The next useful experiment is an authenticated AX data capture at the SSK/AXP bo
 with initial/incremental packet correlation and original device-space Frame validation.
 Local raw evidence and probe references are in the [dated verification](verification.md#2026-10-09--mirroring-bulk-ax-schema-frame-and-physical-producer-offline).
 
+### Mirroring AX subscription, control codec and host trigger (2026-10-10)
+
+**Scope:** offline physical-code analysis and host-local execution on the same **macOS
+26.5.1 / 25F80**, SSK UUID `C6D042A9-EE7E-3F13-9599-69DD1CB1A572`, and physical
+**iPhone14,2 / iOS 27.0 / 24A437** sources identified above. ScreenContinuityUI at
+`/System/Applications/iPhone Mirroring.app/Contents/Frameworks/ScreenContinuityUI.framework/Versions/A/ScreenContinuityUI`
+has SHA256 `8221a0a96e2804b9356323601f64d8b208595f8c5001ffa4b3ce0784da6737ea`.
+No phone connection, active Mirroring session, actual AX packets or new authorization result
+was obtained. Local framework loading and a host status getter do not establish a phone session.
+
+**Resolved subscription switch:** physical `ProxyingAccessibilityMessageConsumer` has
+`isActivated` at instance offset `0x70` and optional `accessibilityPrimitives` at `0x78`,
+confirmed by original-cache ivar/reflection metadata. The dispatch path at `0x2A17D4224`
+checks activation at `0x2A17D425C`; its enum handler (`0x2A17D44AC`) distinguishes data from
+the Bool case and passes the latter to `0x2A17D4AA8` at `0x2A17D458C`. That handler checks
+the optional primitives and dispatches **true → start**, **false → stop** at
+`0x2A17D4D58`–`0x2A17D4D94`. This is a session subscription, not an AXAudit selector.
+
+The exact dispatch is supported by the `AccessibilityServerPrimitives` protocol descriptor
+at `0x2A1A48160` and original-cache witness table `0x2D1628970`: its start/stop slots
+`0x2D1628978` / `0x2D1628980` resolve to `0x2A188F4CC` / `0x2A188F4F0`. Those thunks call
+the already identified AXP server start/stop bodies (`0x2A188EF88` / `0x2A188F230`).
+Consumer allocation initially clears the activation byte and leaves primitives nil
+(`0x2A184CDF8`–`0x2A184CE0C`); setup copies an optional primitives value into that field
+at `0x2A184CE48` through the value-witness assignment helper `0x2A17F1CFC`. This does not
+prove that a particular session supplies a non-nil value. Thus replaying the switch outside
+an activated, configured session is not a demonstrated snapshot shortcut.
+
+**Native control codec:** the host's actual Swift `AccessibilityMessage` and private
+`ControlMessage` types were resolved from loaded metadata, decoded with PropertyListDecoder,
+and encoded through their own Encodable implementations. Five synthetic controls passed
+dictionary/data equality, including the outer envelope:
+
+```json
+{"accessibility":{"_0":{"clientNeedsAccessibility":{"_0":true}}}}
+```
+
+False uses the same shape with `false`. The data case is
+`accessibility._0.accessibilityData._0`, whose value is **Data**, not a presumed base64 string.
+The native encoder produced binary plists: 82 bytes for either standalone Bool case, 105 for
+the outer true envelope, and 1,245 for an envelope carrying the earlier 1,136-byte synthetic
+AXP tree. Unpacking that envelope and securely decoding its AXP archive returned the one
+synthetic node and rectangle `{{18,49},{40,40}}`. This validates codecs and nesting, not
+captured network framing or real-phone coordinates. Physical `ControlMessageSession` reflection
+also exposes `plistEncoder` / `plistDecoder` (`0x2A1A48D88`).
+
+**Normal host activation has a separate prerequisite:** SSK's
+`NotificationsBackedAccessibilityStatePrimitives` queries
+`AXSSHasClientsWithAccessRemoteDeviceContent` at `0x26698DA80` and `0x26698DE20`, and observes
+`AXSSHasClientsWithAccessRemoteDeviceContentDidChange`. Both were resolved from live loaded
+cache pointers, rather than trusting inaccurate names attached to retained disassembly's
+external calls. The getter resides in
+`/System/Library/PrivateFrameworks/AccessibilitySharedSupport.framework/Versions/A/AccessibilitySharedSupport`
+(UUID `FDC2353E-33CB-3E62-9530-1C8E226FCB1A`, image offset `0x35A98`). A host-local query
+returned **false** during this run; Mirroring was not running. This is neither an AXAudit
+result nor an independent network-client authorization result.
+
+ScreenContinuityUI tests `currentStateNeedsAccessibility` at `0x80074` and guards creation of
+its AX primitives; `startAccessibility(remoteDeviceID:deviceSize:)` is called at `0x8075C`.
+Outgoing messages reach `ScreenSharingSession.sendAccessibilityMessage` through the async
+descriptor loaded at `0x6D854`; incoming publisher/data processing call sites are `0x76CA0`
+and `0x8FBB8`. There is also a server-capability check (`0x95AA4`, result branch `0x95D44`):
+SSK's `Capabilities.accessibility` has raw value **2** (`0x2669A72B0`). Successful checking
+starts accessibility-state monitoring; failure logs that the server does not support it.
+These UI addresses are unslid offsets in ScreenContinuityUI, not SSK virtual addresses.
+
+Do not treat `com.apple.screensharing.accessibility` as a newly discovered remote service or
+stream identifier: its host getter at `0x266907FC4` is explicitly exported as
+`AnnotationServiceConstants.accessibilityServiceEntitlement`, a separate annotation path.
+
+**Next discriminator:** capture one genuine configured Mirroring session with positive host
+AX demand, server capability and consumer activation, then correlate the Bool control with
+the initial AXP archive and later incremental data. Inspect session establishment/authentication
+and transport framing separately. The direct subscription message is now resolved; access to
+an authenticated session and physical tree coverage are still open. Raw references are in the
+[dated verification](verification.md#2026-10-10--mirroring-ax-subscription-and-native-envelope-controls-offline).
+
 ## XCTest snapshot service boundary (2026-09-22)
 
 **Static evidence only.** Inspected the arm64 slices in the Mac-local image
