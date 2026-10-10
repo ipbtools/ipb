@@ -2083,6 +2083,44 @@ and transport framing separately. The direct subscription message is now resolve
 an authenticated session and physical tree coverage are still open. Raw references are in the
 [dated verification](verification.md#2026-10-10--mirroring-ax-subscription-and-native-envelope-controls-offline).
 
+### Mirroring first-setup authentication (2026-10-10)
+
+**Runtime scope:** macOS **26.5.1 / 25F80**, iPhone Mirroring **1.6 / 98.5**, the host
+SSK and ScreenContinuityUI identities above; allocated physical **iPhone14,2 / iOS 27.0 /
+24A437**, CoreDevice UUID `7F2FE6E9-5423-552A-A2A2-C499F1D8672F`. The native onboarding
+initially chose another phone; that attempt was stopped, and System Settings' Continuity
+picker was explicitly changed to the 13 Pro before the observations below. Do not attribute
+the earlier default-target attempt to the 13 Pro.
+
+At **10:25:56.985 CST**, a bounded LLDB tap captures
+`SharingBackedAuthenticationPrimitives.pairDeviceForMacUnlock()` in the configured native
+client. The 13 Pro's own Rapport log receives an **authentication pre-pairing request** at
+**10:25:58.428**, with a 121-byte accounting entry, and sends an
+**authentication response** at **10:26:48.963**, 109 bytes, link type BLE. These are device log descriptions and
+byte counts, not captured/decoded wire payloads. Mac sharingd reports session failure at
+**10:26:46.992**, `com.apple.sharing.authentication Code=12`; the client wraps it as
+`ScreenSharingKit.RemoteAuthenticationError Code=3` and shows the target-specific timeout.
+The response send occurs after the host's failure; it is not a successful pairing result.
+The error code's underlying cause is not established.
+
+After manual user setup/unlock, a second `pairDeviceForMacUnlock()` hit occurs at
+**10:31:22.236**. The native host log records **authentication enablement completed** at
+**10:31:26.686** and **Unlock enabled** explicitly for iPhone14,2 at **10:31:26.757**.
+The UI reaches **iPhone Mirroring Is Ready to Use**. Get Started then shows **iPhone Mirroring
+Is Locked**, requiring the Mac login. This establishes first-setup enablement, separately
+from USB/CoreDevice pairing; it does not establish an active screen-sharing control session,
+its network framing, AX capability/subscription, or a received page tree.
+
+The user reports setting the iPhone passcode. Apple documents a passcode as a
+[Mirroring prerequisite](https://support.apple.com/en-eg/120421). Nevertheless, before and
+after setup a fresh Lockdown `all_values` query returns `PasswordProtected=false`. That raw
+key is not used here as authoritative proof that no passcode exists, nor as a causal
+explanation of Code 12. Host AX-demand queries remain false; VoiceOver has not been enabled
+and its permission request remains pending. No authentication credentials or token contents
+were dumped. Decoding the earlier synthetic archive still proves only decoder operation.
+Raw references and capture limits are in the
+[dated verification](verification.md#2026-10-10--13-pro-mirroring-first-setup-authentication-live).
+
 ## XCTest snapshot service boundary (2026-09-22)
 
 **Static evidence only.** Inspected the arm64 slices in the Mac-local image

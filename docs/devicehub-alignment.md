@@ -306,7 +306,10 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    table to AXP start/stop. Its outer ControlMessage envelope passes five native codec controls,
    including a synthetic tree/Frame decode. Normal host subscription additionally checks
    AX demand (`AXSSHasClientsWithAccessRemoteDeviceContent`) and server capability flag `0x2`;
-   the phone consumer must be activated with non-nil primitives. Capture one genuine
+   the phone consumer must be activated with non-nil primitives. The October 10 live 13 Pro
+   run now captures Sharing/Rapport enablement completion and reaches Mirroring Ready;
+   actual screen connection awaits manual Mac login, and temporary VoiceOver activation
+   awaits permission. These stages do not establish an AX subscription. Continue the
    configured Mirroring session at these resolved boundaries, and trace its establishment,
    authentication and transport framing. Validate target identity, geometry space, coverage and
    cancellation. The external Mac AX `remoteDeviceContent` entitlement gate is distinct from
@@ -353,8 +356,9 @@ or one successful capability response does not validate the target. Accept a mat
 push as selection evidence, keep empty OK distinct from object-null/error/timeout, never pair
 across connections by identifier alone, and clean up each session. Generic XCTest handshakes
 still have not established a runner-free snapshot session. iPhone Mirroring's bulk producer,
-schema and Frame field are now resolved static evidence, with a synthetic codec control;
-session authorization, received physical trees and external retrieval remain untested.
+schema and Frame field are now resolved static evidence, with a synthetic codec control.
+The allocated 13 Pro's initial authentication enablement is now a live positive control;
+actual screen-session establishment, received physical trees and independent retrieval remain open.
 
 ## Remaining work
 
