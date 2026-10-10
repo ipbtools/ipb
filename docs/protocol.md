@@ -2167,9 +2167,9 @@ internal-build flag are all **0**, read from Mirroring memory with a validated P
 The client-identification globals are identified by the shipped
 `AXSetClientIdentificationOverride` and request getter code (`0x187BB1BE8–1C14`), not guessed
 from their values. [WebKit's SPI declaration](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/PAL/pal/spi/mac/HIServicesSPI.h)
-names value 0 as no active request and VoiceOver as 7; it does not prove why this host observed 0.
-The effective permission failure is established; the reason for the zero identification and
-behavior on a newer host remain open. No AX start, outgoing subscription or incoming archive
+names value 0 as no active request and VoiceOver as 7. The follow-up below resolves the
+incoming identification and check/store ordering; newer-host runtime behavior remains open.
+No AX start, outgoing subscription or incoming archive
 is captured. This is a specific host-side blocker, not evidence that iOS has no tree/Frame path.
 
 **Independent host authentication has a separate enforced gate.** Current Sharing.framework
@@ -2189,6 +2189,72 @@ broker path; it does not rule out every independent Rapport/network implementati
 VoiceOver is restored **off** and all owned captures detach/close. No genuine phone AX archive
 or element rectangle has been received. Local references and limitations are recorded in the
 [dated verification](verification.md#2026-10-10--13-pro-control-session-voiceover-permission-and-authentication-broker-live).
+
+### Mirroring client identification ordering and macOS 27 comparison (2026-10-10)
+
+**Runtime on macOS 26.5.1 / 25F80, static comparison on macOS 27.2 / 26B5091g.**
+The physical target remains the allocated **iPhone14,2 / iOS 27.0 / 24A437**. The newer host
+is Mac-M2, freshly reached over SSH; this supersedes the earlier SSH-unavailable observation,
+not the historical verification record. HIServices reports version **1.22** on both hosts:
+arm64e UUID **34C40608-353D-3A06-BBF1-6B927CB8B39D** on 26.5.1 and
+**39A43728-ADF4-3FC1-A946-0466C3E72BBA** on 27.2.
+
+**The caller supplies 7; the permission check runs before it is installed.** Passive taps
+inside native Mirroring PID **84730**, with VoiceOver PID **62094**, capture the same-thread
+sequence at **11:27:09.520–.575 CST**:
+
+1. `_AXXMIGCopyAttributeValue` entry (`0x187BB2710`) receives identification **7** as its ninth
+   argument; its audit-token peer PID is the running VoiceOver process. Override/current ID
+   and Apple-internal-build flag are **0**.
+2. Its call to `_isConnectionAllowedAPIAccess` (`0x187BB27C8`) still sees current ID **0**.
+   Remote entitlement lookup returns **1**, the identification filter replaces it with **0**,
+   and `_setMachPortAccessStatus` receives access flags **1/1/1/0** for that same peer/port.
+3. Only after that check does `0x187BB27E4` store incoming ID **7**. The common epilogue
+   clears it at `0x187BB2A10`; the post-reset tap reads **0**.
+
+A second VoiceOver process, PID **63357**, reproduces the sequence. A subsequent peer-filtered
+tap at `0x187BB2498` reads cached status **0x0E**: allowed/protected/inspection are present,
+remote-content bit **0x10** is absent. At the attribute handler's post-identification site,
+current ID is **7** while `_AXCurrentRequestCanAccessRemoteDeviceContent`'s backing byte
+(`0x1EC6E9A00`) remains **0**. This establishes both the zero-ID timing and persistence for
+the tested ordinary attribute route. It does not establish an Apple-wide impossibility or
+that every MIG entry route has identical initialization.
+
+**macOS 27 retains the relevant order and filter in shipped code.** In its HIServices,
+`_AXXMIGCopyAttributeValue` calls the permission helper at **0x1926C3E48**, stores the request
+identification at **0x1926C3E64**, and clears it at **0x1926C4090**. The helper selects the
+nonzero override or current ID (`0x1926C39B0–C4`), preserves the remote entitlement for **7–10**
+(`0x1926C39CC–D4`), otherwise substitutes the internal-build flag, and caches the result.
+This is static instruction evidence, not a macOS 27 VoiceOver/13 Pro result.
+
+Mac-M2 ships Mirroring **2.0 / 126.8** (UUID **C23F483F-F100-3D40-BA21-E952F144D580**),
+embedded ScreenContinuityUI (UUID **79207700-721C-3C67-8D94-C901BE6400FF**) and ScreenSharingKit
+**2.0 / 126.8** (UUID **06D891A4-6FCB-3949-887A-1EC073B2EE3B**). Their imports/exports retain
+AX demand/state, start/stop, `clientNeedsAccessibility`, incoming data and the host cache.
+The inspected app/UI/ScreenSharingKit import and dlsym tables do not reference
+`AXSetClientIdentificationOverride`; indirect calls through other frameworks remain possible.
+The current developer selection reports **Xcode 26.4 / 17E192**, while `devicectl` reports
+**642.15** and LLDB **2100.0.16.4**; the mixed installation is not a confirmed Xcode 27
+release-gate environment. After the user moves the same phone, USB serial and CoreDevice UUID
+identify the allocated 13 Pro, but CoreDevice reports `pairingState=unsupported` and
+`tunnelState=unavailable`. This does not establish missing USB trust or an Apple-account cause
+for CoreDevice. Native Mirroring launches, but its visible default target is another phone;
+that error is excluded from 13 Pro results. No authenticated native 13 Pro session is established.
+
+[Apple's Mirroring requirements](https://support.apple.com/en-eg/120421), refreshed October 10,
+require the Mac and iPhone to use the same Apple Account with two-factor authentication.
+USB trust and remote Mac access do not satisfy that native session requirement. The user
+identifies this prerequisite while selecting the target; account identifiers are not inspected
+and no account is changed. CoreDevice visibility is not a proven prerequisite for native
+Mirroring. The [Mac-M2 attempt](verification.md#2026-10-10--mac-m2-usb-identity-and-native-mirroring-account-prerequisite)
+records the separate USB, developer-tool and native-session observations.
+
+The local native window displays Settings/Home, but normal AX reads still expose only Mac
+window/toolbar/menu elements. No AX start or genuine incoming AXP archive is captured; a full
+phone tree and native rectangles remain unreceived. The phone's bulk Frame producer described
+above is still a separate static positive. VoiceOver is restored **off**, all owned traces
+detach, and local evidence is mapped in the
+[follow-up record](verification.md#2026-10-10--mirroring-client-id-7-arrives-after-permission-check-macos-27-static-comparison).
 
 ## XCTest snapshot service boundary (2026-09-22)
 

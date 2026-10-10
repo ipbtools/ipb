@@ -30,8 +30,17 @@ Code 12 enablement and later Code 10 unlock failures. No phone AX archive has be
 With the user's temporary VoiceOver authorization, its real process connects to Mirroring:
 ordinary/protected/inspection access passes and the remote entitlement lookup returns true,
 but HIServices clears remote-content permission while the current client identification is 0.
-This is a concrete macOS 26.5.1 host blocker; why the identification is zero and macOS 27 behavior
-remain open. The demand getter is process-local: a separate Python process cannot measure
+The next live follow-up resolves why: VoiceOver sends identification 7, but the ordinary
+attribute handler checks permission before installing it, then clears it on return. A second
+VoiceOver process reproduces this; its cached status is 0x0E, lacking remote-content bit 0x10,
+even after current ID becomes 7. Mac-M2 is now reachable on macOS 27.2 / 26B5091g; its HIServices
+retains this order/filter statically. The same 13 Pro is now identified by USB serial and
+CoreDevice UUID, with unsupported pairing/unavailable tunnel despite the user's trust
+confirmation. Native Mirroring launches with another default phone; its error is excluded.
+The user identifies the same-Apple-Account requirement as the next native-session prerequisite;
+no account identifiers are inspected or changed. Developer tools report a mixed Xcode 26.4 /
+devicectl 642.15 installation. No newer-host 13 Pro session/runtime result is established. The demand getter is
+process-local: a separate Python process cannot measure
 Mirroring's demand. An ordinary host probe obtains the authentication broker but a read-only
 inventory query is denied with code 111; the corresponding sharingd path enforces the private
 unlock-manager entitlement. VoiceOver is restored off and all owned captures are closed.
@@ -40,11 +49,11 @@ unlock-manager entitlement. VoiceOver is restored off and all owned captures are
 
 | Item | Current evidence and root-cause status | Owner / next discriminator |
 | --- | --- | --- |
-| **Supported release matrix gate** | Current SSH attempt to the macOS 27 host closed at port 22. Earlier isolated build passed, but that host then selected Xcode 26.4 with its phone unavailable; current prerequisites could not be refreshed. | Environment prerequisite: reachable macOS 27 + Xcode 27 + unlocked iOS 27 phone. Local macOS 26 validation does not close this gate. |
+| **Supported release matrix gate** | October 10 refresh reaches Mac-M2 on macOS 27.2 / 26B5091g. Its only enumerated /Applications/Xcode*.app reports Xcode 26.4 / 17E192, while devicectl reports 642.15 and LLDB 2100.0.16.4. USB/CoreDevice identifies the allocated 13 Pro, but pairing is unsupported, tunnel unavailable and DDI services unavailable. Earlier isolated build results remain historical. | Agent can diagnose the mixed developer-tool installation; a working Xcode 27/iOS 27 service environment remains unconfirmed. Local macOS 26 validation and static macOS 27 inspection do not close this gate. Native Mirroring has separate account/session prerequisites. |
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | AXAudit selection, issue association, Lab activation and Calculator preview are positive; graphs remain partial and preview geometry is an overlay measurement. Physical handlers omit ordinary Frame, return nil for parameterized reads and gate properties/actions/parents on task-port permission. Action completion hides native outcome; nondeveloper text/children remain capped at 64 UTF-16 units/51. The phone command-line interface has a separate entitlement check and exposes no dump. Mirroring has a matched physical bulk tree/Frame producer, AXP 21 → iOS 2003, resolved subscription and synthetic codec controls. Live 13 Pro screen/control startup now works; concurrent ipb screenshot is black with cause unconfirmed. A real VoiceOver connection passes ordinary AX access and remote entitlement lookup, but HIServices clears effective remote-content permission with current client identification 0; no physical AX archive is received. Separate-process demand queries are not Mirroring state. A normal host authentication-broker inventory query is denied with code 111; sharingd checks its private unlock-manager entitlement. Cause of the zero identification, newer-host behavior, independent network access and tree coverage remain open. Native app-debugger Frame getter never executed. | Agent can trace normal client-identification setup/check ordering, compare supported macOS 27 behavior and inspect legitimate authentication/framing. Mac login and temporary VoiceOver permission are completed; VoiceOver is restored off and no extra user input is pending. Keep testmanagerd snapshot second. The user rejected page-wide serial preview due to latency; retain it only as a single-target fallback. Backend 91701 remains a separate hit-test lead. Preserve target/connection/PID/token identity and cleanup. The user chose **“用 13 pro 吧”**; refresh future ownership. Product work still needs coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [live host blockers](protocol.md#mirroring-live-control-session-and-host-ax-permission-failure-2026-10-10), [subscription](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | AXAudit selection, issue association, Lab activation and Calculator preview are positive; graphs remain partial and preview geometry is an overlay measurement. Physical handlers omit ordinary Frame, return nil for parameterized reads and gate properties/actions/parents on task-port permission. Action completion hides native outcome; nondeveloper text/children remain capped at 64 UTF-16 units/51. The phone command-line interface has a separate entitlement check and exposes no dump. Mirroring has a matched physical bulk tree/Frame producer, AXP 21 → iOS 2003, resolved subscription and synthetic codec controls. Live 13 Pro video/control works; concurrent ipb screenshot is black with cause unconfirmed. Two real VoiceOver PIDs send identification 7, while ordinary attribute permission checks read current ID 0 before storing 7. The remote entitlement passes but is filtered to 0; the same peer's cache is 0x0E without bit 0x10, and the attribute handler still has remote permission 0 with current ID 7. macOS 27.2 HIServices retains the order/filter statically; native runtime and other initialization routes remain unverified. No physical AX archive is received. Separate-process demand queries are not Mirroring state. A normal host authentication-broker query is denied with code 111; sharingd checks its private unlock-manager entitlement. Independent network access and tree coverage remain open. Native app-debugger Frame getter never executed. | Agent can finish newer-host initialization inspection and legitimate authentication/framing research. The same 13 Pro is now physically identified on Mac-M2. Native macOS 27 comparison needs an eligible same-Apple-Account session; the user raised this requirement, and no account change is made. Bounded taps are prepared but not run against the wrong default phone. Account setup is user-owned; developer-tool pairing is a separate agent investigation. VoiceOver is restored off. Keep testmanagerd snapshot second. The user rejected page-wide serial preview due to latency; retain it only as a single-target fallback. Backend 91701 remains a separate hit-test lead. Preserve target/connection/PID/token identity and cleanup. The user chose **“用 13 pro 吧”**. Product work still needs coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [identification follow-up](protocol.md#mirroring-client-identification-ordering-and-macos-27-comparison-2026-10-10), [subscription](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -5229,3 +5238,128 @@ logs, session6 and session8 `host-trace.jsonl`, session5 sharingd disassembly/si
 session8 source identities, selector resolution and `auth-broker-readonly.jsonl`. The existing
 synthetic decoder remains only a control. Only research documentation changes; no production
 code, phone installation, production build or macOS 27 smoke gate is claimed.
+
+## 2026-10-10 — Mirroring client ID 7 arrives after permission check; macOS 27 static comparison
+
+**Scope:** the same allocated **13 Pro / iPhone14,2 / iOS 27.0 / 24A437**, CoreDevice UUID
+`7F2FE6E9-5423-552A-A2A2-C499F1D8672F`, UDID `00008110-0014711C3CC3801E`, remains on the local
+macOS **26.5.1 / 25F80** host. Xcode **27 B6 / 27A5252f**, CoreDevice **642.15**, native Mirroring
+**1.6 / 98.5**, PID **84730**. The existing temporary VoiceOver authorization is reused and
+restored. A USB logger asserts the exact UDID/model/build before collecting. No other phone,
+credential entry, phone installation or security-policy change is involved.
+
+**Reachable trigger and reproduction:** with native 13 Pro Mirroring displaying Settings,
+enable VoiceOver through Settings and press Return on the real Welcome window. Actual VoiceOver
+PID **62094** starts; passive, UUID-checked taps observe ordinary `CopyAttributeValue` requests.
+At **11:27:09.520–.575 CST**, on one Mirroring thread and connection port **126671**:
+
+| Stage | Incoming ID | Current ID | Decisive result |
+| --- | --- | --- | --- |
+| MIG function entry | 7 | 0 | Peer PID matches actual VoiceOver. |
+| Permission precheck | 7 | 0 | Override/internal-build flag are also 0. |
+| Remote entitlement lookup/filter | 7 | 0 | Lookup 1 becomes effective 0; access flags are 1/1/1/0. |
+| Post-identification store | 7 | 7 | Store happens after permission calculation. |
+| Common epilogue | — | 0 | Current identification is reset. |
+
+The ninth-argument stack offset is established by the shipped function prologue and load,
+not inferred from a coincidental 7. Static addresses/UUIDs are recorded in the
+[protocol follow-up](protocol.md#mirroring-client-identification-ordering-and-macos-27-comparison-2026-10-10).
+A second activation, VoiceOver PID **63357** / port **194111**, reproduces lookup 1 → effective 0
+at **11:29:51.501–.546**. A short follow-up keeps that process active and filters taps by its
+audit-token PID before applying the hit budget: **20** valid cache-path hits read **0x0E**, and
+**19** valid post-store hits read current ID **7** with remote-content backing byte **0**.
+Thus the normal attribute path's initialization timing and retained missing permission are
+established. This is not proof that all alternate Apple initialization paths are equivalent.
+
+**Observed page/data result:** Home changes the genuine mirrored Settings page to the 13 Pro
+Home screen, visibly including the development Lab app. Saved native-window pixels are usable;
+the ordinary Mac AX tree still contains only window, toolbar and menu elements. No host AX
+start, outgoing subscription or incoming data hit occurs in the full first capture; no AXP
+archive is captured in any of these runs. Full phone tree and native rectangle export remain
+unreceived. The existing synthetic tree/rectangle is not promoted to physical evidence.
+
+**macOS 27 comparison:** a read-only agent inventory (`来源：peer`), independently checked
+against its raw binary outputs and main-session SSH refresh, reaches **Mac-M2 /
+HBs-Mac-mini.local / macOS 27.2 / 26B5091g**. HIServices UUID is
+**39A43728-ADF4-3FC1-A946-0466C3E72BBA**, Mirroring **2.0 / 126.8** UUID
+**C23F483F-F100-3D40-BA21-E952F144D580**. Its ordinary attribute route likewise checks at
+`0x1926C3E48`, then stores identification at `0x1926C3E64`, then clears it at `0x1926C4090`;
+the 7–10/internal-build filter remains. AX demand/start/stop/data interfaces also remain in
+ScreenSharingKit and embedded ScreenContinuityUI. Their direct import/dlsym inventories show
+no identification-override reference, which does not exclude indirect framework calls.
+
+The main refresh corrects an inventory inference: selected `/Applications/Xcode.app` is
+**Xcode 26.4 / 17E192**; only that Xcode app is found by `/Applications/Xcode*.app`. CoreDevice
+does not enumerate this 13 Pro and no native Mirroring/VoiceOver process is running there.
+This is not a native-Mirroring discovery denial or proof it requires CoreDevice: no normal
+13 Pro authentication/GUI session was attempted on Mac-M2. A user question about connecting
+the same phone and completing native login is pending. Static comparison does not close the
+supported release or newer-host runtime gate.
+
+**Cleanup and evidence quality:** all three owned LLDB sessions detach `ok=True`; the first
+host and phone log collectors close with rc0. Settings shows VoiceOver **off**, and neither
+VoiceOver nor Quickstart remains. Mirroring remains alive. Breakpoints shed when their bounded
+hit budget is reached; missing later hits do not establish unlimited-duration inactivity.
+Two auxiliary context events have a PC slide inconsistent with the checked module and are
+excluded (session2 seq45, session3 seq34); decisive same-thread sequences and peer-filtered
+cache results use the matching **0x1E58000** slide. No production code/build/smoke gate changes.
+
+Raw probes/logs/window image and the local handoff remain outside Git at
+`~/.local/state/ipb/20261010-client-id/`: `session1/host-trace.jsonl`, `session2/host-trace.jsonl`,
+`session3/host-trace.jsonl`, `session1/mirroring-home.png`, `capture-summary.json`,
+`mac27/hiservices-targets.txt`, the selected framework inventories, and
+`mac27/current-host-prerequisites.txt`. The local handoff maps readiness, restoration and
+the still-pending newer-host session prerequisite.
+
+
+## 2026-10-10 — Mac-M2 USB identity and native Mirroring account prerequisite
+
+**Scope and access:** after the user moves the allocated 13 Pro and confirms USB trust,
+SSH reaches **Mac-M2 / HBs-Mac-mini.local / macOS 27.2 / 26B5091g** as console user `hb`.
+The user requests **“用 rustdesk 或者 ssh 链接吧”**. RustDesk's connected remote window
+visibly shows that host; no Screen Sharing login is needed for the remaining work.
+
+**Device identity and separate tool state:** IORegistry USB serial
+`000081100014711C3CC3801E` matches the allocated 13 Pro's UDID without separators.
+CoreDevice UUID `7F2FE6E9-5423-552A-A2A2-C499F1D8672F`, model `iPhone14,2` and ECID
+`5753865626681374` also match. The inventory reports `pairingState=unsupported`,
+`tunnelState=unavailable`, booted, and `ddiServicesAvailable=false`. This supersedes the
+pre-transfer absence recorded above. It does not prove that USB trust was omitted or that
+CoreDevice depends on the same Apple Account.
+
+Selected `/Applications/Xcode.app` reports **Xcode 26.4 / 17E192**, while its `devicectl`
+reports **642.15** and `xcrun lldb` reports **2100.0.16.4 / Swift 6.3.0.123.5**. Enumeration
+also prints package installation notices ending **“Authorization is required to install the
+packages.”** No installation or developer-selection change is made. The mixed installation's
+service readiness and the Xcode 27 release gate remain unconfirmed. `--json-output -` includes
+notice text before JSON on this host; the initially failed JSON parse is a probe-format issue,
+not evidence of missing device enumeration. The retained filtered JSON is parsed after the
+first object delimiter.
+
+**Native target/account prerequisite:** SSH launches the native Mirroring app, PID **39768**.
+The RustDesk image shows its default target **“Enter 的 iPhone”** and an iOS-version error.
+No retry or operation is sent to that other phone; its error is excluded from 13 Pro results.
+An ordinary, read-only AX probe against PID 39768 returns **`AX trusted=0`** and window-read
+error **-25211**. RustDesk's computer-use app access times out, so target selection is requested
+from the user rather than assumed to have succeeded. The user then observes that Mirroring
+requires the same account. [Apple's current requirements](https://support.apple.com/en-eg/120421)
+confirm the same Apple Account with two-factor authentication on both devices. USB trust,
+SSH and RustDesk access do not replace this native session requirement. Account identifiers
+are not read, no mismatch is independently measured and no account is changed.
+
+**Capture/result boundary:** passive macOS 27 taps are prepared with framework UUID checks,
+module-derived slides, exact-PC guards, VoiceOver-peer filtering and bounded hit budgets.
+They cover HIServices permission order/cache, ScreenSharingKit's typed AX start/stop/data
+protocol thunks and AXP host cache methods. They are **not started**: there is no authenticated
+13 Pro native session to compare. Protocol thunks are interface taps, not resolved concrete
+implementation bodies. No physical AXP archive, complete page tree or element rectangle is
+received on macOS 27. VoiceOver was not enabled there and no owned remote collector is running;
+local VoiceOver and the earlier owned captures remain restored/closed. Native Mirroring is
+left open for user-controlled setup. No credentials, entitlements or security policy are changed.
+
+Raw tools and the local handoff stay outside Git under
+`~/.local/state/ipb/20261010-client-id/`: `mac27/target-after-connect.json`,
+`mac27/target-usb-serial.txt`, `mac27/devices-after-connect-raw.txt`,
+`mac27/remote-mirroring-ax-read.txt`, `mac27/capture1/`, and `handoff.md`.
+Only condensed research documentation is changed; no production build, installation or
+macOS 27 smoke gate is claimed.

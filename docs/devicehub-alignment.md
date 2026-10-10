@@ -312,8 +312,25 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    its remote-content permission despite a successful entitlement lookup, while the current
    client identification is 0. The AX-demand getter reads the calling process's connection cache;
    separate Python queries do not establish Mirroring's demand. No physical AX archive is received.
-   Next inspect the normal client-identification setup/check ordering and compare the supported
-   macOS 27 host; repeated Welcome/tutorial toggling adds no new discriminator. The native
+   The next live trace resolves this: two VoiceOver processes send ID **7**, but the ordinary
+   attribute route checks permission before storing that ID, filters the entitlement to 0,
+   then resets ID on return. A peer-filtered follow-up reads cached flags **0x0E** without
+   remote bit **0x10**, and remote permission remains 0 even after ID becomes 7. Mac-M2 is now
+   reachable on **macOS 27.2 / 26B5091g**; its HIServices retains the check/store/filter order
+   statically. The newer Mirroring layers still expose demand/start/stop/data plumbing;
+   inspected direct imports/dlsyms show no identification override. Other initialization
+   routes remain unverified. USB serial and CoreDevice UUID now identify the same 13 Pro on
+   Mac-M2, after the user confirms connection and trust. CoreDevice reports unsupported pairing
+   and an unavailable tunnel; this is not evidence that trust was omitted. Native Mirroring
+   launches but defaults to another phone, so its displayed error is excluded from 13 Pro
+   evidence. The user's account observation exposes the next prerequisite: native Mirroring
+   requires the same Apple Account with two-factor authentication on both ends. Establish an
+   eligible 13 Pro session before activating VoiceOver and running the prepared bounded taps;
+   do not substitute repeated USB pairing for this requirement. Account setup is user-owned.
+   CoreDevice enumeration is not a proven prerequisite for native Mirroring. The selected Xcode
+   reports **26.4 / 17E192**, although devicectl reports **642.15** and LLDB **2100.0.16.4**;
+   this mixed installation does not establish the Xcode 27 product gate prerequisite.
+   Repeated Welcome/tutorial toggling adds no new discriminator. The native
    authentication broker is separately gated: an ordinary client's read-only inventory returns
    permission error 111, and sharingd checks the private unlock-manager entitlement before the
    authentication methods. An independent network client is still unproven. Continue tracing
