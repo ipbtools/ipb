@@ -343,6 +343,24 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    The [subscription follow-up](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10)
    identifies the actual message nesting and activation gates; the annotation entitlement
    string is not a discovered remote service.
+   The October 10 independent reviews (source: peer) refine the next investigation without
+   establishing a new usable API. First map normal permission-helper callers, identification
+   and override writers, and cache creation/update/removal; `_loadAccessibilityBundles`
+   follows the ID store, but whether it can initialize a valid remote-content connection is
+   still a hypothesis. In parallel at the research level, trace the physical cache producer's
+   creators and consumers back to transport, listener and authorization boundaries. Mark
+   unresolved Swift/ObjC indirect calls explicitly; absence from resolved direct callers is
+   not proof that a USB entry does not exist. These offline tasks do not require a Mac-M2
+   account change. Only after identifying a concrete normal initialization route, compare
+   VoiceOver-before-Mirroring with Mirroring-before-VoiceOver in an eligible 13 Pro session.
+   Record the same peer/port through permission cache, demand, capability, subscription and
+   an actual incoming archive, with bounded captures and restoration. The bulk receive path
+   is separate from ordinary attribute requests, but the default demand getter reads the
+   remote-content permission cache, so identification 0 is still a relevant upstream lead;
+   neither that failure nor a future permission success settles the entire session chain.
+   USB reuse requires a normal paired host entry, authorization, primitives/activation,
+   transport and a genuine initial archive. See the
+   [review arbitration](verification.md#2026-10-10--independent-ax-research-direction-reviews-and-arbitration).
    Independent-client access, arbitrary-app coverage and a bulk rectangle export remain
    unverified. Keep the existing testmanagerd
    direct snapshot RPC as the second structured candidate, with its internal-policy/session
@@ -380,8 +398,8 @@ push as selection evidence, keep empty OK distinct from object-null/error/timeou
 across connections by identifier alone, and clean up each session. Generic XCTest handshakes
 still have not established a runner-free snapshot session. iPhone Mirroring's bulk producer,
 schema and Frame field are now resolved static evidence, with a synthetic codec control.
-The allocated 13 Pro's initial authentication enablement is now a live positive control;
-actual screen-session establishment, received physical trees and independent retrieval remain open.
+The allocated 13 Pro's authentication and native video/control session now have live positive
+controls. Received physical AX trees, element rectangles and independent retrieval remain open.
 
 ## Remaining work
 

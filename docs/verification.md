@@ -44,6 +44,12 @@ process-local: a separate Python process cannot measure
 Mirroring's demand. An ordinary host probe obtains the authentication broker but a read-only
 inventory query is denied with code 111; the corresponding sharingd path enforces the private
 unlock-manager entitlement. VoiceOver is restored off and all owned captures are closed.
+Independent October 10 reviews from GPT-6 Astra, the Claude Opus path and DeepSeek Flash
+agree that the physical producer and synthetic codecs do not prove USB access. Main-session
+static rechecking confirms that the default host demand getter depends on the remote-content
+permission cache, although bulk receiving and ordinary property requests use separate paths.
+Normal initialization/cache lifecycle and the physical producer's transport/listener boundary
+are the next offline discriminators. No new device session, tree or rectangle is obtained.
 
 ### Remaining work, in recommended order
 
@@ -53,7 +59,7 @@ unlock-manager entitlement. VoiceOver is restored off and all owned captures are
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | AXAudit selection, issue association, Lab activation and Calculator preview are positive; graphs remain partial and preview geometry is an overlay measurement. Physical handlers omit ordinary Frame, return nil for parameterized reads and gate properties/actions/parents on task-port permission. Action completion hides native outcome; nondeveloper text/children remain capped at 64 UTF-16 units/51. The phone command-line interface has a separate entitlement check and exposes no dump. Mirroring has a matched physical bulk tree/Frame producer, AXP 21 → iOS 2003, resolved subscription and synthetic codec controls. Live 13 Pro video/control works; concurrent ipb screenshot is black with cause unconfirmed. Two real VoiceOver PIDs send identification 7, while ordinary attribute permission checks read current ID 0 before storing 7. The remote entitlement passes but is filtered to 0; the same peer's cache is 0x0E without bit 0x10, and the attribute handler still has remote permission 0 with current ID 7. macOS 27.2 HIServices retains the order/filter statically; native runtime and other initialization routes remain unverified. No physical AX archive is received. Separate-process demand queries are not Mirroring state. A normal host authentication-broker query is denied with code 111; sharingd checks its private unlock-manager entitlement. Independent network access and tree coverage remain open. Native app-debugger Frame getter never executed. | Agent can finish newer-host initialization inspection and legitimate authentication/framing research. The same 13 Pro is now physically identified on Mac-M2. Native macOS 27 comparison needs an eligible same-Apple-Account session; the user raised this requirement, and no account change is made. Bounded taps are prepared but not run against the wrong default phone. Account setup is user-owned; developer-tool pairing is a separate agent investigation. VoiceOver is restored off. Keep testmanagerd snapshot second. The user rejected page-wide serial preview due to latency; retain it only as a single-target fallback. Backend 91701 remains a separate hit-test lead. Preserve target/connection/PID/token identity and cleanup. The user chose **“用 13 pro 吧”**. Product work still needs coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [identification follow-up](protocol.md#mirroring-client-identification-ordering-and-macos-27-comparison-2026-10-10), [subscription](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | AXAudit selection, issue association, Lab activation and Calculator preview are positive; graphs remain partial and preview geometry is an overlay measurement. Physical handlers omit ordinary Frame, return nil for parameterized reads and gate properties/actions/parents on task-port permission. Action completion hides native outcome; nondeveloper text/children remain capped at 64 UTF-16 units/51. The phone command-line interface has a separate entitlement check and exposes no dump. Mirroring has a matched physical bulk tree/Frame producer, AXP 21 → iOS 2003, resolved subscription and synthetic codec controls. Live 13 Pro video/control works; concurrent ipb screenshot is black with cause unconfirmed. Two real VoiceOver PIDs send identification 7, while ordinary attribute permission checks read current ID 0 before storing 7. The remote entitlement passes but is filtered to 0; the same peer's cache is 0x0E without bit 0x10, and the attribute handler still has remote permission 0 with current ID 7. macOS 27.2 HIServices retains the order/filter statically; native runtime and other initialization routes remain unverified. No physical AX archive is received. Separate-process demand queries are not Mirroring state. A normal host authentication-broker query is denied with code 111; sharingd checks its private unlock-manager entitlement. Independent network access and tree coverage remain open. Native app-debugger Frame getter never executed. | Agent can map normal identification/permission-cache initialization and reverse-trace the physical bulk producer to transport/listener authorization before another live run. Independent reviews do not establish a new API; the default subscription demand still depends on the permission cache. After a concrete initialization lead, compare the two legitimate VoiceOver/Mirroring startup orders with bounded same-peer captures. The same 13 Pro is now physically identified on Mac-M2. Native macOS 27 comparison needs an eligible same-Apple-Account session; the user raised this requirement, and no account change is made. Bounded taps are prepared but not run against the wrong default phone. Account setup is user-owned; developer-tool pairing is a separate agent investigation. VoiceOver is restored off. Keep testmanagerd snapshot second. The user rejected page-wide serial preview due to latency; retain it only as a single-target fallback. Backend 91701 remains a separate hit-test lead. Preserve target/connection/PID/token identity and cleanup. The user chose **“用 13 pro 吧”**. Product work still needs coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [identification follow-up](protocol.md#mirroring-client-identification-ordering-and-macos-27-comparison-2026-10-10), [subscription](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -5363,3 +5369,57 @@ Raw tools and the local handoff stay outside Git under
 `mac27/remote-mirroring-ax-read.txt`, `mac27/capture1/`, and `handoff.md`.
 Only condensed research documentation is changed; no production build, installation or
 macOS 27 smoke gate is claimed.
+
+
+## 2026-10-10 — Independent AX research direction reviews and arbitration
+
+**Scope:** the user requests several different AI opinions. The common evidence packet is
+based on `6438415`, including numbered protocol/state excerpts and the first genuine
+VoiceOver identification trace. Each reviewer receives the same packet without the other
+reviews. GPT-6 Astra additionally reads raw traces and selected disassembly; Claude and
+DeepSeek inspect only the packet. All recommendations below are **source: peer**, accepted
+only within their stated evidence scope. No phone, SSH, VoiceOver or LLDB operation occurs.
+
+**Completed reviews and provenance:** GPT-6 Astra returns a completed independent review.
+Claude CLI completes successfully when requested as `claude-opus-5-5`, but its usage records
+zero output tokens for that model and the main generation under `claude-opus-4-8`; this is
+not represented as a pure Opus 5.5 review. DeepSeek's configured Responses endpoint returns
+HTTP 200, `response.completed`, completed status and model `deepseek-flash`. Grok provides no
+answer and its configured discovery endpoint returns HTTP 401; it is not counted. Two DSH
+adapter failures also produce no opinion. No global model settings or credentials are changed.
+
+**Accepted direction and main-session arbitration:** all three valid reviews preserve the
+gap between a physical tree producer/Frame schema and an independently reachable USB session.
+Astra identifies normal initialization, including `_loadAccessibilityBundles` after the
+identification store, as a concrete static lead. Main-session rechecking confirms that order
+at macOS 27 HIServices `0x1926C3E64` / `0x1926C3EAC`; its cache effect is unverified.
+Claude emphasizes the separation of ordinary property requests from bulk receiving. That
+separation is retained, but the stronger suggestion that client identification is unrelated
+to bulk startup is not established: the resolved ScreenSharingKit calls reach the AXSS
+demand getter, which calls HIServices `_activeRemoteDeviceContentConnections`; it scans
+`_gPortAccessStatusCache` and reads remote bit 4 at local `0x187BB6C48`.
+`_setMachPortAccessStatus` forms bit `0x10` at `0x187BB7268–7274` and the first nonzero active
+count triggers a demand-change notification at `0x187BB7320`. Thus the default demand path
+depends on the permission cache. This does not prove the sole root cause, exclude another
+normal initialization route, or make permission success sufficient for an incoming archive.
+
+The revised plan first maps identification/override writers, permission callers and cache
+lifecycle, while tracing phone producer creation/activation back to transport, listener and
+authorization. Unknown indirect dispatch stays unknown. A grounded initialization lead can
+then justify two bounded legitimate startup-order controls, following one peer/port through
+permission, demand, capability, subscription and real archive reception. Missing direct USB
+callers is not proof of impossibility; a testmanagerd policy predicate alone is not proof of
+a Runner-free snapshot session. AXAudit single-target preview and backend 91701 remain
+secondary, preserving the user's rejection of page-wide serial preview due to latency.
+
+**Result and retained evidence:** the plan and living open-item state are updated; no new
+usable service, physical tree or element rectangle is proven. Raw reviews and the main
+arbitration remain outside Git at `~/.local/state/ipb/20261010-ax-multimodel/`:
+`shared-brief.txt`, `packet.json`, `consultation-manifest.json`, `astra-reviewed-notes.md`
+(main-session condensation), `opus55-stdout.txt`, `opus55-review.md`,
+`deepseek-api-result.json`, `deepseek-review.md`, and `merged-review.md`.
+Rechecked static sources remain under `~/.local/state/ipb/20261010-mirroring-session/`
+(`host-activation-calls.json`), `20261009-mirroring-ax/` (`axss-disassembly.txt`,
+`hiservices-disassembly.txt`) and `20261010-client-id/mac27/` (`hiservices-targets.txt`).
+All owned consultation jobs are closed. Documentation-only checks do not close the supported
+macOS 27 real-device smoke gate.
