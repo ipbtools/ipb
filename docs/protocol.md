@@ -2323,6 +2323,236 @@ unproven. No code changes, entitlement changes, forced identification or permiss
 writes were made. The [dated record](verification.md#2026-10-11--ax-consumer-installation-transport-providers-and-normal-bundle-loading)
 maps retained local source controls and the current investigation boundary.
 
+## Normal Mirroring transport entry and MCK discovery (2026-10-11)
+
+**Runtime and original-image static evidence; no physical AX archive.** Normal host probes
+run in their own unentitled processes on local **macOS 26.5.1 / 25F80** and Mac-M2
+**macOS 27.2 / 26B5091g**. The latter's loaded MediaContinuityKit UUID is
+**5DC6E4AD-E3CE-3505-AABE-9FB830B3ABA2**, Network UUID
+**17692953-4248-35A0-A0DC-12685F10E308**. Host paths are
+`/System/Library/PrivateFrameworks/MediaContinuityKit.framework/Versions/A/MediaContinuityKit`
+and `/System/Library/Frameworks/Network.framework/Versions/A/Network`.
+Phone static work uses the original 24A437 cryptex cache: MediaContinuityKit UUID
+**9A3DABAB-BE8D-3581-9FB4-CEFE77D9CA4C**, Network UUID
+**9EFD671C-0044-395F-9770-7DAAF06EB31B**. Host and phone addresses are not interchangeable.
+
+The normal Rapport entry is a confirmed restriction: an own-process
+`RPRemoteDisplayDiscovery.activateWithCompletion:` returns **RPErrorDomain -71168**,
+`kMissingEntitlementErr (Missing entitlement 'com.apple.RemoteDisplay')`, immediately on
+both host builds. No session or authentication method is called. This bounds this API under
+the tested process identity; it does not settle MCK, a broker, or a wire client.
+
+Mac-M2's MCK normal configuration and discovery controls produce a different result:
+
+| Control | Observed result / proof boundary |
+| --- | --- |
+| Native usage | The native enum's exported case index and its own value witnesses construct and verify `iPhoneMirroring`, case **5**, size **33**, stride **36**. A locally guessed enum layout is not used. |
+| Endpoint factory | `MediaContinuityEndpoint.init(usage:deviceID:)` with a synthetic own-process ID, encoded through the actual native Codable conformance, returns `endpointType=applicationService` and **`applicationServiceName=com.apple.MediaContinuityKit.iPhoneMirroring`**. This is a configuration control, not a discovered phone identity. |
+| Isolated parameter factories | Native `NWParameters.browserParameters(for:)` returns `udp, multipath service: interactive, attribution: developer, include ble`; `listenerParameters(for:)` returns `udp, multipath service: interactive, no cellular, server, definite, attribution: developer`. Neither creates an active listener or session. These factory results do not identify the actual macOS 27 control-listener stack, resolved below. |
+| Native scope/options | The MCK listener scope equals Network's native **personal** constant (2). Native browser options use **personal** (1), **iPhone** device types (1), empty deviceFilter, RSSI **-70**, `applicationServiceEndpointsOnly=false`, and nil customService/predicate. Scope values belong to different native types and must not be compared across them. |
+| Ordinary discovery | The public `applicationService(name:)` descriptor and, separately, the native `applicationServiceWithOptions` descriptor containing the unchanged MCK options both reach **ready** with the native browser parameters. Each bounded five-second observation receives no endpoints and ends with **cancelled**. No connection, acceptance or phone response follows. Ready is not authentication or proof of 13 Pro visibility; an empty interval does not identify its cause. |
+
+The local macOS 26 MCK export inventory lacks these macOS 27 parameter/scope/endpoint factory
+exports. Its normal control is stopped before invocation; this is not a compatibility shim.
+[Apple's application-service API](https://developer.apple.com/documentation/network/nwbrowser/descriptor-swift.enum/applicationservice(name:))
+establishes a normal discovery mechanism, but does not promise access to Apple's private
+Mirroring service. The private MCK controls above, rather than that public documentation,
+establish the exact service name and options on the tested seed.
+
+Current macOS 27 endpoint metadata further bounds a direct-port interpretation:
+`MediaContinuityEndpoint` descriptor `0x2975932B4` has serverProtocolVersion and type fields;
+its nested EndpointType (`0x2975932D0`) reflects only **applicationService**. CodingKeys at
+`0x297593318` are serverProtocolVersion, endpointType, applicationServiceName and deviceID.
+No host/port or wired endpoint variant appears in this native representation. A different
+ControlConnectionMigrationManager field named isWiredInterfaceAvailable is not evidence of
+a USB/CoreDevice bootstrap or an independently accessible RSD port.
+
+Original phone code distinguishes two different listener owners:
+
+- `NetworkBackedControlConnectionListener`, descriptor `0x28ED92908`, has separate
+  `shouldAdvertise` and `serviceName` fields. Its builder `0x28EC87F5C` stores supplied
+  usage and that Bool, then
+  builds `serviceName` using prefix **`com.apple.MediaContinuityKit.`** at original cstring
+  `0x28EDA43B0`. The Mirroring branch materializes `iPhoneMirroring` at
+  `0x28EC8865C–88690`. The true-Bool path appends the usage name; the false path additionally
+  appends `.` and a freshly created UUID's `uuidString`, storing the result at object `+0x98`
+  (`0x28EC887C0`). Original helper resolution verifies Swift `String.append`, Foundation
+  `UUID.init()` and `uuidString`. This proves name construction, not advertisement or selection
+  of this provider in an active phone session.
+- The **media-prerequisite** owner is `NetworkBackedMediaConnectionPrerequisitesProvider`,
+  descriptor `0x28ED92D28`, resolved through metadata accessor `0x28ED0DC5C`.
+  Its synchronous factory `0x28ED102C8`, called at `0x28ED0EBCC`, invokes
+  `_nw_parameters_create_secure_udp` at `0x28ED1047C` and sets
+  `disable_listener_datapath=1`. Its result is passed into async entry `0x28ED105C4`.
+  Resume `0x28ED10714` creates a native 16-bit **zero** port value and passes it with the same
+  parameters at `0x28ED10784`. Original Network helper `0x1826B2AA0` takes the zero branch to
+  `_nw_listener_create` (`0x1826B2C30`); the nonzero branch uses
+  `_nw_listener_create_with_port` (`0x1826B2BCC`). There is no fixed TCP port in this path.
+  Actual assigned port, protection options and successful runtime startup remain unmeasured.
+  Its field-offset variable `0x2CCACE7D8` belongs to **useLLW0Interface**, not
+  `shouldAdvertise`; this Bool controls duplicate-state-update configuration at
+  `0x28ED10564–10580`. Setup `0x28ED13B0C` installs two internal Network callbacks in this
+  same media preparation path. These calls do not establish the AX control listener or
+  an accepted-connection-to-`ConnectionBackedControlStream` edge.
+- Control-listener service advertisement and session admission remain unresolved. A separate
+  `valueForEntitlement:`
+  call at `0x28ECBE4EC` passes a dynamic key. Neither `com.apple.rapport.browse` nor the Coex
+  service string is proven to be that key or a gate on this Mirroring listener.
+
+On Mac-M2, an own-process **type metadata only** control resolves the actual native class
+dispatch targets without creating any session object: `MediaContinuitySession.activate`
+uses metadata slot `+0x260`, async descriptor image offset `0x130A18`, code `0x350C4`;
+`makeControlStream` uses `+0x280`, descriptor `0x130A98`, code `0x38B84`.
+`MediaContinuityServer.activate` uses `+0xC8`, descriptor `0x130568`, code `0x2E798`.
+Offsets belong to the macOS 27 MCK UUID above. Exported dispatch thunks independently
+establish the slot offsets. This metadata control invokes none of those methods. The
+own-server control below invokes only Server.activate/invalidate; a separate subsequent
+Session control is recorded below. No live control stream is established.
+
+**Actual macOS 27 control listener:** native reflection of an own
+`MediaContinuityServer(usage: iPhoneMirroring, shouldAdvertise: false)` identifies
+`NetworkBackedControlConnectionListener<SessionMessage, StreamMessage>`, descriptor
+`0x297595988`. Its `shouldAdvertise` field is object `+0x91`, serviceName `+0x98`, network
+listener `+0xB8`, listenerReadyContinuation `+0xC0`, state `+0xE8`. Native startup
+`0x2975049B8 → 0x297507F20` reaches the configuration factory at `0x2975290BC`.
+Factory closure `0x29752B92C → 0x29752AF58` constructs the concrete stack
+**`PropertyList3<SessionMessage> → ApplicationServiceQUIC → IP`**. Setup at
+`0x297508330–508344` calls `Listener5.init(for:using:servicePrefixing:serviceScope:)`
+with servicePrefixing false and native personal scope. Exact Network export offsets,
+rather than nearest-symbol names, resolve these imports. The state handler installed at
+`0x29750893C` is `Listener5.stateUpdateHandler`; its readiness continuation is not an
+accepted-connection callback. The precise ready/resume branch remains unverified.
+Reflection after the failure below independently reports the optional concrete Listener5
+type with this same stack. This is a control-channel result on the stated macOS 27 seed;
+it must not be replaced with the isolated UDP factories or the phone media-prerequisite path.
+
+**Normal own-server activation:** two bounded, ordinary arm64 processes on Mac-M2 invoke
+native Server.activate with the configuration above and a framework-generated UUID service
+name. Both fail with the native typed error **`Errors.missingDeviceID`** (bench exit 5).
+The observed server/control states become **interrupted**, the network listener is nil,
+and normal native invalidate completes with the listener still nil. No ActivationResult,
+accepted peer, device connection or authentication result is obtained. This is a reachable
+own-process bootstrap failure. The typed error identifies a nil ID; it does not identify an
+entitlement check or a physical AX refusal.
+
+**Which ID is missing:** the actual control-listener bootstrap getter `0x29750A7A8`
+checks the weak import at `0x2D8059200` and invokes **IDSCopyLocalDeviceUniqueID** at
+`0x29750A824` through stub `0x29809EE60`. Nil takes `0x29750ABA8`, constructing the
+native error case 2 matching missingDeviceID. A separate normal getter confirms the symbol
+exists but returns nil on Mac-M2, retaining only a presence Bool. This is the **host's IDS
+identifier**, not the phone UDID or CoreDevice UUID; substituting either would not reproduce
+the native bootstrap contract.
+
+Current IDS image UUID **7D6637BC-2D2D-36BF-BFE0-4C7746E1D2D1**, path
+`/System/Library/PrivateFrameworks/IDS.framework/Versions/A/IDS`: getter `0x1955805BC`
+calls `IDSDaemonController.sharedInstance.blockUntilConnected`, then on the internal queue
+block `0x195580740` copies `controller.listener.deviceIdentifier`.
+`blockUntilConnected` at `0x1956291E4` can return early when
+`IMLockdownManager.sharedInstance.isNonUIInstall` is true (`0x195629214–629224`).
+That Bool is **false** in the normal Mac-M2 control. Own CLI and normal LaunchServices GUI
+controls instead report **isConnected=false, isConnecting=true, remoteObjectExists=true**
+and a non-nil IDSDaemonListener, with ID still nil after five seconds. Matching console/SSH
+UIDs and the GUI control exclude a simple wrong-user or SSH-only explanation under these
+observations. The same ordinary unentitled CLI on local macOS 26 obtains a non-nil ID and
+isConnected=true; this comparison does not validate the macOS 27 MCK APIs on macOS 26 or
+exclude a changed macOS 27 policy. Native `connectionComplete:withResponse:` is independently
+located at `0x195636E78`; its queued body calls `setupCompleteWithInfo:` at `0x195636F94`.
+A subsequent own-process interposer observes only service name, returned object type,
+elapsed time and the native protocol's **granted** Bool; it leaves the original request,
+response and callback unchanged. Both hosts' synchronous request to
+**com.apple.identityservicesd.desktop.auth** returns a dictionary in less than one millisecond
+in the retained paired runs, with setupInfo absent. The macOS 27 reply has a present Bool
+**granted=false**; local macOS 26 has **granted=true**. This agrees with the uninterposed
+ID/state controls. Exact native response code at `0x195638DC4–638E4C` reads setupInfo and,
+when absent, granted; it inverts that Bool at `0x195638EDC` before the continuation call.
+The synchronous reply itself is not hanging. The service-side refusal is localized below;
+later completion behavior and other session/account prerequisites remain unverified.
+The grant observation is from the instrumented own-process control, not native Mirroring or
+a 13 Pro session. No ID value, setupInfo contents or account inventory is printed or retained.
+
+**Service-side cause for the tested normal client:** the Mac-M2 executable
+`/System/Library/PrivateFrameworks/IDS.framework/identityservicesd.app/Contents/MacOS/identityservicesd`
+has two slices, UUIDs **38332636-ADA2-39DE-8E7C-CDE364838059** and
+**8C98537D-B8A7-3E1E-91D0-714CA62D7F39**. Both contain the same admission structure;
+the running slice is not measured. The concrete
+`daemonInterface:shouldGrantAccessForPID:auditToken:portName:listenerConnection:setupInfo:setupResponse:`
+callback starts at first-slice `0x100381790` / second-slice `0x1003788A4`.
+It extracts IDS entitlements from the caller's audit token. When none is present, it tests
+**IDS/EnforceFirstPartyListeners** and, when enabled, classifies the caller using
+`SecTaskCreateWithAuditToken`, `SecTaskGetCodeSignStatus` and an internal-security-policy
+predicate. First-slice helper `0x1003F3AA8` / second-slice `0x1003EA400` compares signing
+status masks; no signing/team identifier values are required by the probe. Main resolution
+of selector stub `0x100A971E0` also closes the static grant-handler call at `0x1001AD704`
+to this callback selector, without assigning the unnamed handler a guessed method name.
+
+Normal, read-only own-process controls report **EnforceFirstPartyListeners=true on Mac-M2**
+and **false on local macOS 26**; both own binaries fail the native classifier's two status
+mask comparisons. RejectDataSeparatedClients is true on both hosts. Crucially, a fresh
+**uninterposed** normal Mac-M2 probe, PID **69622**, still returns nil ID / connecting state;
+a daemon log query restricted to this PID and the static first-party-enforcement prefix
+finds **one rejection event and zero allow events**, selecting
+`REJECTING 3rd-party caller with no entitlements`. Only these counts/branch Bools are retained.
+This confirms execution of the first-party rejection branch for that client; it is not
+merely a feature-flag correlation or an interposer artifact. This normal IDS-dependent
+MCK bootstrap entry is therefore restricted for the tested unentitled third-party process.
+The control changes no flags, signing, entitlements or account state. It neither establishes
+an authorized outgoing MCK session nor excludes a legitimate broker, another provider or
+an independently reachable device wire service.
+
+**Outgoing Session is a separate entry:** a normal own-process constructor, using a
+synthetic endpoint ID and nil optional UUID, completes with state inactive. Native reflection
+identifies connectionVendor as **NetworkBackedControlConnectionVendor**, with connection and
+migration manager nil. The exact initializer export demangles to
+`Session.init(usage:endpoint:clientSessionID:)`; the optional UUID is a **session ID**, not
+clientDeviceID. No ID value is retained. Main also resolves the indirect call at
+`0x29748C2E8` to a Logger value-witness copy, not a connection-vendor operation; a peer's
+earlier interpretation of that instruction is excluded.
+
+The actual activation chain reaches `0x29749ADA8 → 0x297492CB8`. Its continuation checks
+Session.connection (`+0xA8`) and connectionVendor (`+0xD0`), then schedules closure
+`0x2974BBC78 → 0x2974933E8`. The latter projects the vendor and copies usage, remoteEndpoint
+(`+0x378`) and clientSessionID (`+0x290`) before entering async code `0x2974A5F10` through
+descriptor `0x297588150`. Own metadata-only controls verify the field-offset variables;
+these are not heap or identity-value reads.
+
+In that outgoing helper, exact Network export matches establish browser options construction
+at `0x2974A6530`, **ApplicationService** provider creation at `0x2974A6594`, native Browser2
+allocation at `0x2974A65D0`, and its asynchronous results iterator. A result's NWEndpoint
+deviceID is read at `0x2974A6B24` and compared against the supplied endpoint ID before selection
+on the tested iPhoneMirroring branch. After selection, `0x2974A7550` constructs configuration
+using **PropertyList3 / ApplicationServiceQUIC / IP**; `0x2974A71A0` calls exact
+`Connection3.init(to:using:)`. This closes a static outgoing discovery-to-connection path;
+it is not a discovered phone endpoint or authentication result. Its lower-layer policy,
+successful admission and any later IDS dependency are not excluded by these instructions.
+
+A separate normal own Session.activate control, with nil incoming video/audio configurations
+and a synthetic endpoint ID that cannot match a real device, returns native
+**TaskTimeoutError.timedOut after 10,253.224 ms** (bench exit 5), rather than missingDeviceID.
+State becomes interrupted and normal native invalidate completes. Native event-stream metadata
+and the exported thunk's indirect return convention are checked before invocation. The bench
+log's `synthetic_device_filter` caption refers to the final endpoint-ID match; it does not
+establish a nonempty NWBrowser.Options.deviceFilter. No makeControlStream, accepted peer or
+phone operation occurs. This distinguishes the observed activation failures, without proving
+that an actual phone is discoverable, that browser results are unrestricted, or that the
+outgoing path can replace the provider used by native Mirroring.
+
+The other prepared control does **not** subscribe to AX. Normal `dlopen` of the own bench
+dylib in native local Mirroring is rejected first by its sandbox, then by architecture,
+and finally, with matching arm64e in the native temporary directory, by platform
+library validation. The handle stays nil and no bench send/publisher function executes.
+Passive taps are detached without a new session hit. This is a failed loader preflight,
+not an AX protocol refusal or proof that all passive observation is unavailable.
+
+**Next discriminator:** establish which endpoint the phone's actual MCK provider publishes,
+whether it uses the canonical or UUID service name, and how native Mirroring chooses and
+exchanges that endpoint. Then resolve legitimate broker/provider access and acceptance into
+an actual control stream. Do not infer the native host/phone listener roles from wrapper names
+or treat the synthetic outgoing timeout as a successful independent entry.
+Retain native personal scope and legitimate session authorization. A physical initial archive,
+native rectangles, coverage and latency are still required. The
+[dated record](verification.md#2026-10-11--normal-rapport-entry-mck-discovery-and-native-loader-preflight)
+maps local controls and cleanup.
+
 ## XCTest snapshot service boundary (2026-09-22)
 
 **Static evidence only.** Inspected the arm64 slices in the Mac-local image
