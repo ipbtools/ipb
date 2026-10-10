@@ -2,7 +2,7 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-10-10. This section is overwritten; dated records below are append-only.**
+**Updated 2026-10-11. This section is overwritten; dated records below are append-only.**
 The latest AXAudit runtime work is October 9 on macOS 26.5.1 / Xcode 27 B6 /
 CoreDevice 642.15 with an unlocked wired 13 Pro on iOS 27.0 (24A437). The user explicitly
 allocated the 13 Pro to this round and confirmed real finger input. Finger and injected
@@ -50,6 +50,15 @@ static rechecking confirms that the default host demand getter depends on the re
 permission cache, although bulk receiving and ordinary property requests use separate paths.
 Normal initialization/cache lifecycle and the physical producer's transport/listener boundary
 are the next offline discriminators. No new device session, tree or rectangle is obtained.
+The October 11 static follow-up connects AX consumer creation through its notifying wrapper
+to actual PlaybackServer construction in `SceneInteractorBackedContinuitySession`'s
+`initializePlaybackServer(using:)`, alongside a ControlMessageSession. Original conformance
+metadata identifies two transport-provider families: Rapport-backed MediaTransport and
+MediaContinuityKit-backed MCK. Their normal listener/authorization entries are the next
+discriminator; no independently reachable session is established. Normal AX bundle loaders
+and inspected AppKit imports provide no direct identification/cache repair, and enhanced-UI
+notification requires remote permission already present. No phone, VoiceOver, SSH or GUI
+operation occurred in this follow-up, and no physical AX archive or native rectangle was received.
 
 ### Remaining work, in recommended order
 
@@ -59,7 +68,7 @@ are the next offline discriminators. No new device session, tree or rectangle is
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | AXAudit selection, issue association, Lab activation and Calculator preview are positive; graphs remain partial and preview geometry is an overlay measurement. Physical handlers omit ordinary Frame, return nil for parameterized reads and gate properties/actions/parents on task-port permission. Action completion hides native outcome; nondeveloper text/children remain capped at 64 UTF-16 units/51. The phone command-line interface has a separate entitlement check and exposes no dump. Mirroring has a matched physical bulk tree/Frame producer, AXP 21 → iOS 2003, resolved subscription and synthetic codec controls. Live 13 Pro video/control works; concurrent ipb screenshot is black with cause unconfirmed. Two real VoiceOver PIDs send identification 7, while ordinary attribute permission checks read current ID 0 before storing 7. The remote entitlement passes but is filtered to 0; the same peer's cache is 0x0E without bit 0x10, and the attribute handler still has remote permission 0 with current ID 7. macOS 27.2 HIServices retains the order/filter statically; native runtime and other initialization routes remain unverified. No physical AX archive is received. Separate-process demand queries are not Mirroring state. A normal host authentication-broker query is denied with code 111; sharingd checks its private unlock-manager entitlement. Independent network access and tree coverage remain open. Native app-debugger Frame getter never executed. | Agent can map normal identification/permission-cache initialization and reverse-trace the physical bulk producer to transport/listener authorization before another live run. Independent reviews do not establish a new API; the default subscription demand still depends on the permission cache. After a concrete initialization lead, compare the two legitimate VoiceOver/Mirroring startup orders with bounded same-peer captures. The same 13 Pro is now physically identified on Mac-M2. Native macOS 27 comparison needs an eligible same-Apple-Account session; the user raised this requirement, and no account change is made. Bounded taps are prepared but not run against the wrong default phone. Account setup is user-owned; developer-tool pairing is a separate agent investigation. VoiceOver is restored off. Keep testmanagerd snapshot second. The user rejected page-wide serial preview due to latency; retain it only as a single-target fallback. Backend 91701 remains a separate hit-test lead. Preserve target/connection/PID/token identity and cleanup. The user chose **“用 13 pro 吧”**. Product work still needs coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [identification follow-up](protocol.md#mirroring-client-identification-ordering-and-macos-27-comparison-2026-10-10), [subscription](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
+| **UI element / semantic context research** | AXAudit selection, issue association, Lab activation and Calculator preview are positive; graphs remain partial and preview geometry is an overlay measurement. Physical handlers omit ordinary Frame, return nil for parameterized reads and gate properties/actions/parents on task-port permission. Action completion hides native outcome; nondeveloper text/children remain capped at 64 UTF-16 units/51. The phone command-line interface has a separate entitlement check and exposes no dump. Mirroring has a matched physical bulk tree/Frame producer, AXP 21 → iOS 2003, resolved subscription and synthetic codec controls. October 11 connects the AX consumer wrapper and ControlMessageSession to actual PlaybackServer construction, with Rapport and MediaContinuityKit provider families; their normal entry/authorization remains unproven. Live 13 Pro video/control works; concurrent ipb screenshot is black with cause unconfirmed. Two real VoiceOver PIDs send identification 7, while ordinary attribute permission checks read current ID 0 before storing 7. The remote entitlement passes but is filtered to 0; the same peer's cache is 0x0E without bit 0x10, and the attribute handler still has remote permission 0 with current ID 7. Normal bundle loaders provide no direct cache repair. macOS 27.2 HIServices retains the order/filter statically; native runtime and indirect initialization routes remain unverified. No physical AX archive is received. Separate-process demand queries are not Mirroring state. A normal host authentication-broker query is denied with code 111; sharingd checks its private unlock-manager entitlement. Independent network access and tree coverage remain open. Native app-debugger Frame getter never executed. | Agent can trace the Rapport RPRemoteDisplaySession/RPStreamSession and MediaContinuityKit MediaContinuitySession/ControlStream constructors to normal listener authorization and session acceptance. Conformance and object installation do not prove a usable independent client. Further VoiceOver/Mirroring startup-order captures need a concrete new initialization discriminator; the default subscription demand still depends on the permission cache. The same 13 Pro is physically identified on Mac-M2. Native macOS 27 comparison needs an eligible same-Apple-Account session; the user raised this requirement, and no account change is made. Bounded taps are prepared but not run against the wrong default phone. Account setup is user-owned; developer-tool pairing is a separate agent investigation. VoiceOver is restored off. Keep testmanagerd snapshot second. The user rejected page-wide serial preview due to latency; retain it only as a single-target fallback. Backend 91701 remains a separate hit-test lead. Preserve target/connection/PID/token identity and cleanup. The user chose **“用 13 pro 吧”**. Product work still needs coverage/lifetime policy and the macOS 27 gate. See [current plan](devicehub-alignment.md#axaudit-capture-plan), [provider path](protocol.md#mirroring-ax-consumer-installation-and-transport-providers-2026-10-11), [identification follow-up](protocol.md#mirroring-client-identification-ordering-and-macos-27-comparison-2026-10-10), [subscription](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10) and [XCTest boundary](protocol.md#xctest-snapshot-service-boundary-2026-09-22). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -5423,3 +5432,72 @@ Rechecked static sources remain under `~/.local/state/ipb/20261010-mirroring-ses
 `hiservices-disassembly.txt`) and `20261010-client-id/mac27/` (`hiservices-targets.txt`).
 All owned consultation jobs are closed. Documentation-only checks do not close the supported
 macOS 27 real-device smoke gate.
+
+
+## 2026-10-11 — AX consumer installation, transport providers and normal bundle loading
+
+**Scope/source control:** offline follow-up to the user's request to continue toward a tree
+and native element bounds without XCTest or a phone server. Local host is **macOS 26.5.1 /
+25F80**. The phone source is the already retained **iPhone14,2 / iOS 27.0 / 24A437**
+ScreenSharingKit, UUID **6AA674A8-B0DC-3B87-AF55-B92FE8DE286B**. Its entire 2,530,132-byte
+`__text` is compared again with the complete Apple SystemCryptex image on the mounted external
+volume: exact byte match, SHA-256
+`e00b0045ea82c5030e8035cf206fc4e283a7cd705542b137dca3b46e084a80b8`.
+Code can therefore use the DeviceSupport copy, while descriptors, type references,
+conformances and literal addresses are read from the original cache. The partial sibling DMG,
+rewritten metadata, unresolved exports and zero-initialized vtable/field offsets are excluded.
+
+**Phone construction result:** the original source literal identifies
+`SceneInteractorBackedContinuitySession.initializePlaybackServer(using:)`. Its async chain
+creates `ProxyingAccessibilityMessageConsumer`, supplies the primitives, and wraps it in
+`NotifyingPlaybackEventConsumer` with the verified `PlaybackEventConsuming` witness. Main
+rechecking follows that wrapper and `ControlMessageSession` into a newly allocated object
+whose original accessor/descriptor identifies **PlaybackServer**. This establishes actual
+installation rather than merely a nearby class name. Numeric runtime field offsets and exact
+reflected property-to-offset names are not recovered. A parallel AX constructor is confirmed,
+but its enclosing owner remains unresolved; the nearby client-status consumer is a different
+type. This extends the prior Bool-to-AXP start/stop trace without proving runtime activation.
+
+**Transport boundary:** the session's original type reference resolves
+`TransportProvidingContinuityServerSession`; the control session resolves `ControlTransport`.
+All 1,069 ScreenSharingKit conformance records are scanned with no parse errors. They identify
+two concrete session/control families: **MediaTransportServerSession /
+MediaTransportControlStream**, with explicit **RPRemoteDisplaySession / RPStreamSession**
+fields, and **MCKBackedContinuityServerSession / MCKControlStreamBackedControlTransport**,
+whose references resolve to **MediaContinuityKit.MediaContinuitySession / ControlStream**.
+`MockControlMessageStream` is not a production-access proof. This single-image result does
+not establish which provider ran on the phone, any normal host entry, authorization success,
+an independently reachable stream, or the absence of an external/USB implementation.
+
+**Normal Mac initialization controls:** two read-only inventories are delegated to
+GPT-6 Luna (**source: peer**); the main session rechecks decisive raw code and extends the
+server-installation proof above. Among 19 direct HIServices permission-helper routes,
+18 store incoming identification after the check; `PostKeyEvent` has no incoming-ID store.
+The AccessibilityBundles required/full token loaders (UUID
+**15AB226A-3C61-305A-AF55-616D941D746D**) perform normal image-callback/bundle loading and
+`forceBundleLoad` / `mayNeedBundleLoad` checks, with no direct HIServices ID/cache writer in
+their inspected bodies. CoreAccessibility/AppKitAdditions registers safe categories. A live
+AppKit image inventory (UUID **CF57A4FC-4BE3-3D95-B543-D744E8718B26**) resolves 4,812 of 4,815
+auth stubs, including ordinary AX imports, but no identification-override/remote-content
+import. Unresolved or indirect calls and effects of subsequently loaded bundles remain open.
+The native `AXEnhancedUserInterface` constant is checked directly; the handler's demand
+notification still requires remote permission already set. These controls provide no new
+normal cache-repair route and do not prove every possible route equivalent.
+
+**Result/next discriminator:** continue at the two providers' constructors, listener policy
+and normal session acceptance, retaining authentication boundaries and checking any usable
+lead on the allocated 13 Pro. The [protocol section](protocol.md#mirroring-ax-consumer-installation-and-transport-providers-2026-10-11)
+records decisive addresses. A genuine initial archive with native bounds, coverage/lifetime
+and computer-only access is still required. No phone, SSH, GUI or VoiceOver operation is run;
+no production code, forced identification, permission-cache writes or entitlement changes
+are made. No physical AX archive or native rectangle is received. This is a documentation
+and static-analysis result, not a build/install/smoke or newer-host runtime pass.
+
+Raw scripts and evidence stay outside Git in `~/.local/state/ipb/20261011-ax-init/`:
+`ssk-source-control.json`, `verified-session-literals.json`, `consumer-conformances.json`,
+the `0x2a1953b8c.txt` construction body, `session-transport-typerefs.json`,
+`transport-conformances.json`, `transport-reflection.json`, `mck-typerefs.json`,
+`his-gate-store-order.json`, selected bundle disassembly/image inventories,
+`appkit-direct-call-inventory.json`, `his-enhanced-ui-constant.json`, and `handoff.md`.
+The original source is
+`/Volumes/CSVolume/ipb-research/20261009-mirroring-ax/cryptex/043-68607-705.dmg`.

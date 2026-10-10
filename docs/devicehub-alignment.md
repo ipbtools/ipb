@@ -343,16 +343,25 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    The [subscription follow-up](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10)
    identifies the actual message nesting and activation gates; the annotation entitlement
    string is not a discovered remote service.
-   The October 10 independent reviews (source: peer) refine the next investigation without
-   establishing a new usable API. First map normal permission-helper callers, identification
-   and override writers, and cache creation/update/removal; `_loadAccessibilityBundles`
-   follows the ID store, but whether it can initialize a valid remote-content connection is
-   still a hypothesis. In parallel at the research level, trace the physical cache producer's
-   creators and consumers back to transport, listener and authorization boundaries. Mark
-   unresolved Swift/ObjC indirect calls explicitly; absence from resolved direct callers is
-   not proof that a USB entry does not exist. These offline tasks do not require a Mac-M2
-   account change. Only after identifying a concrete normal initialization route, compare
-   VoiceOver-before-Mirroring with Mirroring-before-VoiceOver in an eligible 13 Pro session.
+   Normal initialization is now checked through the permission-helper callers and the
+   AccessibilityBundles/AppKitAdditions loaders. Of 19 inspected direct permission routes,
+   18 install the incoming ID after the check and keyboard posting has no ID store. The
+   loaders provide no direct ID/cache writer, and `AXEnhancedUserInterface` only announces
+   demand if remote permission already
+   exists. Other indirect routes remain open, but repeated ordinary attribute/notification
+   probes have no new discriminator. The phone-side trace now reaches the continuity
+   session's `initializePlaybackServer(using:)`: its AX consumer is wrapped and installed
+   alongside `ControlMessageSession` into an actual `PlaybackServer` object. The next
+   concrete boundaries are **MediaTransportServerSession / MediaTransportControlStream**
+   (Rapport remote-display/stream objects) and **MCKBackedContinuityServerSession /
+   MCKControlStreamBackedControlTransport** (MediaContinuityKit session/control stream).
+   Trace these providers' constructors, normal listener authorization and session acceptance;
+   a conformance or object installation is not a working independent session. See the
+   [resolved provider path](protocol.md#mirroring-ax-consumer-installation-and-transport-providers-2026-10-11).
+   Mark unresolved Swift/ObjC indirect calls explicitly; the single-image conformance scan
+   does not exclude external implementations or USB reuse. These offline tasks do not require
+   a Mac-M2 account change. Only after a concrete normal initialization or transport entry
+   justifies a live control, compare the two legitimate startup orders in an eligible 13 Pro session.
    Record the same peer/port through permission cache, demand, capability, subscription and
    an actual incoming archive, with bounded captures and restoration. The bulk receive path
    is separate from ordinary attribute requests, but the default demand getter reads the

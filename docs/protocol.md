@@ -2256,6 +2256,73 @@ above is still a separate static positive. VoiceOver is restored **off**, all ow
 detach, and local evidence is mapped in the
 [follow-up record](verification.md#2026-10-10--mirroring-client-id-7-arrives-after-permission-check-macos-27-static-comparison).
 
+## Mirroring AX consumer installation and transport providers (2026-10-11)
+
+**Static evidence; no new phone session.** The source remains the allocated iPhone14,2 /
+iOS 27.0 / **24A437** ScreenSharingKit, UUID **6AA674A8-B0DC-3B87-AF55-B92FE8DE286B**.
+The full 2,530,132-byte `__text` is re-compared with the original Apple SystemCryptex
+`043-68607-705.dmg`: exact match, SHA-256
+`e00b0045ea82c5030e8035cf206fc4e283a7cd705542b137dca3b46e084a80b8`.
+Descriptors, conformances and strings below are read from that original cache, not rewritten
+DeviceSupport metadata or exports. Host observations below use macOS **26.5.1 / 25F80**;
+they are not a new macOS 27 comparison.
+
+The physical AX consumer is now connected to actual playback-server construction:
+
+| Edge | Decisive original-code / metadata evidence |
+| --- | --- |
+| Continuity session initialization | Descriptor `0x2A1A4A9D4` names `SceneInteractorBackedContinuitySession`. Its source-file literal is at `0x2A1A7BBC0`; the `initializeSession()` and `received transport` references appear in continuations `0x2A1950944` and `0x2A1951050`. The async chain reaches `0x2A1952F48`, which references the exact `initializePlaybackServer(using:)` literal at `0x2A1A7C170`. |
+| Concrete AX consumer | `0x2A19532D0` calls accessor `0x2A17D4110` for descriptor `0x2A1A4599C`, `ProxyingAccessibilityMessageConsumer`. Allocation initializes activation false and primitives nil, then copies supplied primitives into the optional at object `+0x78`. The object is retained in async-context `+0x420`. |
+| Wrapper | Accessor `0x2A193451C` resolves original metadata `0x2CF76FDE0` to descriptor `0x2A1A4A310`, `NotifyingPlaybackEventConsumer`. At `0x2A1953464`, the AX consumer and its `PlaybackEventConsuming` witness are stored at wrapper `+0x70/+0x78`; the wrapper is retained at async-context `+0x430`. Reflection names `underlyingConsumer` and `didConsumeSubject`; conformance `0x2A1A3C4B8` verifies the wrapper's protocol. |
+| Control session | Accessor `0x2A18D6598` names `ControlMessageSession` (descriptor `0x2A1A48D88`); allocation and initializer `0x2A18D1EDC` occur at `0x2A1953510–3538`, retaining the result at async-context `+0x440`. |
+| Actual server installation | `0x2A1953F74` calls `PlaybackServer` accessor `0x2A1A25EAC` (descriptor `0x2A1A4D388`), then allocates the server, held in `x21`. At `0x2A1954298`, the wrapper and witness are stored into this object using the field-offset variable `0x2CD30CC20`. At `0x2A195419C`, the retained control session is stored using `0x2CD30CBE8`. This proves object installation; numerical runtime offsets and exact reflected field-to-offset names are not recovered from zero-initialized metadata. |
+
+The parallel constructor at `0x2A184CD98` also creates the AX consumer and wraps it through
+`0x2A184CE8C` (`0x2A184CF4C` store). Its enclosing owner is not yet resolved. A nearby
+accessor, `0x2A18F96BC`, names **ProxyingClientStatusEventConsumer**, not the AX consumer;
+the two must not be conflated. Async-context offsets are not continuity-session object fields.
+
+The upstream transport boundary is narrower now. The original symbolic references resolve
+`SceneInteractorBackedContinuitySession.transportSession` to protocol
+`TransportProvidingContinuityServerSession` (descriptor `0x2A1A4A1B0`),
+`PlaybackServer.session` to `ControlMessageSession`, and its `transport` to `ControlTransport`
+(descriptor `0x2A1A4D22C`). A scan of this ScreenSharingKit image's 1,069 conformance records
+resolves these concrete providers:
+
+| Session provider | Control transport | Backing state established by original reflection |
+| --- | --- | --- |
+| `MediaTransportServerSession` (`0x2A1A3ED88` conformance) | `MediaTransportControlStream` (`0x2A1A2F700`) | Session holds `RPRemoteDisplaySession`, `streamServer` and `controlStream`; control stream holds `RPStreamSession`, `messenger` and `dataStream`. The two Objective-C type names are explicit in the type references. |
+| `MCKBackedContinuityServerSession` (`0x2A1A402D8`) | `MCKControlStreamBackedControlTransport` (`0x2A1A31B30`) | Session holds `MediaContinuityKit.MediaContinuitySession` and incoming-control transport state; the adapter holds `MediaContinuityKit.ControlStream`. Both module/type names resolve through original descriptors. |
+
+`MockControlMessageStream` is another `ControlTransport` conformance in the image; its
+presence is not a production or phone-access control. These providers identify where to trace
+stream creation, listener authorization and session acceptance. They do not show that a
+normal computer client can instantiate an effective provider, reuse CoreDevice/USB pairing,
+or subscribe without native Mirroring. Conformances in other images remain outside this scan.
+
+The normal Mac initialization lead is also bounded. Current HIServices has 19 inspected
+direct permission-helper routes: 18, including notification registration/removal, store the
+incoming identification only after checking access; the keyboard-posting route has no such
+store. `_loadAccessibilityBundles` dynamically calls
+the token-bearing exports of **AccessibilityBundles** (UUID
+**15AB226A-3C61-305A-AF55-616D941D746D**). Its required loader
+`0x230F0A260` installs a dyld image callback and loads required bundles; its full loader
+`0x230F0A510` checks `forceBundleLoad` / `mayNeedBundleLoad` entitlements. Neither loader
+directly writes HIServices identification or remote-access cache state. The inspected
+CoreAccessibility/AppKitAdditions routines register safe categories; their resolved calls
+provide no such direct writer. A separate AppKit auth-stub inventory resolves ordinary AX
+imports but no identification-override/remote-content import; indirect routes are not excluded.
+The `AXEnhancedUserInterface` handler at `0x187BB3DE0–3EB8` can load additional bundles, but
+posts the demand-change notification only when remote permission is already set. This is
+not a discovered way to repair the observed zero remote permission.
+
+**Remaining proof:** trace the two concrete provider families to their normal listener and
+authorization entry, then obtain a real initial AXP archive in an eligible, identity-verified
+13 Pro session. Numerical native bounds, tree coverage and independent client access remain
+unproven. No code changes, entitlement changes, forced identification or permission-cache
+writes were made. The [dated record](verification.md#2026-10-11--ax-consumer-installation-transport-providers-and-normal-bundle-loading)
+maps retained local source controls and the current investigation boundary.
+
 ## XCTest snapshot service boundary (2026-09-22)
 
 **Static evidence only.** Inspected the arm64 slices in the Mac-local image
