@@ -327,6 +327,12 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    launch splash is temporarily unreadable. Direct AX semantic actions are a new separate hypothesis;
    current node-centre actions use verified ipb HID. A one-off concurrent screenshot timeout has
    no diagnosed cause; a later active-AX screenshot works. Stop-ack socket races are recorded.
+   Before declaring WDA parity, compare the same 13 Pro page against an actual XCTest snapshot:
+   match identifiers/labels and logical-point frames, separate container hierarchy from usable
+   controls, and measure warm snapshot time separately from Runner setup. The current native
+   reference is blocked by the phone's explicit XCTest passcode authentication; no successful
+   same-page XCTest baseline exists yet. New AX action-subset replies are positive, while
+   attribute-support Bools contradict already readable fields and need their own semantics control.
 3. Verify the supported **macOS 27 + Xcode 27 + iOS 27** matrix before product integration.
    The successful current AX client runs on supplementary macOS 26.5.1. Then extend the existing
    session layer for CLI/MCP; no duplicated transport, Runner or new phone app is proposed.

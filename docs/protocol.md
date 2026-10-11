@@ -2762,6 +2762,54 @@ There is no reproduced permanent screenshot/AX incompatibility or diagnosed caus
 Direct semantic AX actions remain untested on this route. Current product HID behavior and
 the supported macOS 27 gate are unchanged. See the [condensed physical record](verification.md#2026-10-11--devicesapp-raw-dtx-tree-rectangles-and-explicit-application-control).
 
+### Additional AX queries and DTX discovery (2026-10-11)
+
+**Physical read-only replies, same 24A437 seed:** request type **9** takes
+`parameters.actions` and returns the supported subset of the supplied action numbers; type
+**10** takes `parameters.attributes` and returns an attribute-number → Bool dictionary.
+Both preserve a translation object received in this connection and use the same NSData
+callback transport. Original APT dispatch **0x24FE1EC1C–0x24FE1EC24** selects
+`processSupportedActions:` (implementation **0x24FE14C18**); **0x24FE1EAEC–0x24FE1EAF4**
+selects `processSupportsAttributes:` (**0x24FE14E18**). The actions parameter key is the
+original CFString at **0x275E89020**, and attributes remains **0x275E89000**.
+
+On the visible XCTest authentication sheet, the received application root has label/Frame 21
+and 15 child handles. A type-9 query over the **1…17** action cases in the shipped implementation
+returns `[]` for that root and `[2,7,8,12]` for its first child, with error 0. No action is sent.
+Type 10 reports false for `[8,21,3,25,53]`, including fields already returned by type 5.
+Thus this Bool query is **not yet a reliable oracle of readable fields**; its semantics and
+client-context discrepancy remain open. Do not discard a successfully read frame/label based
+on that result or equate an advertised action with a verified visible effect.
+
+**Static action branches only:** request type **7** reaches the original iOS action dispatcher
+**0x24FE0F07C**. Its actionType **5** calls `press` (**0x24FE0F16C–0x24FE0F180**), and
+actionType **11** calls `scrollToVisible` (**0x24FE0F194–0x24FE0F1A8**); other cases call
+`performAction:withValue:`. Request type **8** reaches `processSetAttribute:`
+(**0x24FE1EB40–0x24FE1EB48**, implementation **0x24FE146C8**). None of these mutation
+paths has been exercised by this investigation. Existing centre actions still use ipb HID.
+
+**DTX is a transport shared by different servers, not a single permission/capability domain.**
+An ordinary connection to the current 13 Pro's `com.apple.instruments.dtservicehub` returns
+**111 published capability/version keys** during its handshake. These include target metadata,
+codec flags and per-service capabilities; they are not 111 independently callable services.
+Selected advertisements are `processcontrol.capability.viewdebuggingutils=1`,
+`deviceinfo.app-life-cycle=1`, `mobilenotifications=2`, `filetransfer=1`,
+`httparchiverecording=2`, `coreml.perfrunner=4` and `coreai.perfrunner=27001`, each under
+`com.apple.instruments.server.services.`. Their arbitrary-app reachability and usefulness
+remain untested. Process control is used successfully to launch/stop this run's own Runner.
+Existing telemetry/process/screenshot clients are already implemented by
+[pymobiledevice3](https://github.com/doronz88/pymobiledevice3/blob/master/docs/api/dvt.md);
+these advertisements should not all be presented as newly discovered functions.
+
+The Xcode B6 host `Contents/SharedFrameworks/DVTInstrumentsFoundation.framework/Versions/A/`
+`DVTInstrumentsFoundation` is version **65000**, arm64 UUID
+**8C827C84-C90A-3FC6-8EC5-F0CAF47DD689**. Its
+`-[DTProcessControlService insertViewDebuggingLibrariesForPid:]` at **0x3C4A0** chooses
+`libViewDebuggerSupport.dylib`, calls **task_for_pid at 0x3C588**, and has a failure branch
+if no task is obtained. This is host static evidence of a process-debugging/injection path,
+not proof of a universal UIView-tree interface for installed App Store applications.
+No library is injected by this run.
+
 ## XCTest snapshot service boundary (2026-09-22)
 
 **Static evidence only.** Inspected the arm64 slices in the Mac-local image

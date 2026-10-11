@@ -56,6 +56,7 @@ See [wire/source evidence](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11),
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
 | **UI element / semantic context research** | DevicesApp raw DTX returns real AX trees/frames on the 13 Pro: Calculator 24/24, History 4/4, Settings main 13/13, Battery 32/32, Home 29/29, ordinary Bilibili modal/keyboard 40/40. Native/Python bulk codecs agree; node-centre HID transitions have screenshot and tree confirmation. Automatic bulk/frontmost can select unrelated PDUIApp; explicit PID reads and system hit-test-derived PID reads work on tested pages. Pure Python fresh-session capture takes 740 ms for Calculator, 941 ms for Battery and 1744 ms for Bilibili. A launch-splash hit test returns nil/error 8 before visible-page success. This is AX graph coverage, not every UIKit view. One concurrent screenshot timeout and stop-ack closure races remain undiagnosed. Earlier Inspector/Mirroring restrictions are separate entry paths. | Agent-fixable: target/overlay coverage, token/page generation contract, persistent-session latency, supported macOS 27 gate, then CLI/MCP integration. Keep one outstanding semantic read and preserve unsolicited packets. Do not use arbitrary first foreground event, replay uncertain input or claim all apps complete. The user chose **“用 13 pro 吧”** and rejected page-wide serial preview. See [current protocol](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
+| **AX vs XCTest baseline and additional DTX functions** | Fresh Calculator AX capture again returns 24 nodes/24 frames in 946 ms. The 13 Pro displays an iPhone-passcode sheet for **XCTest / Enable UI Automation**; the native Xcode reference exits during bootstrap before a usable WDA snapshot. Same-page node/rectangle and latency comparisons are still pending. AX request 9 returns real action subsets; request 10 reports false even for fields already read. Instruments publishes 111 capability/version keys, including metadata/flags rather than 111 services. | User-owned: complete the phone's explicit XCTest authentication, without sharing its passcode. Agent-fixable afterward: same-page snapshots, geometry/coverage comparison, action/support semantics and service-specific validation. Do not infer an AX speed win from failed XCTest setup or treat the view-debugging advertisement as arbitrary-app access. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
 | **Silent media loss / cold-start budgets** | Static silence is now correctly tolerated; explicit stream/connection errors fail. Silent loss without an error callback remains indistinguishable from idle until content changes. Setup/watchdog margins are policy values without cold-start calibration. | Agent-fixable measurement work; do not treat a frame-count ceiling as an established transport lifetime. |
@@ -5839,3 +5840,53 @@ Raw packet archives, screenshots and ad hoc probes remain outside version contro
 ~/.local/state/ipb/20261011-provider/. Local handoff.md and the per-run summary.json files map
 native source identities, exact commands, unsuccessful controls and cleanup. No raw logs,
 snapshots, complex one-off scripts or success-only evidence files are committed.
+
+## 2026-10-11 — XCTest comparison precondition and additional DTX discovery
+
+Same supplementary host/device as the preceding DevicesApp record: macOS 26.5.1 / 25F80,
+Xcode 27 B6 / CoreDevice 642.15, allocated iPhone 13 Pro / iOS 27.0 / 24A437, portrait
+390×844 points. Fresh Calculator capture again obtains **24 nodes / 24 frames**, child walk
+**571 ms**, complete AX session **946 ms**, with normal cleanup. This is a repeat observation,
+not a same-page XCTest performance comparison.
+
+**XCTest baseline remains pending.** An existing WDA provisioning profile includes this
+phone. The local Appium WDA source is pinned to
+**d15c0b2dbaa850fa712fba817e51cf8d5026d9f2**. The old Xcode 26 artifact was reused first,
+then the same source was separately built with Xcode 27 B6 (**TEST BUILD SUCCEEDED**), signed
+with the existing valid development identity/profile, and installed as the owned reference
+`ai.looktech.codex.ondevicewda.xctrunner`. Neither constitutes a working UI-test session.
+Third-party DTX startup encounters driver-channel closure/handshake timeout. Native Xcode
+`test-without-building`, selecting only UDID `00008110-0014711C3CC3801E`, ends with
+**TEST EXECUTE FAILED**, Runner bootstrap exit **74**, before any usable WDA source reply.
+The observed phone screen displays **“为 XCTest 输入 iPhone 密码 / Enable UI Automation”**.
+The user has been asked to complete that explicit phone authentication manually. No passcode
+is read, supplied or bypassed. Developer Mode being enabled has not completed this separate step.
+The screen is the current blocking precondition; it does not diagnose every earlier transport
+failure. No WDA node count, rectangle equivalence or latency win is claimed yet.
+
+**Additional read-only AX evidence:** system hit test correctly identifies the authentication
+UI's actual PID 58239. Its application root has numerical Frame 21 and 15 child handles.
+Received translations are used for request **9**, parameter `actions=[1…17]`: application
+result `[]` and first-child result `[2,7,8,12]`, error 0, approximately 12/21 ms. Request **10**,
+parameter `attributes=[8,21,3,25,53]`, returns all false, error 0, although type 5 has already
+returned children/frame/label. The support-query semantics remain unresolved; its Bool result
+must not erase successful data reads. No action or attribute write is sent to the auth UI.
+Original 24A437 APT dispatch/function addresses and the static press/scroll/set branches are
+recorded in [protocol.md](protocol.md#additional-ax-queries-and-dtx-discovery-2026-10-11).
+
+**DTX inventory proof boundary:** a normal Instruments DTX handshake publishes **111**
+capability/version keys. The dictionary includes service capabilities, target metadata and
+compression flags, not 111 independent services. Notable untested entries include view-debugging
+utilities, app-life-cycle, HTTP archive, file transfer and Core ML/Core AI performance runners.
+The matched Xcode B6 host view-debugging method selects a support dylib and calls task_for_pid;
+it is not a demonstrated alternative for arbitrary App Store view trees. Existing telemetry,
+process and screenshot clients in pymobiledevice3 are existing implementations, not new discoveries.
+
+Native testing has ended, no owned WDA or Maestro process remains, and all owned Python
+connections/assertions have closed. The temporary reference app remains installed for the
+pending authenticated comparison and must be removed when that comparison ends. Phone state
+is the user-owned authentication sheet; no automated interaction with it is attempted.
+Local captures, signed/built reference, comparison scripts and exact per-run results stay in
+~/.local/state/ipb/20261011-provider/. The external handoff identifies the next native command,
+fresh-result-directory requirement, match rules and remaining cleanup. Documentation-only
+repository changes do not establish a product CLI/MCP or supported macOS 27 smoke gate.
