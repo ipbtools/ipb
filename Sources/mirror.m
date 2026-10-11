@@ -71,6 +71,7 @@ extern int uhid_make_edge_touch_hid_report(double,double,int,int,int,void*);
 extern int uhid_make_scroll_hid_report(int64_t,int64_t,uint32_t,uint32_t,uint32_t,double,double,void*);
 extern int uhid_make_scroll_wire_hid_report(int32_t,int32_t,uint32_t,uint32_t,double,double,void*);
 extern int uhid_make_absolute_pointer_hid_report(double,double,uint32_t,void*);
+extern int uhid_make_keyboard_hid_report(uint32_t,int,void*);
 extern int coredevice_print_connected_descriptors_async_raw(xrc_t);
 extern int coredevice_send_universalhid_hid_report(xrc_t,const void*,uint64_t);
 extern int coredevice_send_universalhid_barrier(xrc_t);
@@ -81,7 +82,7 @@ extern int coredevice_send_hid_digitizer_cgpoint(xrc_t,double,double,double,doub
 
 enum { Capacity=8192, PendingLimit=64 };
 typedef enum { Down, Move, Up, ScrollPrecise, ScrollWheel, ScrollEnd,
-               KeyHome, KeyRecents, KeyVolumeUp, KeyVolumeDown, KeyLock } Kind;
+               KeyHome, KeyRecents, KeyVolumeUp, KeyVolumeDown, KeyLock, KeyKeyboard } Kind;
 typedef enum { Touch, BottomEdge, Scroll } InputMode;
 // Product choice: bottom 2% of the mapped content, NOT an Apple/protocol threshold.
 static const double BottomEdgeFraction=.02;
@@ -99,7 +100,8 @@ typedef struct { uint64_t seq, generation, gesture; Kind kind; double x,y,submit
                  // device routes a scroll to the view under the cursor, and
                  // without one a list scroll has no target. See pointerValid.
                  double pointerX,pointerY; BOOL pointerValid;
-                 NSUInteger appPhase,appMomentum; } Event;
+                 NSUInteger appPhase,appMomentum;
+                 uint32_t keyboardUsage; } Event; // queued only; never exported to CSV/logs
 typedef struct { Event event; unsigned depth; Result result; int reportCode,barrierCode;
                  double received,reportReturn,barrierReturn; } Record;
 static pthread_mutex_t gLock=PTHREAD_MUTEX_INITIALIZER;
@@ -133,7 +135,7 @@ static BOOL gLocalShortcutPending; // at most one local action awaiting the inpu
 static dispatch_group_t gScreenshotGroup;
 static uint64_t gDisplayDrops,gDisplayed,gBlackBars;
 static BOOL gReady,gClosing,gMousePressed;
-static uint64_t gServiceID,gGesture,gMouseGeneration;
+static uint64_t gServiceID,gKeyboardServiceID,gGesture,gMouseGeneration;
 static double gMouseX,gMouseY;
 static int gMouseEdgeQuarter;
 static InputMode gMouseMode; // main thread: frozen at Down, copied into every event
@@ -252,11 +254,11 @@ static void finish(int code,NSString *reason){
         (unsigned long long)atomic_load(&gAbandonedSends),(double)SendDeadlineSeconds];
     static double values[4][Capacity]; unsigned counts[4]={0};
     unsigned executed=0,rejected=0,overload=0,inflight=0;
-    const char *kinds[]={"DOWN","MOVE","UP","SCROLL_PRECISE","SCROLL_WHEEL","SCROLL_END","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN","KEY_LOCK"};
+    const char *kinds[]={"DOWN","MOVE","UP","SCROLL_PRECISE","SCROLL_WHEEL","SCROLL_END","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN","KEY_LOCK","KEY_KEYBOARD"};
     // KEY_LOCK was added to Kind without a string here, so kinds[KeyLock] read past the end and
     // %s ran strlen on whatever followed: any session using Cmd-L with --csv crashed in finish.
     // These asserts make the next such omission a build error instead of a SIGSEGV at exit.
-    _Static_assert(sizeof kinds / sizeof *kinds == KeyLock + 1,
+    _Static_assert(sizeof kinds / sizeof *kinds == KeyKeyboard + 1,
                    "kinds[] must have one string per Kind");
     _Static_assert(sizeof inputResults / sizeof *inputResults == ScrollOffTarget + 1,
                    "inputResults[] must have one string per Result");
@@ -286,7 +288,7 @@ static void finish(int code,NSString *reason){
         intervalN?[NSString stringWithFormat:@"%.3f",intervals[(unsigned)ceil(intervalN*.50)-1]*1000]:@"NA",
         intervalN?[NSString stringWithFormat:@"%.3f",intervals[(unsigned)ceil(intervalN*.95)-1]*1000]:@"NA",
         (unsigned long long)drops,(unsigned long long)errors,intervalN,(unsigned long long)intervalCount];
-    [s appendString:@"KEY_* report_return=first send return; barrier_return=button barrier or RECENTS end return (digitizer has no barrier in the existing oracle).\n"];
+    [s appendString:@"KEY_* report_return=first send return; barrier_return=button/UHID barrier. Keyboard usages are not recorded.\n"];
     [s appendString:@"BOTTOM_EDGE: portrait-content uses Indigo END only; rotated content uses UHID direction flags + UP barrier. Scroll x/y are relative AppKit deltas; scroll calibration is UNVERIFIED.\n"];
     [s appendString:@"drops=local invalid/non-increasing PTS only; transport/decoder losses unknown. Times=CLOCK_MONOTONIC seconds; blank=not reached.\n"];
     NSMutableString *csv=nil;
@@ -688,11 +690,14 @@ static void keyStep(unsigned index,unsigned step){
     pthread_mutex_lock(&gLock); Record r=gRecords[index]; pthread_mutex_unlock(&gLock);
     BOOL done=NO;
     double delay=0;
-    if(r.event.generation!=atomic_load(&gGeneration)){
+    // A keyboard key already pressed must still be released after a focus/geometry change.
+    if(r.event.generation!=atomic_load(&gGeneration) && !(r.event.kind==KeyKeyboard && step>0)){
         r.result=Interrupted; done=YES;
     }else{
         int code;
         {
+            // Standard keyboard reports share the existing UHID sender; hardware shortcuts
+            // retain their separate button socket below.
             // Every shortcut is a button click now, App Switcher included. It used to be a
             // 14-step digitizer swipe costing 1.66 s (12 x 30 ms of motion, then a 1.05 s dwell,
             // then a 0.25 s settle), which is why it felt like a slowly mocked drag.
@@ -702,6 +707,20 @@ static void keyStep(unsigned index,unsigned step){
             // Home: docs/protocol.md. Volume: E9 showed a HUD on the 13 Pro (M3 brief,
             // 2026-09-08); EA was rc=0-only until 2026-09-14, when both directions were
             // exercised interactively on a 12 mini over localNetwork and confirmed working.
+            if(r.event.kind==KeyKeyboard){
+                if(step==2) code=sendBounded(&gInputSender,^{ return coredevice_send_universalhid_barrier(gInput); });
+                else {
+                    uint64_t words[2]={0,0};
+                    if(uhid_make_keyboard_hid_report(r.event.keyboardUsage,step==0,words)!=(int)sizeof words){
+                        r.result=BuildFailed; inputError(@"keyboard report build failed");
+                        r.event.keyboardUsage=0;
+                        pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
+                        drainInput(); dispatch_group_leave(gInputGroup); return;
+                    }
+                    code=sendReportBounded(&gInputSender,gInput,words,sizeof words,gKeyboardServiceID);
+                }
+                done=step==2; delay=step==0?.08:.12;
+            }else{
             uint64_t page=r.event.kind==KeyRecents?0xff01:0x0c;
             uint64_t usage=r.event.kind==KeyHome?0x40:r.event.kind==KeyRecents?0x10:
                            r.event.kind==KeyVolumeUp?0xE9:r.event.kind==KeyVolumeDown?0xEA:0x30;
@@ -718,6 +737,7 @@ static void keyStep(unsigned index,unsigned step){
             // 346 ms have been measured on localNetwork). ~1.38x the boundary buys that margin
             // while staying far below the 0.7 s that once opened Siri.
             done=step==2; delay=step==0?(r.event.kind==KeyLock?.4:.08):.12;
+            }
         }
         double returned=nowSec();
         if(step==0){ r.reportCode=code; r.reportReturn=returned; }
@@ -735,10 +755,11 @@ static void keyStep(unsigned index,unsigned step){
             else inputError(r.result==SendTimedOut?
                 @"shortcut sender exceeded the send deadline; input queue released":
                 @"shortcut sender failed (see CSV codes)");
-        }else if(r.event.generation!=atomic_load(&gGeneration)){
+        }else if(r.event.generation!=atomic_load(&gGeneration) && r.event.kind!=KeyKeyboard){
             r.result=Interrupted; done=YES;
         }else if(done) r.result=Sent;
     }
+    if(done && r.event.kind==KeyKeyboard) r.event.keyboardUsage=0;
     pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
     if(done){
         // The digitizer swipe needed a post-END settle; a button click does not.
@@ -881,6 +902,7 @@ static void drainInput(void){
             }
         }
         if(event.generation!=atomic_load(&gGeneration)){ state=Idle; activeGesture=0; }
+        if(event.kind==KeyKeyboard) r.event.keyboardUsage=0;
         pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
     }}
 }
@@ -902,6 +924,7 @@ static void submitEvent(Event event,Result disposition){
         if(gCount>gMaxDepth) gMaxDepth=gCount;
         if(!gWorker){ gWorker=YES; dispatch_group_async(gInputGroup,gInputQueue,^{ drainInput(); }); }
     }
+    if(r.result!=Pending) r.event.keyboardUsage=0;
     gRecords[index]=r;
     pthread_mutex_unlock(&gLock);
     // Losing DOWN/UP/MOVE invalidates the entire gesture, never sends a partial replay.
@@ -1018,12 +1041,14 @@ static void discoverService(void){
         if(strncmp(line,"connectedDescriptor[",20)) continue;
         BOOL touch=strstr(line,"string:\"CoreDevice touchscreen(")!=NULL;
         BOOL scroll=strstr(line,"string:\"CoreDevice touchscreenGesture\"")!=NULL;
-        if(!touch && !scroll) continue;
+        BOOL keyboard=strstr(line,"string:\"CoreDevice keyboard\"")!=NULL;
+        if(!touch && !scroll && !keyboard) continue;
         char *id=strstr(line,"serviceID:");
         if(id){ char *end=NULL; errno=0; uint64_t value=strtoull(id+10,&end,0);
             if(!errno && end!=id+10 && (*end==' ' || *end=='\n') && value){
                 if(touch && !gServiceID) gServiceID=value; // preserve explicit touchscreen override
                 if(scroll) gScrollServiceID=value;
+                if(keyboard) gKeyboardServiceID=value;
             }
         }
     }
@@ -1031,6 +1056,7 @@ static void discoverService(void){
     if(!gScrollServiceID) LOGE("scroll disabled: no CoreDevice touchscreenGesture descriptor; no fallback ID or second socket");
     else LOGE("scroll service=0x%llx on existing universalhidservice; units/direction/gains/flags UNVERIFIED",(unsigned long long)gScrollServiceID);
     if(!gServiceID) fail(3,@"no touchscreen descriptor; use --service-id only with a known touchscreen ID");
+    if(!gKeyboardServiceID) LOGE("numeric keypad unavailable: no CoreDevice keyboard descriptor");
 }
 
 static void releaseMouse(double submitted){
@@ -1184,8 +1210,98 @@ static void rotateDisplay(int delta){
     refreshDisplay(names[target]);
 }
 
-@interface MirrorView : NSView @end
+// Keep the video in a background view so AppKit owns the control/video stacking order.
+@interface VideoSurface : NSView @end
+@implementation VideoSurface
+- (BOOL)isFlipped { return YES; }
+- (NSView*)hitTest:(NSPoint)point { return nil; }
+@end
+// Consume panel input locally; clicks/scrolls must not become phone-coordinate input.
+@interface KeypadPanel : NSVisualEffectView @end
+@implementation KeypadPanel
+- (BOOL)isFlipped { return YES; }
+- (void)mouseDown:(NSEvent*)event {}
+- (void)scrollWheel:(NSEvent*)event {}
+@end
+@interface MirrorView : NSView {
+    NSButton *_keypadToggle,*_keypadClose;
+    KeypadPanel *_keypad;
+    NSTextField *_keypadTitle,*_keypadHint;
+    NSArray<NSButton*> *_keypadKeys;
+}
+- (void)installKeypadControl;
+@end
 @implementation MirrorView
+- (instancetype)initWithFrame:(NSRect)frame {
+    if(!(self=[super initWithFrame:frame])) return nil;
+    _keypadToggle=[NSButton buttonWithTitle:@"123" target:self action:@selector(toggleKeypad:)];
+    _keypadToggle.accessibilityLabel=@"Numeric keypad";
+    _keypadToggle.toolTip=@"Show or hide numeric keypad (⌘K)";
+    _keypadToggle.enabled=gKeyboardServiceID!=0;
+    _keypad=[[KeypadPanel alloc] initWithFrame:NSZeroRect];
+    _keypad.material=NSVisualEffectMaterialHUDWindow;
+    _keypad.blendingMode=NSVisualEffectBlendingModeWithinWindow;
+    _keypad.state=NSVisualEffectStateActive;
+    _keypad.appearance=[NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
+    _keypad.wantsLayer=YES; _keypad.layer.cornerRadius=12; _keypad.hidden=YES;
+    _keypadTitle=[NSTextField labelWithString:@"Numeric keypad"];
+    [_keypad addSubview:_keypadTitle];
+    _keypadHint=[NSTextField labelWithString:@"Sends keys to iPhone"];
+    _keypadHint.textColor=NSColor.secondaryLabelColor;
+    [_keypad addSubview:_keypadHint];
+    _keypadClose=[NSButton buttonWithTitle:@"×" target:self action:@selector(toggleKeypad:)];
+    _keypadClose.accessibilityLabel=@"Close numeric keypad";
+    [_keypad addSubview:_keypadClose];
+    NSArray *titles=@[@"1",@"2",@"3",@"4",@"5",@"6",@"7",@"8",@"9",@"⌫",@"0",@"↵"];
+    const uint32_t usages[]={0x1e,0x1f,0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x2a,0x27,0x28};
+    NSMutableArray *keys=[NSMutableArray array];
+    for(unsigned i=0;i<titles.count;i++){
+        NSButton *button=[NSButton buttonWithTitle:titles[i] target:self action:@selector(keypadPress:)];
+        button.tag=usages[i]; button.enabled=gKeyboardServiceID!=0;
+        if(i==9) button.accessibilityLabel=@"Backspace";
+        if(i==11) button.accessibilityLabel=@"Return";
+        [_keypad addSubview:button]; [keys addObject:button];
+    }
+    _keypadKeys=keys;
+    [self addSubview:_keypad];
+    return self;
+}
+- (void)installKeypadControl {
+    // Keep the entry point in window chrome, away from phone status/buttons.
+    _keypadToggle.frame=NSMakeRect(0,0,60,24);
+    NSTitlebarAccessoryViewController *control=[NSTitlebarAccessoryViewController new];
+    control.view=_keypadToggle; control.layoutAttribute=NSLayoutAttributeRight;
+    [self.window addTitlebarAccessoryViewController:control];
+}
+- (void)toggleKeypad:(id)sender {
+    if(!gKeyboardServiceID) return;
+    releaseMouse(nowSec()); releaseScroll(nowSec());
+    _keypad.hidden=!_keypad.hidden;
+    _keypadToggle.state=_keypad.hidden?NSControlStateValueOff:NSControlStateValueOn;
+    [self.window makeFirstResponder:self];
+}
+- (void)sendKeypadUsage:(uint32_t)usage {
+    if(!gReady || gClosing || atomic_load(&gFailure) || !gKeyboardServiceID) return;
+    if(gSubmitted>=Capacity-2){ requestClose(@"event capacity reached"); return; }
+    double t=nowSec(); releaseMouse(t); releaseScroll(t);
+    submitEvent((Event){.kind=KeyKeyboard,.generation=atomic_load(&gGeneration),
+        .submit=t,.keyboardUsage=usage},Pending);
+}
+- (void)keypadPress:(NSButton*)button {
+    [self sendKeypadUsage:(uint32_t)button.tag];
+    [self.window makeFirstResponder:self];
+}
+- (void)keyDown:(NSEvent*)event {
+    if(!_keypad.hidden && !event.isARepeat && event.characters.length==1 &&
+       !(event.modifierFlags&(NSEventModifierFlagCommand|NSEventModifierFlagControl|NSEventModifierFlagOption))){
+        unichar c=[event.characters characterAtIndex:0];
+        uint32_t usage=c>='1' && c<='9'?0x1e + c-'1':c=='0'?0x27:
+            c==NSDeleteCharacter || c==NSBackspaceCharacter?0x2a:
+            c==NSCarriageReturnCharacter || c==NSNewlineCharacter || c==NSEnterCharacter?0x28:0;
+        if(usage){ [self sendKeypadUsage:usage]; return; }
+    }
+    [super keyDown:event];
+}
 - (BOOL)isFlipped { return YES; }
 - (BOOL)acceptsFirstResponder { return YES; }
 - (void)layout {
@@ -1205,6 +1321,20 @@ static void rotateDisplay(int delta){
     }else gDisplay.frame=gContentClip.bounds;
     gDisplay.contentsScale=self.window.backingScaleFactor;
     [CATransaction commit];
+    CGFloat width=MAX(1,MIN(232,self.bounds.size.width-24));
+    CGFloat height=MAX(1,MIN(300,self.bounds.size.height-58));
+    _keypad.frame=NSMakeRect(MAX(0,self.bounds.size.width-width-12),MAX(0,self.bounds.size.height-height-12),width,height);
+    CGFloat sx=width/232,sy=height/300;
+    _keypadTitle.frame=NSMakeRect(12*sx,12*sy,174*sx,20*sy);
+    _keypadTitle.font=[NSFont systemFontOfSize:MAX(10,14*MIN(sx,sy)) weight:NSFontWeightMedium];
+    _keypadClose.frame=NSMakeRect(194*sx,8*sy,28*sx,26*sy);
+    _keypadHint.frame=NSMakeRect(12*sx,274*sy,208*sx,18*sy);
+    _keypadHint.font=[NSFont systemFontOfSize:MAX(9,11*MIN(sx,sy))];
+    for(unsigned i=0;i<_keypadKeys.count;i++){
+        NSButton *button=_keypadKeys[i];
+        button.frame=NSMakeRect((12+(i%3)*72)*sx,(42+(i/3)*57)*sy,64*sx,49*sy);
+        button.font=[NSFont systemFontOfSize:MAX(10,24*MIN(sx,sy))];
+    }
 }
 - (void)viewDidChangeBackingProperties { [super viewDidChangeBackingProperties]; [self setNeedsLayout:YES]; }
 - (BOOL)mapEvent:(NSEvent*)event x:(double*)x y:(double*)y pointer:(BOOL)pointer {
@@ -1217,6 +1347,7 @@ static void rotateDisplay(int delta){
     // anyway, so working in points is both correct and Retina-independent.
     NSRect bounds=self.bounds;
     NSPoint point=[self convertPoint:event.locationInWindow fromView:nil];
+    if(!_keypad.hidden && NSPointInRect(point,_keypad.frame)) return NO;
     NSRect content=AVMakeRectWithAspectRatioInsideRect(gVideoSize,bounds);
     if(content.size.width<=0 || content.size.height<=0 || !NSPointInRect(point,content)){
         pthread_mutex_lock(&gLock); gBlackBars++; pthread_mutex_unlock(&gLock); return NO;
@@ -1235,7 +1366,7 @@ static void rotateDisplay(int delta){
     NSString *key=event.charactersIgnoringModifiers.lowercaseString;
     NSEventModifierFlags command=NSEventModifierFlagCommand,shiftCommand=command|NSEventModifierFlagShift;
     Kind kind=KeyHome;
-    enum { DeviceKey, Screenshot, ZoomToFit, ActualSize, RotateLeft, RotateRight } action=DeviceKey;
+    enum { DeviceKey, Screenshot, ZoomToFit, ActualSize, RotateLeft, RotateRight, ToggleKeypad } action=DeviceKey;
     // Device Hub bindings captured in the M4 brief (Xcode 27 beta 6).
     if(flags==shiftCommand && [key isEqualToString:@"h"]) kind=KeyHome;
     else if(flags==(shiftCommand|NSEventModifierFlagControl) && [key isEqualToString:@"h"]) kind=KeyRecents;
@@ -1255,6 +1386,7 @@ static void rotateDisplay(int delta){
     // read at action_sender.m:1675). Treat hold values as path-specific and
     // measured, not as transferable between the two.
     else if(flags==command && [key isEqualToString:@"l"]) kind=KeyLock;
+    else if(flags==command && [key isEqualToString:@"k"]) action=ToggleKeypad;
     else if(flags==shiftCommand && [key isEqualToString:@"s"]) action=Screenshot;
     else if(flags==command && [key isEqualToString:@"0"]) action=ZoomToFit;
     else if(flags==command && [key isEqualToString:@"1"]) action=ActualSize;
@@ -1277,6 +1409,7 @@ static void rotateDisplay(int delta){
             gLocalShortcutPending=NO;
             if(!gReady || gClosing || atomic_load(&gFailure) || generation!=atomic_load(&gGeneration)) return;
             if(action==Screenshot) saveScreenshot();
+            else if(action==ToggleKeypad) [self toggleKeypad:nil];
             else if(action==RotateLeft || action==RotateRight) rotateDisplay(action==RotateLeft?1:-1);
             else resizeMirror(action==ActualSize);
         });
@@ -1376,14 +1509,18 @@ static void createWindow(void){
     MirrorView *view=[[MirrorView alloc] initWithFrame:NSMakeRect(0,0,420,840)];
     view.wantsLayer=YES; view.layer.backgroundColor=NSColor.blackColor.CGColor;
     view.layer.masksToBounds=YES;
+    VideoSurface *video=[[VideoSurface alloc] initWithFrame:view.bounds];
+    video.autoresizingMask=NSViewWidthSizable|NSViewHeightSizable; video.wantsLayer=YES;
+    [view addSubview:video positioned:NSWindowBelow relativeTo:nil];
     // Clip at the same aspect-fit rectangle mapEvent uses, including during resize.
     gContentClip=[CALayer layer]; gContentClip.masksToBounds=YES;
-    [view.layer addSublayer:gContentClip];
+    [video.layer addSublayer:gContentClip];
     gNativeClip=[CALayer layer]; gNativeClip.masksToBounds=YES;
     [gContentClip addSublayer:gNativeClip];
     gDisplay=[AVSampleBufferDisplayLayer layer];
     gDisplay.videoGravity=AVLayerVideoGravityResize; // explicit raw-frame geometry owns the aspect ratio
     [gNativeClip addSublayer:gDisplay]; gWindow.contentView=view;
+    [view installKeypadControl];
     [view setNeedsLayout:YES]; [gWindow center]; fitWindow(CGSizeMake(420,840),NO); [gWindow makeKeyAndOrderFront:nil];
     [gWindow makeFirstResponder:view]; [NSApp activateIgnoringOtherApps:YES];
 }
@@ -1452,7 +1589,8 @@ static void presentLatest(void){
 
 static void usage(void){
     fprintf(stderr,"usage: ipb-mirror <coredevice-uuid> <utun> <hostIP> <deviceIP> <productType-or-empty> [--service-id ID] [--seconds S] [--csv PATH]\n"
-        "Defaults: touchscreen descriptor discovery, 300 seconds; maximum 3600 seconds / 8192 input events. Summary on stderr; event CSV only with --csv PATH (overwrites PATH). Needs a GUI login session.\n");
+        "Defaults: touchscreen descriptor discovery, 300 seconds; maximum 3600 seconds / 8192 input events. Summary on stderr; event CSV only with --csv PATH (overwrites PATH). Needs a GUI login session.\n"
+        "123 button / Cmd-K: numeric keypad (0-9, Backspace, Return); physical number keys are forwarded only while open.\n");
 }
 static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     if(argc<6){ usage(); DIE(2,"missing arguments"); }
@@ -1611,7 +1749,7 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     // M4 brief: AX menu capture, Device Hub in Xcode 27 beta 6, iPhone 13 Pro.
     // hardwareGestureControls.actionButton / .sideButton use ConditionalKeyboardShortcut;
     // neither menu item appears with the 13 Pro. Revisit on corresponding hardware.
-    LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⌘L=Lock/Wake, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size, ⌘←/⌘→=Rotate Left/Right (key repeat ignored).");
+    LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⌘L=Lock/Wake, ⌘K=Numeric keypad, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size, ⌘←/⌘→=Rotate Left/Right (key repeat ignored).");
     LOGE("Siri (⇧⌥⌘H): not implemented; full encoding/behavior unverified. Recording (⇧⌘R): not implemented; capture/recording behavior evidence missing. Action Button / Camera Control: usage-code evidence and corresponding local hardware missing.");
     armWatchdog(watchdog,runSeconds+10);
     double deadline=nowSec()+runSeconds;

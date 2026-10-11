@@ -240,14 +240,23 @@ device's own scroll path (`0x501`, iOS 27 only). The shortcuts match DeviceHub:
 | ⇧⌘H | Home |
 | ⌃⇧⌘H | App Switcher |
 | ⌘L | Lock, or wake a dark screen — the same side-button press |
+| ⌘K / `123` button | Show or hide the numeric keypad |
 | ⌘↑ / ⌘↓ | Volume up / down |
 | ⇧⌘S | Save the latest decoded frame as a PNG in `~/Pictures` |
 | ⌘← / ⌘→ | Rotate device left / right, then update the preview and input mapping |
 | ⌘0 | Zoom to fit |
 | ⌘1 | Actual size (falls back to fit if it exceeds the available screen) |
 
-Key repeat is ignored, so holding a shortcut sends one press. The mirror does not yet forward
-ordinary typing like Device Hub's Capture Keyboard mode; use CLI `key` for individual usages or `text` for a focused paste.
+The `123` button in the window title bar opens digits **0–9**, **Backspace** and **Return**
+for focused numeric input. This can help with hidden streamed keypads if iOS accepts keyboard
+input on that page. It sends keyboard keys; its buttons do not
+represent reconstructed iPhone touch positions. While open, Mac number keys, Backspace and
+Return are forwarded too. Close it with `123`, `⌘K`, or its close button. Keyboard usages are
+omitted from event CSV and diagnostics. Password-sheet and lockscreen acceptance still require
+device validation; a visible panel does not prove iOS will accept its keyboard events.
+
+Key repeat is ignored, so holding a shortcut or numeric key sends one press. Other ordinary
+typing is not forwarded; use CLI `key` for individual usages or `text` for a focused paste.
 
 **Requires a GUI login session**, just like `ipb stream`: in-process decoding needs
 `CVDisplayLink`. It works with SIP enabled and needs no entitlement; plain ssh is unsupported.

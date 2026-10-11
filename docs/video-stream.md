@@ -213,6 +213,33 @@ records in [verification.md](verification.md). Statistics go to stderr; event CS
 only with `--csv PATH`, which overwrites the specified file. The probe remains at
 `Experiments/mirror/mirror_probe.m`. No device validation was repeated for this packaging change.
 
+### Numeric keypad controls for hidden input (2026-10-11)
+
+The user cannot locate passcode buttons in Device Hub's streamed authorization page and requests
+controls in ipb's mirror. A title-bar **123 / Cmd-K** control now toggles an overlay with digits, Backspace
+and Return. It sends standard keyboard HID reports through the existing discovered keyboard
+service and serial input queue. It does not estimate hidden touch coordinates, reconstruct
+the system keypad, or depend on AX/XCTest. Each click owns its down/up/barrier sequence;
+closing, focus changes and geometry changes preserve release of a successfully pressed key
+while transport remains healthy; a failed send still cannot guarantee device release.
+CSV/statistics expose only generic keyboard-event type and timing, never the usage/digit.
+The panel consumes its own clicks/scrolls and leaves the video/touch geometry unchanged.
+The live 13 Pro Calculator accepts all ten panel digits, Backspace, physical numeric input
+and Return (`7 + 2` becomes `9`). Panel clicks/scrolls do not leak into phone touch input;
+normal phone clicks after closing the panel are verified. The noninteractive local smoke
+gate passes. Tests use supplementary macOS 26.5.1 / Xcode 27 B6, not the supported matrix;
+password-sheet/lockscreen acceptance requires a human-operated validation, and the supported
+macOS 27 + Xcode 27 matrix gate remains separate.
+
+During bench runs the existing one-second display metadata refresh intermittently exceeded
+its five-second `devicectl` bound and exited the mirror with code 1, including runs with no
+keyboard events and with Device Hub closed. A subsequent standalone display query succeeds.
+The cause is open; do not attribute this to keypad input or silently use stale orientation.
+
+Rejected alternatives for this input control: guessing hidden keypad rectangles can silently
+hit the wrong digit; per-key CLI subprocesses duplicate transport and expose usages in argv/logs;
+automatic password-page detection has no product-ready, verified page classifier.
+
 ### The decoded frame is not the screen: encoder padding
 
 **The frame is larger than the display and the extra area is black padding.** On the 13 Pro the
