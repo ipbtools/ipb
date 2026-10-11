@@ -2810,6 +2810,43 @@ if no task is obtained. This is host static evidence of a process-debugging/inje
 not proof of a universal UIView-tree interface for installed App Store applications.
 No library is injected by this run.
 
+### XCTest retry after unlock (2026-10-11)
+
+**Runtime evidence on the same 13 Pro, supplementary macOS 26 host:** native Xcode B6
+initializes the ordinary testmanagerd control/main sessions, installs/launches the temporary
+signed WDA reference and reaches `Running tests...`. The earlier password sheet is not visible
+in this retry. Its reverse `dtxproxy:XCTestDriverInterface:XCTestManager_IDEInterface` channel
+is refused, and native testing ends with exit 65 / Runner bootstrap exit 74. A native run
+without the comparison collector reproduces this outcome. This is not yet a working XCTest
+snapshot or a complete proof of all UI-testing permission gates.
+
+An ordinary Python control reports successful session initialization and
+`_IDE_authorizeTestSessionWithProcessID:` returns **true** for the just-launched owned PID.
+The phone's testmanagerd PID **8118**, executable `/System/Developer/usr/libexec/testmanagerd`,
+emits sender UUID **F154543F-6075-34E5-8ACF-C8245D4F2611**. Its filtered activity stream
+records the matching session UUID's request for an IDE transport, then **serialized transport
+handoff**, a barrier, `Socket will not be closed`, and the harness transport's disconnection
+and session closure. The Python peer closes before a usable driver channel arrives. The
+isolated native run also reaches this handoff before its failure. These observations locate
+the failure stage; they do **not** establish why the transferred connection fails or whether
+the handoff's initial disconnect notification is itself erroneous.
+
+Live `devicectl device info ddiServices` reports DDI **27A5252f**, CoreDevice **642.15**,
+XCTest **25227**, variant `external`, with `isUsable=true` and `contentIsCompatible=true`.
+A separate reference retaining the older artifact's embedded XCTest **24904** frameworks
+also closes before the driver channel; this does not isolate a single changed variable or
+prove a version-independent defect. It supplies no successful baseline.
+
+The advertised direct `com.apple.dt.testmanagerd.remote.automation` endpoint does not
+complete the normal DTX capability handshake within **five seconds** in a bounded control.
+No `_XCTD_beginSession…`, capability exchange or snapshot request is sent there. This timeout
+does not prove the advertised endpoint is usable or identify its admission policy.
+
+The temporary owned Runner is subsequently uninstalled. The independent DevicesApp AX path
+still obtains Calculator **24 nodes / 24 frames**, with a normal stop, on the same phone.
+Same-page XCTest node/rectangle and warm-latency comparison remains pending; failed bootstrap
+times must not be compared with successful AX capture times.
+
 ## XCTest snapshot service boundary (2026-09-22)
 
 **Static evidence only.** Inspected the arm64 slices in the Mac-local image

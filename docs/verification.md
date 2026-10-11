@@ -56,7 +56,7 @@ See [wire/source evidence](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11),
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
 | **UI element / semantic context research** | DevicesApp raw DTX returns real AX trees/frames on the 13 Pro: Calculator 24/24, History 4/4, Settings main 13/13, Battery 32/32, Home 29/29, ordinary Bilibili modal/keyboard 40/40. Native/Python bulk codecs agree; node-centre HID transitions have screenshot and tree confirmation. Automatic bulk/frontmost can select unrelated PDUIApp; explicit PID reads and system hit-test-derived PID reads work on tested pages. Pure Python fresh-session capture takes 740 ms for Calculator, 941 ms for Battery and 1744 ms for Bilibili. A launch-splash hit test returns nil/error 8 before visible-page success. This is AX graph coverage, not every UIKit view. One concurrent screenshot timeout and stop-ack closure races remain undiagnosed. Earlier Inspector/Mirroring restrictions are separate entry paths. | Agent-fixable: target/overlay coverage, token/page generation contract, persistent-session latency, supported macOS 27 gate, then CLI/MCP integration. Keep one outstanding semantic read and preserve unsolicited packets. Do not use arbitrary first foreground event, replay uncertain input or claim all apps complete. The user chose **“用 13 pro 吧”** and rejected page-wide serial preview. See [current protocol](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
-| **AX vs XCTest baseline and additional DTX functions** | Fresh Calculator AX capture again returns 24 nodes/24 frames in 946 ms. The 13 Pro displays an iPhone-passcode sheet for **XCTest / Enable UI Automation**; the native Xcode reference exits during bootstrap before a usable WDA snapshot. Same-page node/rectangle and latency comparisons are still pending. AX request 9 returns real action subsets; request 10 reports false even for fields already read. Instruments publishes 111 capability/version keys, including metadata/flags rather than 111 services. | User-owned: complete the phone's explicit XCTest authentication, without sharing its passcode. Agent-fixable afterward: same-page snapshots, geometry/coverage comparison, action/support semantics and service-specific validation. Do not infer an AX speed win from failed XCTest setup or treat the view-debugging advertisement as arbitrary-app access. |
+| **AX vs XCTest baseline and additional DTX functions** | After the user's unlock, native Runner reaches Running tests without the earlier visible password sheet, then exits 74 after its driver channel is refused; isolated native startup reproduces this. Python control/main sessions initialize and PID authorization returns true, but the connection closes while waiting for the driver. Device logs locate this around serialized IDE-transport handoff; the cause remains open. Retaining XCTest 24904 frameworks also fails, and direct remote.automation does not finish a five-second handshake. No XCTest snapshot exists yet. After removing the temporary Runner, fresh AX still returns 24 nodes/24 frames in 787 ms. Request 9 supplies action subsets; request 10 contradicts readable fields. Instruments advertises 111 capability/version keys rather than 111 services. | Agent-fixable: diagnose the transport handoff before retrying, then capture same-page geometry/coverage and latency. No further unlock request is justified by the current observations. PID authorization alone does not prove every UI-testing permission gate passed. Keep service-specific admission separate, and do not infer an AX speed win from failed XCTest setup or universal view-debugging access from its advertisement. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
 | **Silent media loss / cold-start budgets** | Static silence is now correctly tolerated; explicit stream/connection errors fail. Silent loss without an error callback remains indistinguishable from idle until content changes. Setup/watchdog margins are policy values without cold-start calibration. | Agent-fixable measurement work; do not treat a frame-count ceiling as an established transport lifetime. |
@@ -5890,3 +5890,50 @@ Local captures, signed/built reference, comparison scripts and exact per-run res
 ~/.local/state/ipb/20261011-provider/. The external handoff identifies the next native command,
 fresh-result-directory requirement, match rules and remaining cleanup. Documentation-only
 repository changes do not establish a product CLI/MCP or supported macOS 27 smoke gate.
+
+## 2026-10-11 — XCTest retry after unlock and IDE-transport handoff failure
+
+The user reports the allocated **13 Pro unlocked** and requests another trigger. Target remains
+CoreDevice `7F2FE6E9-5423-552A-A2A2-C499F1D8672F`, UDID `00008110-0014711C3CC3801E`,
+iOS 27.0 / 24A437; host remains supplementary macOS 26.5.1 / 25F80, Xcode 27 B6.
+Live DDI metadata reports **27A5252f / CoreDevice 642.15 / XCTest 25227**, compatible and usable.
+This does not close the supported macOS 27 release matrix gate.
+
+**Expected:** a running reference serves actual XCTest-backed WDA page snapshots for the AX
+comparison. **Actual:** native Runner PID 67364 reaches **Running tests**, with no earlier
+password sheet observed in the retry screenshots, then reports its reverse driver channel
+refused and exits **74**. Native Xcode exits **65 / TEST EXECUTE FAILED** after approximately
+22 seconds. No source/snapshot reply is obtained. An isolated native run, without the comparison
+collector, reproduces this failure with PID 67405. The collector is therefore not required to
+trigger the native failure.
+
+Python TestManager startup also initializes both sessions and explicitly authorizes the owned
+Runner PID 67398 with result **true**, then receives a closed connection while waiting for
+XCTestDriverInterface. A filtered, bounded device activity stream from testmanagerd PID 8118
+records the matching session requesting its IDE transport, **serialized transport handoff**,
+barrier completion with **Socket will not be closed**, and subsequent harness transport
+disconnection/session closure. The isolated native run reaches the same handoff. This narrows
+the investigation to connection transfer/driver establishment. The reason remains open; neither
+the ordinary disconnect notification nor PID authorization is proof of the entire causal chain
+or all UI-testing permission gates. Current observations do not justify asking for unlock again.
+
+An additional control signs/installs the older reference with its embedded XCTest **24904**
+frameworks retained. It authorizes PID 67419 but also closes before a usable driver channel.
+This is not a single-variable A/B and supplies no successful comparison. Direct
+`com.apple.dt.testmanagerd.remote.automation` also fails to complete its normal DTX handshake
+within five seconds; no direct session/query/snapshot request is sent. Its advertisement and
+the ordinary control's capabilities remain separate from a usable direct snapshot session.
+
+**Cleanup and independent AX control:** all native/Python launches finish; process enumeration
+shows no WDA or Maestro Runner. Uninstall succeeds for this investigation's temporary
+`ai.looktech.codex.ondevicewda.xctrunner`; the preexisting Maestro application is not modified.
+Calculator is foregrounded again. Fresh DevicesApp AX reads detect PID 51502 and return
+**24 nodes / 24 frames**, child walk **467 ms**, whole fresh session **787 ms**, with normal
+stop. Screenshot inspection shows Calculator and the unchanged value **7**. No input is sent
+to a credential sheet. This verifies that the working AX route remains available after the
+failed reference runs; it is not a XCTest parity/performance result.
+
+Signed references, native result bundles, filtered logs, snapshots and bounded ad hoc scripts
+remain outside git in the existing local research directory. The handoff preserves exact run
+paths and cleanup. Repository changes are documentation only; no production code, CLI/MCP
+integration, build or supported-matrix smoke result is claimed.
