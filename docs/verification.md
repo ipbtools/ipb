@@ -50,13 +50,13 @@ See [wire/source evidence](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11),
 
 | Item | Current evidence and root-cause status | Owner / next discriminator |
 | --- | --- | --- |
-| **Supported release matrix gate** | October 10 refresh reaches Mac-M2 on macOS 27.2 / 26B5091g. Its only enumerated /Applications/Xcode*.app reports Xcode 26.4 / 17E192, while devicectl reports 642.15 and LLDB 2100.0.16.4. USB/CoreDevice identifies the allocated 13 Pro, but pairing is unsupported, tunnel unavailable and DDI services unavailable. Earlier isolated build results remain historical. | Agent can diagnose the mixed developer-tool installation; a working Xcode 27/iOS 27 service environment remains unconfirmed. Local macOS 26 validation and static macOS 27 inspection do not close this gate. Native Mirroring has separate account/session prerequisites. |
+| **Supported release matrix gate** | October 10 refresh reaches Mac-M2 on macOS 27.2 / 26B5091g. Its only enumerated /Applications/Xcode*.app reports Xcode 26.4 / 17E192, while devicectl reports 642.15 and LLDB 2100.0.16.4. The October 10 Apple CoreDevice queries identify the allocated 13 Pro but report unsupported pairing/unavailable tunnel/DDI services. On October 11 an isolated pymobiledevice3 USB CoreDeviceProxy userspace tunnel connects and establishes the reference XCTest Driver; this does not repair or validate that Xcode installation. Earlier isolated build results remain historical. | Agent can diagnose the mixed developer-tool installation; a working Xcode 27/iOS 27 service environment remains unconfirmed. Local macOS 26 validation and static macOS 27 inspection do not close this gate. Native Mirroring has separate account/session prerequisites. |
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
 | **UI element / semantic context research** | DevicesApp raw DTX returns real AX trees/frames on the 13 Pro: Calculator 24/24, History 4/4, Settings main 13/13, Battery 32/32, Home 29/29, ordinary Bilibili modal/keyboard 40/40. Native/Python bulk codecs agree; node-centre HID transitions have screenshot and tree confirmation. Automatic bulk/frontmost can select unrelated PDUIApp; explicit PID reads and system hit-test-derived PID reads work on tested pages. Pure Python fresh-session capture takes 740 ms for Calculator, 941 ms for Battery and 1744 ms for Bilibili. A launch-splash hit test returns nil/error 8 before visible-page success. This is AX graph coverage, not every UIKit view. One concurrent screenshot timeout and stop-ack closure races remain undiagnosed. Earlier Inspector/Mirroring restrictions are separate entry paths. | Agent-fixable: target/overlay coverage, token/page generation contract, persistent-session latency, supported macOS 27 gate, then CLI/MCP integration. Keep one outstanding semantic read and preserve unsolicited packets. Do not use arbitrary first foreground event, replay uncertain input or claim all apps complete. The user chose **“用 13 pro 吧”** and rejected page-wide serial preview. See [current protocol](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
-| **AX vs XCTest baseline and additional DTX functions** | After the user's unlock, native Runner reaches Running tests without the earlier visible password sheet, then exits 74 after its driver channel is refused; isolated native startup reproduces this. Python control/main sessions initialize and PID authorization returns true, but the connection closes while waiting for the driver. Device logs locate this around serialized IDE-transport handoff; the cause remains open. Retaining XCTest 24904 frameworks also fails, and direct remote.automation does not finish a five-second handshake. No XCTest snapshot exists yet. After removing the temporary Runner, fresh AX still returns 24 nodes/24 frames in 787 ms. Request 9 supplies action subsets; request 10 contradicts readable fields. Instruments advertises 111 capability/version keys rather than 111 services. | Agent-fixable: diagnose the transport handoff before retrying, then capture same-page geometry/coverage and latency. No further unlock request is justified by the current observations. PID authorization alone does not prove every UI-testing permission gate passed. Keep service-specific admission separate, and do not infer an AX speed win from failed XCTest setup or universal view-debugging access from its advertisement. |
+| **AX vs XCTest baseline and additional DTX functions** | Local native/Python Apple-tunnel startup fails before its reverse Driver channel, including with Device Hub foreground; the native cause remains open. A target-only socket inventory shows no Device Hub testmanagerd connection. Independent Mac-M2 USB CoreDeviceProxy userspace RSD establishes the reverse driver, supplies configuration and loads the same reference bundle, then displays the separate Enable UI Automation password gate. The handoff/disconnection sequence also appears on this working driver path and is not itself a failure cause. Host and transport both differ; subsequent pre-launch handshake timeout remains undiagnosed. WDA HTTP/snapshots are still pending. Foreground-Device-Hub AX control returns 24 nodes/24 frames in 892 ms. Request 9 supplies action subsets; request 10 contradicts readable fields; Instruments advertises 111 capability/version keys. | User-only step: complete the observed XCTest password authorization on 13 Pro; do not send credentials to the agent. Agent-fixable: single-host transport control, then same-page geometry/coverage and warm latency. No ordinary-unlock request or speed-win claim. The owned reference is temporarily installed for the pending comparison; remove it when the comparison ends. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
 | **Silent media loss / cold-start budgets** | Static silence is now correctly tolerated; explicit stream/connection errors fail. Silent loss without an error callback remains indistinguishable from idle until content changes. Setup/watchdog margins are policy values without cold-start calibration. | Agent-fixable measurement work; do not treat a frame-count ceiling as an established transport lifetime. |
@@ -5937,3 +5937,57 @@ Signed references, native result bundles, filtered logs, snapshots and bounded a
 remain outside git in the existing local research directory. The handoff preserves exact run
 paths and cleanup. Repository changes are documentation only; no production code, CLI/MCP
 integration, build or supported-matrix smoke result is claimed.
+
+## 2026-10-11 — Device Hub foreground, USB driver establishment and UI Automation gate
+
+The user reports Device Hub foreground and requests diagnosis of the failed reference.
+CUA inspection confirms Device Hub **255.2.3.5**, explicitly selecting the allocated
+**13 Pro**, with Calculator value **7** visible. The supplementary local host remains
+macOS **26.5.1 / 25F80**, Xcode **27 B6 / 27A5252f**; phone remains iPhone14,2,
+UDID `00008110-0014711C3CC3801E`, iOS **27.0 / 24A437**. No other phone is operated.
+
+**Foreground Device Hub control:** a target-only lsof/RSD inventory maps its sockets to
+HID, display, pasteboard, configuration and location services; neither testmanagerd port is
+connected by Device Hub in that inventory. This is a scoped observation, not proof that every
+possible competing session is absent. Native reference PID **67482** again reaches Running
+tests, then exits **74**, with Xcode **65** after **23.467 s**. An activity stream filtered to
+testmanagerd, the owned Runner and messages naming its bundle records serialized transport
+handoff and IDE disconnection. It supplies no decisive sandbox/local-network refusal or native
+root cause. Runner loads device XCTestCore at
+`/System/Developer/Library/PrivateFrameworks/XCTestCore.framework/XCTestCore`, runtime UUID
+**3BD17DCC-0FB3-3644-9DD2-D76B85C8AFFF**. Fresh independent AX capture while Device Hub
+remains open returns Calculator **24 nodes / 24 frames**, child walk **475 ms**, whole fresh
+session **892 ms**, normal stop. This still is not a XCTest comparison.
+
+**Transport discriminator:** forwarding only Mac-M2's usbmuxd over SSH permits exact-target
+USB selection and validates existing pairing, without a new trust operation. The legacy
+`com.apple.testmanagerd.lockdown.secure` service returns **InvalidService**. Mac-M2 itself runs
+macOS **27.2 / 26B5091g**; pymobiledevice3 **11.10.2** is installed in an isolated research
+venv, without changing Xcode or global packages. Its native Apple-tunnel assertion times out.
+An independent USB **CoreDeviceProxy userspace RSD** path does connect to ordinary remote
+testmanagerd using the same installed signed Xcode B6 reference.
+
+Reference PID **67518** is explicitly authorized with result **true**, receives the reverse
+Driver proxy channel, reports runner-ready capabilities, receives configuration and protocol
+version **36** start execution, loads the test bundle and links device XCTAutomationSupport
+**25227**. It then waits for **enabling automation mode**. CUA shows the phone's separate
+**“为 XCTest 输入 iPhone 密码 / Enable UI Automation”** sheet. The password step is requested
+from the user; the agent does not enter credentials, change security settings, create profiles
+or certificates, or approve a prompt. The bounded 35-second probe reaches no HTTP-ready WDA
+or snapshot before ending. The same harness handoff/disconnection exists in this successful
+Driver-establishment run, so it is **not itself the demonstrated failure cause**. Host and
+transport both differ; native root cause and a same-host transport control remain open.
+
+An initial userspace probe also reaches the Driver/start instruction but ends early because
+the ad hoc HTTP readiness reader treats an expected pre-server EOF as fatal. Its external
+probe is corrected to treat that read failure as not ready; this is not a product fix.
+A subsequent fresh userspace startup times out in its **pre-launch DTX capability handshake**;
+its cause remains unresolved and must not be conflated with the earlier handoff failure or
+presented as a successful snapshot. Every owned launch has ended, and cleanup reports no owned
+Runner PID. The temporary reference remains installed solely for the pending authenticated
+baseline; the preexisting Maestro app and Device Hub selection are preserved.
+
+Exact native bundles, filtered logs, remote/local probe results and transport scripts remain
+outside git in the local research directory and Mac-M2's isolated research directory. The
+external handoff retains their paths and pending cleanup. These are research observations,
+not a production implementation or a supported macOS 27 + Xcode 27 smoke gate.

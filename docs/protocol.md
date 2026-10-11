@@ -2847,6 +2847,41 @@ still obtains Calculator **24 nodes / 24 frames**, with a normal stop, on the sa
 Same-page XCTest node/rectangle and warm-latency comparison remains pending; failed bootstrap
 times must not be compared with successful AX capture times.
 
+### Device Hub foreground and USB transport control (2026-10-11)
+
+**Runtime evidence:** Device Hub 255.2.3.5 on the same macOS 26 / Xcode B6 host is
+foreground, explicitly selecting the allocated 13 Pro and displaying Calculator value **7**.
+A target-only socket inventory maps its connections to HID, display, pasteboard, configuration
+and location services. No connection to either advertised testmanagerd port is present in
+that inventory. This does not rule out every other host/session or every possible contention.
+Native testing while Device Hub stays open again reaches `Running tests`, then exits
+**Runner 74 / Xcode 65** after **23.467 seconds**. A filtered device activity stream covers
+both the owned Runner and testmanagerd; it records the transfer and IDE disconnection, without
+identifying a sandbox/local-network refusal. The concrete reason for this native-path failure
+remains open. Fresh independent AX capture with Device Hub open still returns Calculator
+**24 nodes / 24 frames** in **892 ms** for the complete fresh session.
+
+An exact-UDID **USB** connection through Mac-M2's usbmuxd validates its existing pairing and
+identifies iPhone14,2 / iOS 27.0 / 24A437. The legacy service
+`com.apple.testmanagerd.lockdown.secure` returns **InvalidService**. Using pymobiledevice3
+**11.10.2** on Mac-M2's macOS **27.2 / 26B5091g**, an independent, unprivileged
+**CoreDeviceProxy userspace RSD tunnel** instead connects to the ordinary remote testmanagerd.
+The same installed Xcode B6-signed reference receives its reverse
+`dtxproxy:XCTestDriverInterface:XCTestManager_IDEInterface` channel, sends
+`_XCT_testRunnerReadyWithCapabilities:`, receives the XCTest configuration and
+`_IDE_startExecutingTestPlanWithProtocolVersion:36`, and loads its test bundle.
+It links device `XCTAutomationSupport` version **25227** before waiting for
+**enabling automation mode**. This is not yet an HTTP-ready WDA or a successful snapshot.
+
+The phone shows **“为 XCTest 输入 iPhone 密码 / Enable UI Automation”** at that stage.
+Ordinary unlock and the earlier true PID authorization are therefore insufficient for this
+separate gate. The credential step is left to the user. No security setting, profile or
+certificate is changed by the probe. These successful driver-establishment runs also contain
+the same harness handoff/disconnection sequence: **that sequence alone is normal transfer
+evidence, not the demonstrated failure cause**. Host OS and transport both differ in this
+control; a single-host transport A/B remains pending. A subsequent pre-launch capability
+handshake timeout is recorded separately, with its cause unresolved.
+
 ## XCTest snapshot service boundary (2026-09-22)
 
 **Static evidence only.** Inspected the arm64 slices in the Mac-local image
