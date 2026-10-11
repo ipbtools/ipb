@@ -351,7 +351,11 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    obstacle and requests controls in ipb mirror. The new manual title-bar **123 / Cmd-K** panel
    sends existing keyboard HID, with all digits, deletion and Return verified in Calculator.
    Human-operated password/lockscreen acceptance is still pending; no touch rectangles or
-   credential-page classifier are assumed. See [the mirror plan](video-stream.md#numeric-keypad-controls-for-hidden-input-2026-10-11).
+   credential-page classifier are assumed. The subsequent readiness attempt fails at USB
+   Lockdown service startup with PasswordProtected before Runner/auth; CoreDevice and native
+   Device Hub still report locked after the user reports unlocking, even with the mirror closed.
+   The reason for that difference is open. The user pauses testing with “现在没法搞了，之后再说吧”;
+   resume from an observed actual unlock rather than another blind authorization retry. See [the mirror plan](video-stream.md#numeric-keypad-controls-for-hidden-input-2026-10-11).
 3. Verify the supported **macOS 27 + Xcode 27 + iOS 27** matrix before product integration.
    The successful current AX client runs on supplementary macOS 26.5.1. Then extend the existing
    session layer for CLI/MCP; no duplicated transport, Runner or new phone app is proposed.
