@@ -333,10 +333,18 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    reference reaches Running tests after the user's unlock, but the local Apple tunnel fails
    before driver establishment, including with Device Hub foreground. Mac-M2's independent
    USB CoreDeviceProxy userspace RSD path establishes the reverse driver, loads the same test
-   bundle and reaches the separate **Enable UI Automation** password gate. Credential entry
-   belongs to the user; PID authorization and ordinary unlock do not satisfy that gate.
+   bundle and reaches the separate **Enable UI Automation** password gate. The same USB path
+   also establishes Driver when its Python process runs on the local macOS 26 host; the
+   host OS/Python change is not required for that success, while route and paired-host identity
+   remain confounded. Device logs reach LocalAuthentication and SpringBoard overlay presentation.
+   The user reports no prompt on the physical panel but confirms input works in Device Hub,
+   with a mistyped attempt. No authorization success is established. Credential entry belongs
+   to the user; PID authorization and ordinary unlock do not satisfy that gate.
    The harness handoff/disconnection also occurs on the working driver path and is not itself
-   a failure cause. Native-path root cause and a single-host transport control remain open.
+   a failure cause. Native-path root cause remains open. Runner initialization fails after
+   60 seconds, while the authorization sheet can outlive the Runner. The external probe now
+   stops on the actual initialization-failure callback. Subsequent pre-launch handshake timeout
+   and the physical/mirrored presentation difference need separate diagnosis; do not stack retries.
    No successful same-page XCTest baseline exists yet. New AX action-subset replies are positive, while
    attribute-support Bools contradict already readable fields and need their own semantics control.
 3. Verify the supported **macOS 27 + Xcode 27 + iOS 27** matrix before product integration.

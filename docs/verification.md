@@ -56,7 +56,7 @@ See [wire/source evidence](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11),
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
 | **UI element / semantic context research** | DevicesApp raw DTX returns real AX trees/frames on the 13 Pro: Calculator 24/24, History 4/4, Settings main 13/13, Battery 32/32, Home 29/29, ordinary Bilibili modal/keyboard 40/40. Native/Python bulk codecs agree; node-centre HID transitions have screenshot and tree confirmation. Automatic bulk/frontmost can select unrelated PDUIApp; explicit PID reads and system hit-test-derived PID reads work on tested pages. Pure Python fresh-session capture takes 740 ms for Calculator, 941 ms for Battery and 1744 ms for Bilibili. A launch-splash hit test returns nil/error 8 before visible-page success. This is AX graph coverage, not every UIKit view. One concurrent screenshot timeout and stop-ack closure races remain undiagnosed. Earlier Inspector/Mirroring restrictions are separate entry paths. | Agent-fixable: target/overlay coverage, token/page generation contract, persistent-session latency, supported macOS 27 gate, then CLI/MCP integration. Keep one outstanding semantic read and preserve unsolicited packets. Do not use arbitrary first foreground event, replay uncertain input or claim all apps complete. The user chose **“用 13 pro 吧”** and rejected page-wide serial preview. See [current protocol](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
-| **AX vs XCTest baseline and additional DTX functions** | Local native/Python Apple-tunnel startup fails before its reverse Driver channel, including with Device Hub foreground; the native cause remains open. A target-only socket inventory shows no Device Hub testmanagerd connection. Independent Mac-M2 USB CoreDeviceProxy userspace RSD establishes the reverse driver, supplies configuration and loads the same reference bundle, then displays the separate Enable UI Automation password gate. The handoff/disconnection sequence also appears on this working driver path and is not itself a failure cause. Host and transport both differ; subsequent pre-launch handshake timeout remains undiagnosed. WDA HTTP/snapshots are still pending. Foreground-Device-Hub AX control returns 24 nodes/24 frames in 892 ms. Request 9 supplies action subsets; request 10 contradicts readable fields; Instruments advertises 111 capability/version keys. | User-only step: complete the observed XCTest password authorization on 13 Pro; do not send credentials to the agent. Agent-fixable: single-host transport control, then same-page geometry/coverage and warm latency. No ordinary-unlock request or speed-win claim. The owned reference is temporarily installed for the pending comparison; remove it when the comparison ends. |
+| **AX vs XCTest baseline and additional DTX functions** | Local native/Python Apple-tunnel startup fails before its reverse Driver channel; the cause remains open. USB CoreDeviceProxy userspace RSD establishes Driver/configuration/start36 both on Mac-M2 and with the Python client on the local macOS 26 host. Device logs reach AutomationMode writer authentication, coreauthd and SpringBoard overlay presentation. The user reports no physical-panel prompt but confirms input works in Device Hub, with a mistyped attempt. Runner waits 60 seconds, then reports XCTest.XCTFuture code 1000; the visible authorization sheet can remain after Runner termination. A subsequent pre-launch capability handshake still times out. No WDA HTTP/snapshot or completed authentication is established. Foreground-Device-Hub AX returns 24 nodes/24 frames in 892 ms. Request 9 supplies action subsets; request 10 contradicts readable fields; Instruments advertises 111 capability/version keys. | Agent-fixable: diagnose the outstanding authentication/session lifetime and remaining native-path/USB paired-host differences, then obtain a same-page comparison. The external probe now stops on actual UI-testing initialization failure. User-only: any password authorization, once the session state is verified; no further ordinary-unlock request. The attempted no-Device-Hub startup was not a valid closed-app control. The owned reference remains temporarily installed for the pending comparison; remove it when the comparison ends. No speed/parity claim. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
 | **Silent media loss / cold-start budgets** | Static silence is now correctly tolerated; explicit stream/connection errors fail. Silent loss without an error callback remains indistinguishable from idle until content changes. Setup/watchdog margins are policy values without cold-start calibration. | Agent-fixable measurement work; do not treat a frame-count ceiling as an established transport lifetime. |
@@ -5991,3 +5991,45 @@ Exact native bundles, filtered logs, remote/local probe results and transport sc
 outside git in the local research directory and Mac-M2's isolated research directory. The
 external handoff retains their paths and pending cleanup. These are research observations,
 not a production implementation or a supported macOS 27 + Xcode 27 smoke gate.
+
+## 2026-10-11 — Physical-panel report, authentication lifetime and same-client-host USB control
+
+Same allocated 13 Pro, iOS **27.0 / 24A437**, supplementary local macOS **26.5.1 / 25F80**,
+Xcode **27 B6**, Python **3.12 / pymobiledevice3 11.10.2**. Exact-target USB traffic is forwarded
+from Mac-M2's usbmuxd, with existing pairing; no new trust, account, signing or security-setting
+change. Native-path failure remains unresolved, but the USB client does not require executing
+its Python process on macOS 27: local-host reference PIDs **67654** and **67684** both establish
+Driver/configuration/start36 and reach the AutomationMode authentication gate. Route and paired
+host identity are still different; this is not a fully isolated transport root cause.
+
+The user reports that the **physical phone has no prompt**. Device Hub shows the authorization
+sheet; the user subsequently confirms it is input-capable there, reports one mistyped attempt,
+and identifies the hidden streamed password keypad as the input obstacle. Mirror observation
+must not be described as proof of physical-panel presentation or completed authentication.
+
+Device logs record `_XCT_enableAutomationModeWithReply:` → AutomationMode writer authentication
+required → LocalAuthentication `evaluatePolicy:2` for caller XCTest / reason Enable UI Automation
+→ coreauthd → SpringBoard remote overlay presentation with LocalAuthenticationUIService.
+AutomationMode's 24A437 shipped-symbol UUID matches runtime
+**4867BF17-FF7C-3D4D-A08F-C601FF4021F8**; raw-cache disassembly identifies
+`authorizationWithError:` calling `evaluatePolicy:options:error:`.
+
+**Two lifetimes:** Runner initialization returns XCTest.XCTFuture code **1000** after roughly
+**60 seconds**, but the visible sheet outlives the Runner. The same authentication context
+returns LocalAuthentication **-1003 / Timeout expired** at **10:35:56**, about **320 seconds**
+after its **10:30:36** request; testmanagerd releases the enable-automation transaction then.
+A following launch probe had timed out in its pre-launch DTX capability handshake after
+**15.821 seconds**. After authentication expiry, a separate **handshake-only** USB control
+succeeds in **9.8 ms** at **10:36:03**, without launching a Runner or requesting automation.
+This supports investigating outstanding authentication/session lifetime; queue-level causality
+is not proven. The attempted no-Device-Hub startup is invalid as a closed-app control: the app
+had not fully exited at startup. It is subsequently quit through its menu, reopened, and
+restored to the explicitly selected 13 Pro with View Screen active.
+
+The external probe now observes `initialization_for_ui_testing_did_fail`, records its actual
+NSError and ends promptly; the first run had continued waiting for HTTP for **180.861 seconds**.
+The second exits after **61.150 seconds** and reports Runner stopped. Every owned launch and
+passive collector ends; temporary SSH forwards, sockets and pairing caches are removed. No WDA
+HTTP or snapshot has been obtained. The owned reference remains installed for the deferred
+baseline; Maestro is untouched. Raw scripts/logs/disassembly stay outside git, with exact run
+references in the local handoff. No product build or supported-matrix gate is claimed here.

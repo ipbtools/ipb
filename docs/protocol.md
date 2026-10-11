@@ -2873,14 +2873,65 @@ The same installed Xcode B6-signed reference receives its reverse
 It links device `XCTAutomationSupport` version **25227** before waiting for
 **enabling automation mode**. This is not yet an HTTP-ready WDA or a successful snapshot.
 
-The phone shows **“为 XCTest 输入 iPhone 密码 / Enable UI Automation”** at that stage.
+Device Hub's mirrored display shows **“为 XCTest 输入 iPhone 密码 / Enable UI Automation”**
+at that stage. This is a mirror observation, not proof of presentation on the physical panel;
+the user's subsequent physical-panel report and authorization control are recorded below.
 Ordinary unlock and the earlier true PID authorization are therefore insufficient for this
 separate gate. The credential step is left to the user. No security setting, profile or
 certificate is changed by the probe. These successful driver-establishment runs also contain
 the same harness handoff/disconnection sequence: **that sequence alone is normal transfer
 evidence, not the demonstrated failure cause**. Host OS and transport both differ in this
-control; a single-host transport A/B remains pending. A subsequent pre-launch capability
+control; the subsequent same-client-host USB control is recorded below. A pre-launch capability
 handshake timeout is recorded separately, with its cause unresolved.
+
+### Automation authorization presentation and lifetime (2026-10-11)
+
+**Runtime evidence, same 13 Pro / 24A437:** the USB CoreDeviceProxy userspace client also
+establishes Driver/configuration/protocol-36 execution when run on the **local macOS 26.5.1
+host with Python 3.12 / pymobiledevice3 11.10.2**, forwarding Mac-M2's usbmuxd over SSH.
+Thus moving the Python process to macOS 27 is unnecessary for this observed Driver success.
+It does not isolate every route, paired-host identity or service-lifetime difference from
+the local NativeRemotedTunnel failure; that failure's precise cause remains open.
+
+Runner PID **67654** waits **60 seconds** for enabling automation mode, then reports
+`com.apple.dt.XCTest.XCTFuture`, code **1000**, **“Timed out while enabling automation mode.”**
+`_XCT_initializationForUITestingDidFailWithError:` reaches the host. There is no WDA HTTP
+readiness or snapshot. A subsequent Driver-success run, PID **67684**, repeats this gate.
+The external research probe now propagates this failure instead of continuing its 180-second
+HTTP readiness loop; no production implementation changes.
+
+Device logs trace the request through `_XCT_enableAutomationModeWithReply:` → testmanagerd's
+**AutomationMode** client → `com.apple.dt.automationmode.writer`. Its reply requires
+authentication, followed by LocalAuthentication **`evaluatePolicy:2`**, caller **XCTest**,
+reason **Enable UI Automation**. coreauthd receives the request; SpringBoard activates and
+finishes presenting a remote transient overlay for testmanagerd PID **8118**, with
+**LocalAuthenticationUIService** in the overlay stack. These are device-side presentation
+records, not confirmation that authentication succeeded or that the physical panel displayed
+the overlay. AutomationMode runtime UUID is **4867BF17-FF7C-3D4D-A08F-C601FF4021F8**.
+Shipped 24A437 symbols/raw-cache disassembly corroborate
+`XAMLocalAuthenticationProvider.authorizationWithError:` at **0x255aa3014** calling
+`evaluatePolicy:options:error:` at **0x255aa30a0**.
+
+The user reports **no physical-panel prompt**, then confirms the authorization is input-capable
+in **Device Hub**, with one mistyped attempt. No successful authorization is inferred from
+that report. CUA still observes the authorization sheet after the owned Runner has ended;
+the Runner's 60-second deadline is therefore **not the lifetime of the visible authentication
+sheet**. A following startup fails its pre-launch DTX capability handshake in approximately
+15 seconds. An outstanding authentication request blocking progress is a hypothesis, not
+a demonstrated cause of that handshake timeout. Do not stack more Runner launches or assume
+a visible sheet proves a live comparison session. Device Hub is restored to the same 13 Pro;
+the attempted no-Device-Hub startup is not a valid control because the app had not fully
+exited before that run began. Credentials and authorization remain human-operated.
+
+A bounded passive trace subsequently receives the same context's authentication timeout at
+**10:35:56**, approximately **320 seconds** after its request at **10:30:36**:
+LocalAuthentication code **-1003**, **“Timeout expired.”** testmanagerd then releases the
+`_XCT_enableAutomationModeWithReply:` transaction. At **10:36:03**, a fresh USB userspace
+**handshake-only** connection succeeds in **9.8 ms**, without a Runner launch, test session
+or automation-mode request. This establishes recovery after authentication expiry; it is
+temporal evidence, not a proved queue-level causal explanation of the earlier 15-second timeout.
+The user identifies the missing streamed password keypad as the practical input obstacle and
+requests numeric controls in ipb's own mirror. The actual XCTest baseline remains pending.
 
 ## XCTest snapshot service boundary (2026-09-22)
 
