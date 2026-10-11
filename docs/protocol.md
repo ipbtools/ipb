@@ -2652,6 +2652,20 @@ tunnel**. This result does not establish an independent new pairing flow, USB-on
 Linux/Windows support or the supported macOS 27 release gate. No new Mirroring login or
 VoiceOver operation was required by this client.
 
+**Additional physical runtime, same host/phone OS seed:** after the user selects the
+12 mini, an existing-paired local **USB CoreDeviceProxy userspace RSD** client reaches
+the same raw service on iPhone13,1 / iOS 27.0 / 24A437. The same host-version-7 /
+device-version-26 exchange and request types 6 → 1 → 5 return the already-present
+XCTest authorization UI's **16 nodes / 16 numerical rectangles** in **598 ms** from
+coroutine entry through cleanup. The application rectangle is **375×812 logical points**;
+all ten numeric keys, Delete, Cancel and the passcode field have frames. For example,
+key `1` is `{x:53.667, y:363, width:75, height:75}`. All observed child identities are
+resolved. This client launches no Runner and sends no UI input; a separate active
+AltStoreProbe Runner was observed. It proves this overlay's readable AX graph and
+USB transport, not password acceptance, attribution of its authentication request,
+all underlying views or macOS 27 validation. See the
+[12 mini record](verification.md#2026-10-11--12-mini-usb-ax-authorization-tree-and-test-ownership).
+
 ### Shipped caller and device receiver
 
 | Source | Identity | Decisive calls |

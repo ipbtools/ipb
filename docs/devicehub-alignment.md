@@ -78,6 +78,19 @@ its login modal/numeric keyboard). Fresh node-centre HID taps open the
 Calculator History sheet and Settings Battery page, with updated AX trees and screenshot
 confirmation. This is a working research probe, not an implemented product/MCP command.
 
+The user now selects **“那你看看能不能用12mini做测试”**. On the local USB-connected
+iPhone13,1 / iOS 27.0 / 24A437, existing pairing and a CoreDeviceProxy userspace RSD
+tunnel work. Ordinary testmanagerd's capability handshake succeeds without starting
+automation. The same raw AX client reads a preexisting XCTest authorization page:
+16 nodes / 16 frames, including all numeric keys and Delete, with a closed observed
+child graph and 375×812 logical root; fresh setup/read/cleanup takes 598 ms.
+The active Runner belongs to the separate AltStoreProbe test, so this is read-only
+overlay coverage, not this session's authentication or a completed WDA comparison.
+Further input/Runner testing awaits device-use coordination. Native CoreDevice details
+and lockState queries time out; `displays --json` fails RSD device allocation with
+0xE8000003. Cause remains open. Mac UI control reports a locked Mac. No source fix,
+secure-page keyboard acceptance or supported-host gate is claimed by this control.
+
 Automatic bulk/frontmost selection can return unrelated PDUIApp. A native system hit-test
 request instead selects the displayed application's PID on the tested pages; the pure-Python
 hit-test → application → attribute traversal reads Battery's 32-node graph in 941 ms including
