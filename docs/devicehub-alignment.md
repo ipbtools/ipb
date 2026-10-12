@@ -67,6 +67,35 @@ The supported macOS 27 + Xcode 27 + iOS 27 release gate is still pending. A curr
 prior macOS 27 host closed at port 22; its older Xcode 26.4/unavailable-device observation is historical,
 not a current prerequisite check. This local macOS 26 run is supplementary validation only.
 
+## Mirror keyboard and text clipboard
+
+User request on 2026-10-12: complete ordinary keyboard input, modifiers/repeat, host IME
+composition and text Copy/Cut/Paste in mirror. Implementation is in progress on the same
+branch; verification below must distinguish build, host checks and real-device effects.
+
+- Keep the existing serial input FIFO and bounded sender. Raw key down/up carry the complete
+  held-usage set; AppKit repeats re-edge the repeated key while preserving modifiers. Keypad
+  clicks and clipboard chords remain atomic FIFO operations. Focus loss, geometry changes
+  and close release keys; unsent stale keyboard operations are cancelled, never replayed.
+- Extend the existing makeKeyboardHIDReport array builder with a bounded C entry. No new
+  Apple private symbol/ABI shim, transport/socket, device app or entitlement is introduced.
+- MirrorView implements NSTextInputClient. Marked text stays on the Mac; committed non-ASCII
+  or composed text uses exact UTF-8 clipboard copy plus the captured Command+V chord. Plain
+  single-byte typing remains physical HID and follows the iPhone keyboard layout/input method.
+- Command+V snapshots Mac text; Command+C/X send device copy/cut, require a device clipboard
+  change count, then retrieve UTF-8 and update Mac text only if its clipboard/focus is unchanged.
+  Clipboard tasks share the bounded device-control runner and hold FIFO ownership through
+  completion. Text/payloads never enter argv, CSV or diagnostics; total pending text is capped.
+- Existing mirror shortcuts remain reserved. Transfer failures and uncertain sends are explicit;
+  paste permissions remain operator-controlled. Images/rich text and continuous clipboard sync
+  are outside this text clipboard feature.
+
+Only ipb host tooling changes. Android/iOS application repositories, Bluetooth/ISP firmware,
+schema/rpc and audio bindings are unaffected: the existing Apple DDI/clipboard contract is used.
+Release version, schedule and supported-host acceptance remain pending. Rejected alternatives:
+independent CLI calls per key/chord (lose held state/order); clipboard polling in the background
+(unrequested synchronization); Unicode-to-HID substitution (cannot preserve committed text).
+
 ## UI context research
 
 **Current research result (2026-10-11):** prioritize Device Hub's separate **DevicesApp raw-DTX
