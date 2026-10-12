@@ -85,7 +85,8 @@ FRAME = {"x": 0, "y": 0, "width": 375, "height": 812}
 
 class SessionTests(unittest.IsolatedAsyncioTestCase):
     async def run_capture(self, mode):
-        state = {"requests": [], "closed": False, "dtx_closed": False, "root_reads": 0}
+        state = {"requests": [], "attribute_requests": [], "closed": False,
+                 "dtx_closed": False, "root_reads": 0}
         class Terminated(Exception):
             pass
         class Service:
@@ -107,6 +108,10 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                     result = TOKEN
                 else:
                     token = req["translation"]
+                    requested = req["parameters"]["attributes"]
+                    state["attribute_requests"].append((token["objectID"], requested))
+                    if token["objectID"] == CHILD["objectID"] and 3 in requested and mode in ("description", "label-timeout"):
+                        raise TimeoutError("fixture stalled Label")
                     if token["objectID"] == TOKEN["objectID"]:
                         state["root_reads"] += 1
                         children = [CHILD]
@@ -115,11 +120,21 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                         if mode == "duplicate":
                             children = [CHILD, CHILD]
                         result = {8: children, 21: FRAME, 3: "Test app"}
+                        if mode in ("description", "description-changed"):
+                            result[33] = "Test app"
+                        if mode == "description-changed" and state["root_reads"] > 1:
+                            result[33] = "Changed app description"
+                        if mode == "label-changed" and state["root_reads"] > 2:
+                            result[3] = "Changed app label"
                     else:
                         result = {8: [], 21: FRAME, 27: 0}
                         if mode == "missing":
                             del result[8]
-                    result = {key: val for key, val in result.items() if key in req["parameters"]["attributes"]}
+                        if mode == "description":
+                            result.update({33: "Example video title", 45: 14})
+                        if mode == "label-only":
+                            result.update({33: " ", 3: "Actual label"})
+                    result = {key: val for key, val in result.items() if key in requested}
                 if mode == "notification":
                     await self.conn._services[0].packet(archive({"associatedRequestType": 11, "resultData": None}))
                 await self.conn._services[0].packet(archive({"associatedRequestType": req["requestType"], "resultData": result, "error": 0}))
@@ -165,6 +180,44 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_changed_root_does_not_emit_partial_tree(self):
         result, state, error = await self.run_capture("changed")
+        self.assertIsNone(result)
+        self.assertRegex(str(error), "root changed")
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_description_avoids_stalled_label_without_renaming_it(self):
+        result, state, error = await self.run_capture("description")
+        self.assertIsNone(error)
+        self.assertEqual(result["nodeCount"], 2)
+        self.assertEqual(result["attributePolicy"], "description-first")
+        title = result["nodes"][1]
+        self.assertEqual(title["description"], "Example video title")
+        self.assertEqual(title["frame"], FRAME)
+        self.assertNotIn("label", title)
+        self.assertTrue(all(3 not in fields for _, fields in state["attribute_requests"]))
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_label_is_read_when_description_has_no_text(self):
+        result, state, error = await self.run_capture("label-only")
+        self.assertIsNone(error)
+        self.assertEqual(result["nodes"][1]["label"], "Actual label")
+        self.assertEqual(result["nodes"][1]["description"], " ")
+        self.assertIn((CHILD["objectID"], [3]), state["attribute_requests"])
+
+    async def test_stalled_label_still_fails_with_request_context(self):
+        result, state, error = await self.run_capture("label-timeout")
+        self.assertIsNone(result)
+        self.assertIsInstance(error, TimeoutError)
+        self.assertRegex(str(error), r"type=5 pid=42 objectID=101 attributes=\[3\] timed out")
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_changed_root_description_does_not_emit_partial_tree(self):
+        result, state, error = await self.run_capture("description-changed")
+        self.assertIsNone(result)
+        self.assertRegex(str(error), "root changed")
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_changed_root_label_without_description_still_fails(self):
+        result, state, error = await self.run_capture("label-changed")
         self.assertIsNone(result)
         self.assertRegex(str(error), "root changed")
         self.assertTrue(state["closed"] and state["dtx_closed"])

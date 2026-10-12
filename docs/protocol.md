@@ -2804,6 +2804,65 @@ inventory lacks this local 12 mini; this validates the AX host runtime, not the
 full supported Xcode 27 CLI/HID/media matrix. See the
 [integration record](verification.md#2026-10-12--settings-node-delta-richer-ax-fields-and-ipb-ui-integration).
 
+### Description-first reads after a Bilibili Label timeout (2026-10-12)
+
+**Runtime evidence, supplementary macOS26.5.1 /25F80, Xcode27 B6 /CoreDevice642.15,
+USB iPhone14,2 /iOS27.0 /24A437, Bilibili9.13.0:** default centre hit test selects
+the correct Bilibili PID52460 and application/root reads succeed. With video controls
+present the root has40 children; the first17 child batches return, but the18th node
+(role14, frame x12/y436.333/width338/height22 logical points) receives no direct type5
+reply. Type11 pushes still arrive and include that same node's Description33 title.
+The original five-field batch `[8,21,3,25,53]` also times out. Fresh-session requests
+on the same live child discriminate `[8,21]`, `[8,21,25]` and `[8,21,53]` success from
+`[8,21,3]` timeout. A type2 single-attribute3 control also receives no direct reply.
+Thus this captured failure is specifically the Label3 read path, not PID selection,
+rectangle decoding, a dropped child or only the newer richer field set.
+
+**Root cause resolved by disassembly + paired device logs, same physical framework
+UUID AA0429D2-50DA-3B83-9C2A-A8D9E752581D:** the actual
+`-[AXPTranslator_iOS _processLabelAttributeRequest:error:axpAttribute:]` IMP is
+0x24FE123C8. Both IDs3/33 read native AX attribute2001. ID3 passes the
+NSAttributedString class (class reference0x2680DF2C8), whereas33 passes nil to
+`__AXPConvertOutgoingValueWithDesiredType` at0x24FE102B8. Its AXAttributedString
+path retains rich output for that requested class when attributes remain;
+otherwise it uses the plain string. This separates outgoing representation from
+the common native text read; no AXTitle or XCTest-role mapping is assumed.
+
+`-[AXPRemoteCacheManager _attemptToSendResponse:]` at0x24FE1AD80 hardcodes
+`archivedDataWithRootObject:requiringSecureCoding:YES:error:`. An archive NSError
+takes its log/return branch and bypasses the transport send, without a fallback
+AX error reply. On fresh matching title handles, a Description-only control gets
+`[8,21,33]` in9.6ms with zero archive errors. The Label control first gets that
+same plain Description/frame in9.2ms, sends `[8,21,3]`, then records a device
+archive error9.5ms later and no semantic reply before its3s deadline.
+
+The live axauditd78621 log names NSCocoaErrorDomain4866, underlying4864: class
+`__NSCFType` does not adopt NSSecureCoding. Sender UUID matches the physical image;
+its image offset65308 /0xFF1C resolves to0x24FE1AF1C in the archive-error branch.
+The captured Label-dependent response therefore fails **device-side secure
+encoding and is discarded before transport**. The specific CF-backed object or
+rich-text attribute key is still unidentified; CGColor/CTFont are not confirmed.
+Description-first avoids transporting the problematic rich representation.
+
+After the title scrolls out, the original client returns17 nodes/17 frames; restoring
+the title restores the old timeout. The client now requests the existing fields except
+3 first, then requests3 separately only when33 has no nonblank text. Raw `description`
+and `label` retain their own identities; no Label is synthesized, and unqueried fields
+stay absent. JSON adds `attributePolicy="description-first"`; the text renderer may show
+Description. Root stability rechecks whichever text field was initially selected (33,
+otherwise3), frame and children. This uses the existing type5 encoding/connection,
+not bulk-cache substitution, reconnect/retry or a Bilibili-specific PID/role exception.
+
+Three restored-title reads return25 nodes/25 frames with the exact title Description
+and rectangle, taking1151–1407ms end to end. Control visibility changed between captures,
+so25 versus the initial41 is not a same-state count comparison. Calculator old/new reads
+both return24/24; Settings search with keyboard both return49/49. Their graphs and all
+non-Label node fields match. Fallback Label reads and all other request errors still
+fail if unavailable/malformed/timed out; timeout diagnostics identify type/PID/objectID/
+attributes without text payloads. These are scoped device results, not universal
+attribute safety, atomic snapshots or the macOS27 release gate. See the dated
+Bilibili record in `verification.md`; raw packets and screenshots remain local.
+
 ### Shipped caller and device receiver
 
 | Source | Identity | Decisive calls |

@@ -25,7 +25,10 @@ SERVICE = "com.apple.accessibility.axAuditDaemon.remoteAXService"
 FIELDS = {3: "label", 21: "frame", 25: "identifier", 27: "enabled", 28: "focused",
           30: "selected", 32: "visible", 33: "description", 42: "placeholder",
           45: "roleCode", 46: "roleDescription", 51: "subroleCode", 53: "value", 77: "traits"}
-ATTRS = [8, 9, 41, *FIELDS]
+# Label 3 can stall a text node even when Description 33 already supplies its
+# text (13 Pro Bilibili title, iOS 27 / 24A437; verification.md). Keep the fields
+# distinct: query Label only when Description has no text, never synthesize it.
+ATTRS = [8, 9, 41, *(key for key in FIELDS if key != 3)]
 BOOL_FIELDS = {27, 28, 30, 32}
 MAX_NODES, MAX_DEPTH = 512, 32
 
@@ -91,8 +94,13 @@ def node_fields(attrs):
     return result
 
 
-def signature(attrs):
-    return (attrs.get(21), attrs.get(3), tuple(identity(c) for c in attrs.get(8, [])))
+def has_description(attrs):
+    text = attrs.get(33)
+    return isinstance(text, str) and bool(text.strip())
+
+
+def signature(attrs, text_attribute):
+    return (attrs.get(21), attrs.get(text_attribute), tuple(identity(c) for c in attrs.get(8, [])))
 
 
 def display_geometry(info):
@@ -184,24 +192,39 @@ async def capture(rsd, args):
             # Exactly one outstanding semantic request. A timeout aborts the
             # connection; late type-5 replies are never assigned to a new node.
             data = request(kind, params, translation=token)
-            async with asyncio.timeout(3):
-                await dtx._ctrl_channel.invoke("processDataFromHost:", data)
-                while True:
-                    raw = await queue.get()
-                    packet_bytes += len(raw)
-                    if packet_bytes > 40 * 1024 * 1024 or fatal:
-                        raise ValueError(fatal[0] if fatal else "AX response budget")
-                    reply = decode(raw)
-                    if not isinstance(reply, dict):
-                        raise ValueError("invalid AX response")
-                    if reply.get("associatedRequestType") != kind:
-                        unsolicited.append(reply)
-                        if len(unsolicited) > 256:
-                            raise ValueError("AX notification budget")
-                        continue
-                    if reply.get("error") not in (None, 0):
-                        raise ValueError("AX request refused: error " + str(reply["error"]))
-                    return reply.get("resultData")
+            try:
+                async with asyncio.timeout(3):
+                    await dtx._ctrl_channel.invoke("processDataFromHost:", data)
+                    while True:
+                        raw = await queue.get()
+                        packet_bytes += len(raw)
+                        if packet_bytes > 40 * 1024 * 1024 or fatal:
+                            raise ValueError(fatal[0] if fatal else "AX response budget")
+                        reply = decode(raw)
+                        if not isinstance(reply, dict):
+                            raise ValueError("invalid AX response")
+                        if reply.get("associatedRequestType") != kind:
+                            unsolicited.append(reply)
+                            if len(unsolicited) > 256:
+                                raise ValueError("AX notification budget")
+                            continue
+                        if reply.get("error") not in (None, 0):
+                            raise ValueError("AX request refused: error " + str(reply["error"]))
+                        return reply.get("resultData")
+            except TimeoutError as error:
+                target = (f" pid={token['pid']} objectID={token['objectID']}" if token else "")
+                fields = f" attributes={params['attributes']}" if kind == 5 else ""
+                raise TimeoutError(f"AX request type={kind}{target}{fields} timed out") from error
+
+        async def node_attributes(token):
+            attrs = attributes(await read(5, {"attributes": ATTRS}, token))
+            if not has_description(attrs):
+                label = await read(5, {"attributes": [3]}, token)
+                if not isinstance(label, dict):
+                    raise ValueError("AX label attributes unavailable")
+                if 3 in label:
+                    attrs[3] = label[3]
+            return attrs
 
         async def app(pid):
             obj = await read(1, {"pid": pid})
@@ -230,7 +253,8 @@ async def capture(rsd, args):
             root = await app(selected["pid"])
             selection = "hit-test"
 
-        first = attributes(await read(5, {"attributes": ATTRS}, root))
+        first = await node_attributes(root)
+        root_text_attribute = 33 if has_description(first) else 3
         pending = deque([(root, first, None, 0)])
         seen, nodes, max_depth = {}, [], 0
         while pending:
@@ -242,7 +266,7 @@ async def capture(rsd, args):
                 raise ValueError("AX child belongs to another process")
             if depth > MAX_DEPTH or len(nodes) >= MAX_NODES:
                 raise ValueError("AX graph limit reached; no partial tree emitted")
-            attrs = attributes(attrs if attrs is not None else await read(5, {"attributes": ATTRS}, token))
+            attrs = attributes(attrs if attrs is not None else await node_attributes(token))
             node_id = "n" + str(len(nodes))
             seen[key] = node_id
             node = {"id": node_id, "parentId": parent, "depth": depth, **node_fields(attrs),
@@ -267,8 +291,8 @@ async def capture(rsd, args):
             if parent is not None:
                 node["reportedParentId"] = seen.get(parent)
                 node["reportedParentOutsideGraph"] = parent not in seen
-        last = attributes(await read(5, {"attributes": [8, 21, 3]}, root))
-        if signature(first) != signature(last):
+        last = attributes(await read(5, {"attributes": [8, 21, root_text_attribute]}, root))
+        if signature(first, root_text_attribute) != signature(last, root_text_attribute):
             raise ValueError("AX root changed during collection; request a new snapshot")
         if hit_point is not None and identity(await hit(hit_point))[0] != root["pid"]:
             raise ValueError("displayed AX process changed during collection")
@@ -282,7 +306,8 @@ async def capture(rsd, args):
                 "deviceIdentifier": args.device_id, "udid": rsd.udid,
                 "application": {"pid": root["pid"], "selection": selection},
                 "scope": "application-accessibility", "coordinateSpace": "device-logical-points",
-                "hierarchySource": "AXChildren", "atomic": False, "rootStable": True,
+                "hierarchySource": "AXChildren", "attributePolicy": "description-first",
+                "atomic": False, "rootStable": True,
                 "displayFrame": display,
                 "cleanup": cleanup,
                 "nodeCount": len(nodes), "maxDepth": max_depth, "nodes": nodes,
@@ -377,8 +402,11 @@ def main():
 
     try:
         result = asyncio.run(bounded())
-    except (TimeoutError, asyncio.CancelledError):
-        print("ipb ui: cancelled or AX query timed out; no partial tree emitted", file=sys.stderr)
+    except TimeoutError as error:
+        print("ipb ui: " + (str(error) or "AX query timed out") + "; no partial tree emitted", file=sys.stderr)
+        return 5
+    except asyncio.CancelledError:
+        print("ipb ui: cancelled; no partial tree emitted", file=sys.stderr)
         return 5
     except Exception as error:
         print("ipb ui: " + type(error).__name__ + ": " + str(error), file=sys.stderr)
@@ -391,8 +419,8 @@ def main():
         pending = [result["nodes"][0]["id"]]
         while pending:
             node = by_id[pending.pop()]
-            label = node.get("label") or node.get("identifier") or ""
-            print("  " * node["depth"] + node["id"] + " " + json.dumps(label, ensure_ascii=False)
+            text = node.get("label") or node.get("description") or node.get("identifier") or ""
+            print("  " * node["depth"] + node["id"] + " " + json.dumps(text, ensure_ascii=False)
                   + " " + json.dumps(node.get("frame")))
             pending.extend(reversed(node["children"]))
     return 0
