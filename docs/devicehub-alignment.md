@@ -107,9 +107,10 @@ main-list graph with no active Runner. The shared app is preserved. The measurem
 client's EOF wait on HTTP keep-alive caused an intermediate false not-ready result;
 Content-Length/chunked framing resolves it. Preliminary LA -1004 did
 not mean final authorization failed. No product code is changed by this benchmark.
-13 Pro's comparison remains pending its successful unlock after the reported retry
-restriction. Supported-host validation, arbitrary-app coverage, richer attributes and
-snapshot-generation semantics remain required before CLI/MCP integration.
+The user subsequently chose **“先看 12 mini 结果”**. Keep this completed comparison as
+the current baseline and defer the 13 Pro repeat; resume it only after renewed user
+readiness and successful unlock. Supported-host validation, arbitrary-app coverage,
+richer attributes and snapshot-generation semantics remain required before CLI/MCP integration.
 
 Automatic bulk/frontmost selection can return unrelated PDUIApp. A native system hit-test
 request instead selects the displayed application's PID on the tested pages; the pure-Python
