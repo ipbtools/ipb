@@ -2652,6 +2652,46 @@ tunnel**. This result does not establish an independent new pairing flow, USB-on
 Linux/Windows support or the supported macOS 27 release gate. No new Mirroring login or
 VoiceOver operation was required by this client.
 
+**Additional physical runtime, same host/phone OS seed:** after the user selects the
+12 mini, an existing-paired local **USB CoreDeviceProxy userspace RSD** client reaches
+the same raw service on iPhone13,1 / iOS 27.0 / 24A437. The same host-version-7 /
+device-version-26 exchange and request types 6 → 1 → 5 return the already-present
+XCTest authorization UI's **16 nodes / 16 numerical rectangles** in **598 ms** from
+coroutine entry through cleanup. The application rectangle is **375×812 logical points**;
+all ten numeric keys, Delete, Cancel and the passcode field have frames. For example,
+key `1` is `{x:53.667, y:363, width:75, height:75}`. All observed child identities are
+resolved. This client launches no Runner and sends no UI input; a separate active
+AltStoreProbe Runner was observed. It proves this overlay's readable AX graph and
+USB transport, not password acceptance, attribution of its authentication request,
+all underlying views or macOS 27 validation. See the
+[12 mini record](verification.md#2026-10-11--12-mini-usb-ax-authorization-tree-and-test-ownership).
+
+### Same-page XCTest geometry and graph control (2026-10-12)
+
+**Runtime source:** same supplementary host seed, local USB iPhone13,1 / iOS 27.0 /
+24A437, raw AX host API 7 / device API 26 and an independently identified WDA 16.14.2
+reference built with Xcode 27 B6. Three AX-before / WDA-JSON / AX-after rounds on each
+page have matching app roots and unchanged observed AX semantic signatures.
+Calculator gives AX 24 nodes/depth 1 versus XCTest 45/depth 16; Settings main is
+13/1 versus 176/21. All 23 and 12 nonroot AX elements correspond to snapshot elements,
+and attribute 21's x/y/width/height equals their **nativeFrame** exactly in every round.
+This validates the tested portrait logical-point geometry, not arbitrary transforms.
+
+WDA's regular rect/frame is integral-rounded: the retained reference's
+`XCUIElement+FBWebDriverAttributes.m` uses CGRectIntegral in wdFrame and returns the
+original snapshot frame in wdNativeFrame; `FBXPath.m` serializes that native rectangle.
+For Calculator 7, AX/native y=407.6667 and h=79.6667 become WDA rect y=407 and h=81.
+The apparent rectangle discrepancy is a representation difference on these elements.
+On the Settings suggestion page, AX combines a title/body into one node while XCTest
+returns an unlabeled Cell with the identical native frame and separate text descendants.
+Exact-label matching alone therefore understates shared semantic coverage.
+
+The graphs are structurally different. The reference supplies type/state/traits/action
+fields beyond this scoped AX request; no universal missing-attribute or view-completeness
+claim follows. Query workload and caching differ. After stopping and uninstalling the
+temporary reference, fresh AX-only USB reads still return Settings main 13/13 without
+an active Runner. See the [comparison and limits](verification.md#2026-10-12--first-axxctest-same-page-comparison-on-12-mini).
+
 ### Shipped caller and device receiver
 
 | Source | Identity | Decisive calls |

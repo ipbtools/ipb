@@ -78,6 +78,40 @@ its login modal/numeric keyboard). Fresh node-centre HID taps open the
 Calculator History sheet and Settings Battery page, with updated AX trees and screenshot
 confirmation. This is a working research probe, not an implemented product/MCP command.
 
+The user now selects **“那你看看能不能用12mini做测试”**. On the local USB-connected
+iPhone13,1 / iOS 27.0 / 24A437, existing pairing and a CoreDeviceProxy userspace RSD
+tunnel work. Ordinary testmanagerd's capability handshake succeeds without starting
+automation. The same raw AX client reads a preexisting XCTest authorization page:
+16 nodes / 16 frames, including all numeric keys and Delete, with a closed observed
+child graph and 375×812 logical root; fresh setup/read/cleanup takes 598 ms.
+The active Runner belongs to the separate AltStoreProbe test, so this is read-only
+overlay coverage, not this session's authentication or a completed WDA comparison.
+Further input/Runner testing awaits device-use coordination. Native CoreDevice details
+and lockState queries time out; `displays --json` fails RSD device allocation with
+0xE8000003. Cause remains open. Mac UI control reports a locked Mac. No source fix,
+secure-page keyboard acceptance or supported-host gate is claimed by this control.
+
+**Current comparison result (2026-10-12):** after the user's 12 mini password entry,
+real WDA/XCTest source collection succeeds on the same USB RSD as the raw AX client.
+Calculator is AX 24 nodes/depth 1 versus XCTest 45/depth 16; Settings main is 13/1
+versus 176/21. All 23 and 12 nonroot elements have identical native rectangles over
+three stable interleaved samples. WDA's ordinary rect is integer-rounded; nativeFrame
+is the correct geometry comparator. A suggestion-page AX node combines text that
+XCTest splits across a Cell and descendants. The trees have different structure and
+field scopes, so node totals do not directly count missing actions/views.
+
+Query medians are 343/869 ms for Calculator and 186/2710 ms for Settings main;
+startup is separate, samples are serial and workload differs. After the temporary
+independent reference is stopped/uninstalled, fresh AX alone still returns the 13/13
+main-list graph with no active Runner. The shared app is preserved. The measurement
+client's EOF wait on HTTP keep-alive caused an intermediate false not-ready result;
+Content-Length/chunked framing resolves it. Preliminary LA -1004 did
+not mean final authorization failed. No product code is changed by this benchmark.
+The user subsequently chose **“先看 12 mini 结果”**. Keep this completed comparison as
+the current baseline and defer the 13 Pro repeat; resume it only after renewed user
+readiness and successful unlock. Supported-host validation, arbitrary-app coverage,
+richer attributes and snapshot-generation semantics remain required before CLI/MCP integration.
+
 Automatic bulk/frontmost selection can return unrelated PDUIApp. A native system hit-test
 request instead selects the displayed application's PID on the tested pages; the pure-Python
 hit-test → application → attribute traversal reads Battery's 32-node graph in 941 ms including
@@ -351,7 +385,11 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    obstacle and requests controls in ipb mirror. The new manual title-bar **123 / Cmd-K** panel
    sends existing keyboard HID, with all digits, deletion and Return verified in Calculator.
    Human-operated password/lockscreen acceptance is still pending; no touch rectangles or
-   credential-page classifier are assumed. See [the mirror plan](video-stream.md#numeric-keypad-controls-for-hidden-input-2026-10-11).
+   credential-page classifier are assumed. The subsequent readiness attempt fails at USB
+   Lockdown service startup with PasswordProtected before Runner/auth; CoreDevice and native
+   Device Hub still report locked after the user reports unlocking, even with the mirror closed.
+   The reason for that difference is open. The user pauses testing with “现在没法搞了，之后再说吧”;
+   resume from an observed actual unlock rather than another blind authorization retry. See [the mirror plan](video-stream.md#numeric-keypad-controls-for-hidden-input-2026-10-11).
 3. Verify the supported **macOS 27 + Xcode 27 + iOS 27** matrix before product integration.
    The successful current AX client runs on supplementary macOS 26.5.1. Then extend the existing
    session layer for CLI/MCP; no duplicated transport, Runner or new phone app is proposed.
