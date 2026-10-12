@@ -1657,6 +1657,163 @@ On the final Home page, the advertised read-only `deviceRunningApplications` ret
 root queries therefore used a separately observed process list plus screenshots for target
 selection. A production foreground-binding contract remains unresolved.
 
+### Element geometry and action follow-up on the 12 mini (2026-09-27)
+
+**Seed and proof layers:** macOS 26.5.1 (25F80), Xcode 27 Beta 6 / CoreDevice 642.15,
+physical iPhone 12 mini / iOS 27.0 (24A437), Developer Mode and DDI enabled. The host
+`AccessibilityAuditDeviceManager.framework` disassembly and iOS 26.5 simulator `axauditd`
+are **static comparisons**; the AXAudit DTX replies and screenshots below are **physical iOS 27
+runtime evidence**. None of these experiments establishes an ordinary-node frame API.
+
+- The host implementation of `XDMDeviceTransportBased
+  fetchElementAtNormalizedDeviceCoordinate:withCompletionBlock:` builds one `NSValue` with
+  Objective-C type `{CGPoint=dd}` and sends it with `sendControlAsync:replyHandler:`. Its reply
+  handler decodes the returned object. The **simulator-only** `XADAuditServer` implementation
+  reads that argument with `CGPointValue`, asks `XADInspectorManager` to hit-test, and completes
+  the DTX invocation with the result. Thus a `host*` event alone is not the expected answer on
+  these inspected implementations. On the physical 12 mini, two correctly typed point queries
+  over Calculator still returned nil; monitoring-change callbacks did not supply an element.
+  Apple's exact request on this phone has not been captured, so target/state or physical-daemon
+  differences remain open.
+- `deviceCaptureScreenshot` on the 12 mini returned `displayBounds={{0,0},{375,812}}` and
+  `displayNativeScale=2.88`, while its PNG was **1125×2436**. The PNG has three pixels per
+  reported logical point on each axis, not 2.88. Any screenshot-derived rectangle must use the
+  actual image dimensions and reported bounds, then account for rotation; multiplying a detected
+  pixel rectangle by `displayNativeScale` would misplace it on this seed.
+- AXAudit audits returned one Calculator issue with `ElementRectValue_v1={{16,234},{343,84}}`
+  and two SpringBoard issues with rectangle values. The SpringBoard issues were type 1007 and
+  carried no `AuditElementValue_v1` in the decoded result. These are **issue rectangles**, not
+  established bounds for corresponding ordinary tree nodes. Neither the 45-node Calculator tree
+  nor the 407-node App Library tree gained a per-node frame field. The cached physical iOS 27
+  `AccessibilityAudit.framework` also names `AXAuditIssue.elementRect` and
+  `AXAuditCategory addIssueWithClassification:auditElement:elementRect:elementDescription:`;
+  those symbols identify an issue-construction path, not a normal-node rectangle getter.
+- A prior 13 Pro Lab preview visibly outlined selected text, and one 12 mini Calculator capture
+  showed a green outline around the `7` key. However, direct-root-token and focus-token
+  `deviceInspectorPreviewOnElement:` trials on the 12 mini did not reliably outline the requested
+  node; several before/after PNG pairs were identical and another preview cleared the existing
+  outline. Screenshot differencing is therefore not yet a general node-to-rectangle method.
+- pymobiledevice3 11.10.2's `perform_press` serializes `PlatformElementValue_v1` without the
+  nested `Value` used by captured property requests; its earlier no-effect press was an
+  inconclusive action test. A follow-up used the **exact focus-event element and advertised
+  `AXAction-2010` descriptor** for Calculator `7` and `All Clear`. Both calls returned, but
+  before/after screenshots were unchanged and the display stayed `0`. This excludes that one
+  malformed serializer as the sole explanation; semantic activation is still unverified.
+
+The initial desktop control attempt could open Xcode's Accessibility Inspector but not operate
+its target picker (`elementHasNoFrame` / `noWindowsAvailable`). A later attempt reached the picker
+and the connection failure below, so the UI issue is no longer the blocking boundary. The
+physical iOS 27 `axauditd` executable was not present in the local Xcode symbol cache; the
+simulator implementation above is not proof of its physical-device geometry or permission policy.
+
+### Apple Inspector connection and point-reply type (2026-09-27)
+
+After bringing Xcode 27 Beta 6 Accessibility Inspector's window to the front, its target menu
+listed the wired 12 mini, and selecting **only that phone** reached “Error connecting to device.”
+An LLDB trace of the selected host's `XDMDeviceMonitorEmbedded._connectToDevice:` showed
+`AMDeviceConnect` and `AMDeviceStartSession` returning **0**, followed by
+`AMDeviceSecureStartService` returning **-402652910 / 0xE8000112**. The call-site argument was
+the CFString `com.apple.accessibility.axAuditDaemon.remoteserver`; this host's MobileDevice
+`AMDErrorString` names that code `kAMDRemoteConnectError`. This is a concrete **Apple-host
+service-start failure before DTX**, not evidence about an element-frame reply. A separate
+`devicectl device info lockState` request failed while allocating the RSD device with
+`-402653181 / kAMDNoResourcesError`; their shared underlying cause is unproven.
+
+The physical device did accept the same **lockdown service name** through a paired USB
+pymobiledevice3 11.10.2 client (`autopair=False`): `StartService` returned an SSL-enabled port,
+and AXAudit DTX `deviceCapabilities` returned 45 entries. Its RSD shim remained readable and
+`deviceCaptureScreenshot` showed an unlocked App Library. Thus the Apple-client failure cannot
+be described as absence of the device service or a locked screen on this run; the difference
+between the host MobileDevice and Python connection paths still needs isolation.
+
+On that native lockdown DTX channel, two typed normalized-point requests returned `None` through
+pymobiledevice3. Inspecting the **raw** reply clarified that `None`: a request for `(0.7,0.4)`
+received message type **0 (`OK`)** with no payload at conversation index 1, rather than type 3
+(`OBJECT`) carrying a null element. No further DTX message or `host*` callback arrived during a
+bounded four-second observation window. A subsequent `deviceCapabilities` control received a
+type-3 object reply, confirming the recorder saw ordinary replies. Enabling the inspector and
+app monitoring also left a point request with an empty result. This narrows the tested path to
+an empty completion on this build/state; it does not establish why hit-testing found no element,
+or whether Apple's client uses additional target/cursor state. No Apple-client point or preview
+DTX payload was captured from the physical device.
+
+### iPhone 13 Pro Apple Inspector and issue geometry (2026-09-28)
+
+On macOS 26.5.1 (25F80), Xcode 27 Beta 6 / Accessibility Inspector 5.0 (192.6), CoreDevice
+642.15 / DDI 27A5252f, the wired iPhone 13 Pro on iOS 27.0 (24A437) accepted Apple's
+Inspector target and completed an audit of `PDUIApp`. The UI showed nine warnings (one Contrast,
+five Dynamic Type, three Hit Region). This is **runtime evidence** that the Apple client can
+establish an effective AXAudit session on this physical device/host seed, unlike the 12 mini
+service-start result above.
+It is not a trace of Apple's individual DTX audit or point request.
+
+Through the independent paired pymobiledevice3 11.10.2 RSD shim (`autopair=False`),
+`deviceCapabilities` returned 45 entries. `deviceAllSupportedAuditTypes` advertised the string
+`testTypeHitRegion`; `deviceBeginAuditTypes:` with `["testTypeHitRegion"]` returned three
+`AXAuditIssue_v1` objects through `hostDeviceDidCompleteAuditCategoriesWithAuditIssues:`.
+Each issue contained both `ElementRectValue_v1` and `AuditElementValue_v1`. The first rectangle
+was `{{12.666666666666666, 167}, {43.111111111111114, 8.5555555555555429}}`, with a
+20-byte `PlatformElementValue_v1` token. Sending that token back inside the captured
+`AXAuditElement_v1`/passthrough wrapper to `deviceElement:valueForAttribute:` returned the
+label `进一步了解…`; the other two issue tokens returned `接受并继续` and `关闭FaceTime通话`.
+`Frame` and `AXFrame` requests on all three returned nil. The direct normalized-point requests
+at `(0.5,0.5)` and `(0.7,0.4)` also returned high-level nil. These message shapes and values
+are **runtime evidence** on the stated seed, recorded in the local observation summary cited by
+[the dated verification](verification.md#2026-09-28--iphone-13-pro-apple-inspector-and-audit-issue-geometry).
+
+Thus an audit issue can associate its own rectangle with an element token, but that does not
+establish a rectangle getter for ordinary tree nodes. The Inspector Quick Look preview showed
+a Home-screen image with a green box although the selected target was `PDUIApp` and the first
+token's label was not a Home icon. Treat overlay-to-current-screen alignment as unverified.
+The next decisive comparison is an Apple-client 13 Pro point selection and its DTX reply.
+
+A bounded 40-second LLDB interception of the Apple client's
+`objc_msgSend$messageWithSelector:objectArguments:` path then recorded **43 outbound
+selectors** while selecting `13 Pro > All processes` and enabling inspection scope. The
+observed setup included `deviceSetAuditTargetPid:` with `0`,
+`deviceSetAppMonitoringEnabled:` with `1`, `deviceDidGetTargeted`,
+`deviceInspectorSetMonitoredEventType:` with `2` and `deviceInspectorShowVisuals:` with `1`.
+The capture did **not** contain `deviceFetchElementAtNormalizedDeviceCoordinate:`: no
+on-device/mirror pointer hit-test was triggered during that window. Replaying these observed
+setup calls in one direct Python session, then querying `(0.5,0.5)`, still returned nil. The
+trace establishes this subset of Apple's setup, not the complete state needed for a point
+reply. The debugger detached and the direct session disabled monitoring and visuals afterward.
+That run did not exercise the point-selection UI; the later injected-input controls are
+recorded below.
+
+### 13 Pro point-selection follow-up (2026-09-28)
+
+**Same seed, runtime evidence.** Apple's
+[Inspector instructions](https://developer.apple.com/documentation/accessibility/inspecting-the-accessibility-of-screens)
+say to choose a device/app, enable point inspection, and tap an iOS element. On this host,
+Device Hub's 13 Pro `View Screen` mirror accepted a click on the Weather icon and opened
+Weather, but the separately targeted Inspector continued to show `None` for the selected
+element. A 50-second Apple-client LLDB trace around a change to `13 Pro > All processes`
+recorded 15 calls/callbacks on the three selected methods. They included
+`deviceSetAuditTargetPid: 0`, repeated `deviceInspectorFocusOnElement: <null>` and
+`deviceInspectorPreviewOnElement: <null>`, and three
+`hostInspectorCurrentElementChanged:` values containing section descriptors but no
+`ElementValue_v1`. It recorded neither a call to
+`fetchElementAtNormalizedDeviceCoordinate:withCompletionBlock:` nor a selector for a point
+fetch. A second bounded trace while tapping the phone at `(0.5,0.5)` under that target had
+zero hits on these methods.
+
+For a foreground-app control, `ipb launch com.apple.calculator` made `计算器` appear in the
+Inspector's 13 Pro process menu. With that explicit target and point mode enabled,
+`ipb tap 0.10 0.08` opened Calculator's History sheet, proving the injected touch reached
+the app; the Inspector fields stayed `None`, and a third 50-second trace again had zero hits
+on the selected point/focus methods. The intercepted method set is not a complete DTX trace.
+These runs show that **these injected touches and the Device Hub mirror click did not trigger
+Apple's element-selection path**; they do not establish what a human finger touch would do.
+The prior nine-warning `PDUIApp` audit remains valid, but rerunning the audit on the current
+`PDUIApp` and Calculator targets gave an empty result outline, so the documented
+[audit-issue double-click route](https://developer.apple.com/documentation/accessibility/performing-accessibility-audits-for-your-app)
+could not be exercised here. No ordinary-element point result
+or frame was obtained. Local trace and screenshots are listed in the
+[dated verification](verification.md#2026-09-28--13-pro-point-selection-and-foreground-app-control).
+
+### Separate iPhone Mirroring AX path (offline host, 2026-09-23)
+
 A separate **offline** host path exists in macOS 26.5.1 (25F80), iPhone Mirroring 1.6,
 `ScreenSharingKit` dyld-cache image UUID `C6D042A9-EE7E-3F13-9599-69DD1CB1A572`.
 `ScreenContinuityUI` uses `ScreenSharingSession.accessibilityDataPublisher`,

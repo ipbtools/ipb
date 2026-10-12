@@ -151,6 +151,57 @@ remain open. Requested Opus 5, Grok 4.7 and DeepSeek Flash
 consultations returned candidates; their suggestions were treated as hypotheses, not protocol
 evidence. A successful hierarchy RPC or a closed graph alone does not establish completeness.
 
+A fresh Opus 5.5 review focused the geometry search on three discriminators: capture Apple's
+actual Inspector DTX exchange, test preview-outline differencing, and determine whether audit
+rectangles are ordinary element frames. The 2026-09-27 physical 12 mini checks found one
+Calculator and two SpringBoard **audit-issue** rectangles, but no mapping from an issue to an
+arbitrary tree node. Several targeted previews did not reproduce an outline; a node action
+re-encoded from the received focus token and descriptor still left Calculator unchanged.
+The host point-query method sends an `NSValue` `{CGPoint=dd}` and handles a direct DTX reply;
+the older suggestion that a nil reply necessarily means a missing `host*` callback is not
+supported by that implementation. Correctly typed point requests nevertheless returned nil on
+the physical device, so this is still an unresolved route. The 12 mini screenshot's actual
+PNG/logical ratio is 3, while `displayNativeScale` reports 2.88; any visual fallback must map
+from image dimensions rather than assume that scale is the PNG ratio. See the
+[physical follow-up](protocol.md#element-geometry-and-action-follow-up-on-the-12-mini-2026-09-27).
+
+A second bounded attempt got past Inspector's target picker, but the Apple host failed before
+DTX: `AMDeviceConnect` and `AMDeviceStartSession` succeeded, while
+`AMDeviceSecureStartService("com.apple.accessibility.axAuditDaemon.remoteserver")` returned
+`kAMDRemoteConnectError`. The same service name opened through paired Python USB lockdown and
+reported 45 AXAudit capabilities, so the host failure does not establish a missing device
+service. A raw physical-device point request on that lockdown channel received a DTX `OK`
+without payload; there was no later message in four seconds, while a capability control returned
+an object. This corrects the ambiguity in the wrapper's `None` and bounds the callback
+hypothesis, but does not explain why the point had no element. See the
+[Apple-client boundary](protocol.md#apple-inspector-connection-and-point-reply-type-2026-09-27).
+
+At the user's request, the same Xcode Inspector was then tested against the unlocked wired
+13 Pro. Its `PDUIApp` audit completed with nine warnings, proving that this host can establish
+an effective Apple AXAudit session on that phone. Direct AXAudit `testTypeHitRegion` on the
+13 Pro returned three issue records that paired element tokens with rectangles; one token also
+returned a label when re-encoded into the captured wire wrapper. `Frame`/`AXFrame` and direct
+point lookups still returned nil. The audit's Home-screen Quick Look image did not match the
+selected `PDUIApp` target's issue label, so it is not a verified screen-to-element mapping.
+The 12 mini Apple connection failure is therefore not a universal host failure; its
+device/state-dependent cause and arbitrary-node geometry remain open. See the
+[13 Pro follow-up](protocol.md#iphone-13-pro-apple-inspector-and-issue-geometry-2026-09-28).
+
+A bounded Apple-client selector trace on the 13 Pro captured target PID `0`, app monitoring,
+targeted notification, event type `2` and inspection visuals. That run did not exercise a
+pointer hit test and captured no point query. Replaying the observed setup in a direct session
+still produced a nil point reply, so these selectors alone do not explain the missing element.
+
+A further 13 Pro control selected foreground Calculator explicitly in Apple Inspector (its
+process appeared after `ipb launch com.apple.calculator`). Injected taps opened Weather from
+Device Hub's mirror and Calculator's History sheet from `ipb`, but Inspector continued to show
+no selected element. A bounded host trace recorded only null focus/preview and section
+descriptors during an All-processes target change; two touch windows had no hit on the traced
+point/focus methods. This narrows the missing trigger to Inspector's selection path for these
+injected touches; it does not rule out a human finger touch. The latest Apple audit outlines
+were empty, so the documented issue-double-click path still lacks a reference capture. See
+the [dated follow-up](verification.md#2026-09-28--13-pro-point-selection-and-foreground-app-control).
+
 Pending experiments, in order of current evidence:
 
 1. Convert the research-only PID-root and own-query-child traversal into a product command only
@@ -159,9 +210,15 @@ Pending experiments, in order of current evidence:
    Mach service; enabling Developer Mode, rebooting and mounting DDI restored capabilities and
    hierarchy reads. Those simultaneous changes do not isolate the exact launchd gate. Two
    SpringBoard replies repeated a child within the same parent; deduplicate identical child
-   tokens before testing single-parent structure. A Calculator node press submitted without a
-   visible effect and candidate `Frame`/`AXFrame` reads returned nil, so geometry and node actions
-   remain research rather than a product contract.
+   tokens before testing single-parent structure. Even a press made with the focus event's exact
+   token/action descriptor had no visible effect, and candidate `Frame`/`AXFrame` reads returned
+   nil, so geometry and node actions remain research rather than a product contract. The next
+   geometry discriminator is a bounded capture of a **human finger** point selection with the
+   13 Pro's foreground app explicitly targeted. Synthetic HID taps and Device Hub mirror clicks
+   moved the UI but did not trigger the traced Inspector selection method. If a warning-bearing
+   audit target is available, also double-click an issue and trace its element handoff. Compare
+   the 12 mini's service-start failure separately. If neither reference path yields a point
+   reply, inspect the physical iOS 27 daemon before trying more descriptor guesses.
 2. Decode the full XCTest automation client exchange only if further evidence shows its session
    can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
 3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006
