@@ -48,7 +48,7 @@ com.apple.coredevice.feature.remote.universalhid
 
 ## Wire Format (captured 2026-09-07)
 
-Interposing `xpc_remote_connection_send_message*` in the helper on Xcode 27 beta 6 / CoreDevice 642.15 shows that every typed CoreDevice path ends up as a plain XPC dictionary on the RemoteXPC socket. There is no Mercury type-name wrapper on the wire, so a client that only speaks XPC dictionaries (C, or pymobiledevice3 from Python) can drive the same device daemon.
+Interposing `xpc_remote_connection_send_message*` in the helper on Xcode 27 beta 6 / CoreDevice 642.15 shows that the typed HID paths described here end up as plain XPC dictionaries on the RemoteXPC socket. There is no Mercury type-name wrapper on the wire, so a client that only speaks XPC dictionaries (C, or pymobiledevice3 from Python) can drive the same device daemon.
 
 UniversalHID service (`featureIdentifier = com.apple.coredevice.feature.remote.universalhidservice`):
 
@@ -84,6 +84,10 @@ barrier: {isBarrier: true} as above
 The device side is `/usr/libexec/dtuhidd` from the Xcode 27 beta DDI. Its launchd plist registers the RemoteXPC services `com.apple.coredevice.hid.universalhidservice` (feature `universalhidservice`), `com.apple.coredevice.hid.universalhid`, and `com.apple.coredevice.hid.indigo` (features button, scroll, digitizer, vendordefined), all with `UsesRemoteXPC = true` and entitlement `com.apple.private.CoreDevice.hid`. `dtuhidd` is absent from the Xcode 26.x DDI (CoreDevice 518.x), which is why those hosts refuse every HID socket with CoreDeviceError 1001.
 
 Host-side prerequisites for the socket path are a connected CoreDevice tunnel (`tunnelState = connected`; otherwise `createservicesocket` fails with CoreDeviceError 4000) and the CoreDevice UUID of the device, not its UDID.
+
+The separate AX service uses **raw DTX**, with NSKeyedArchiver payloads rather than this HID
+RemoteXPC envelope. Its captured wire contract is documented in
+[DevicesApp AX over raw DTX](#devicesapp-ax-over-raw-dtx-2026-10-11).
 
 ## UniversalHID Service
 
@@ -2620,6 +2624,314 @@ native rectangles, coverage and latency are still required. The
 [initial record](verification.md#2026-10-11--normal-rapport-entry-mck-discovery-and-native-loader-preflight)
 and [native-alignment follow-up](verification.md#2026-10-11--native-mck-client-alignment-phone-server-sequencing-and-browser-policy-control)
 map local controls and cleanup.
+
+## DevicesApp AX over raw DTX (2026-10-11)
+
+**Physical runtime and matched disassembly:** an ordinary host client now receives native AX
+nodes and numerical rectangles from the allocated iPhone 13 Pro, without XCTest, a Runner,
+a new phone app or a private entitlement/signing change. This is a separate DevicesApp route
+into the shipped MainOS axauditd, rather than the Inspector shim's XADAudit property dispatcher
+or the authenticated Mirroring transport. No product element-query command has been added.
+
+Measured seed: local macOS **26.5.1 / 25F80**, Xcode **27 Beta 6**, CoreDevice **642.15**;
+iPhone14,2, **iOS 27.0 / 24A437**, Developer Mode enabled. The phone was USB-connected to
+Mac-M2, while the working local client used its existing paired **local-network CoreDevice
+tunnel**. This result does not establish an independent new pairing flow, USB-only access,
+Linux/Windows support or the supported macOS 27 release gate. No new Mirroring login or
+VoiceOver operation was required by this client.
+
+### Shipped caller and device receiver
+
+| Source | Identity | Decisive calls |
+| --- | --- | --- |
+| Xcode B6 `Contents/SharedFrameworks/DeviceKit.framework/Versions/A/DeviceKit` | 255.2.3; UUID **2630578E-F7F3-3915-AA4C-3C201AD011E7** | `DeviceAccessibilityView` names `com.apple.accessibility.axAuditDaemon.remoteAXService` at **0x58696C**; **0x5869F0** resolves the exact CoreDevice `CreateServiceSocketProtocol.fileHandle(toServiceNamed:)` import. It duplicates the FD, constructs AXAuditRemoteDevice (**0x587C5C**) and calls startAccessibility (**0x586CC0**). |
+| Xcode B6 `Contents/SharedFrameworks/AccessibilityAudit.framework/Versions/B/AccessibilityAudit` | 192.6; UUID **EC45F228-B900-3BA4-A957-D2BD119667F9** | AXAuditRemoteDevice sets up **DTXSocketTransport** on the connected socket (**0x196F0**), DTXConnection, its dispatch target, cached client type **2**, and `clientNeedsAccessibility:@YES` (**0x198FC–0x19958**). `hostAPIVersion` returns boxed **7** (**0x1A608–0x1A614**). |
+| Phone `/System/Library/PrivateFrameworks/AccessibilityAudit.framework/AccessibilityAudit` | UUID **43AC666C-80EB-3B45-83D2-C8236CA7A958** | AXAuditDevicesAppRemoteServer's true subscription branch (**0x24FDD245C**, **0x24FDD2524–0x24FDD256C**) creates AXPRemoteCacheManager with cached type **2**, installs the transport delegate and starts it. The false branch clears the manager/delegate. Outgoing NSData uses `processDataFromRemoteDevice:`; incoming uses `processDataFromHost:` (**0x24FDD25E4**). |
+| Phone `/System/Library/PrivateFrameworks/AccessibilityPlatformTranslation.framework/AccessibilityPlatformTranslation` | UUID **AA0429D2-50DA-3B83-9C2A-A8D9E752581D** | Cache-manager start **0x24FE197B8**, request receiver **0x24FE19A68**, dispatch **0x24FE1EA4C**, explicit application processing **0x24FE157F8**, multiple attributes **0x24FE0E8C8**, hit test **0x24FE17CD0**. |
+
+The original Apple 24A437 cache instruction bytes are used for phone disassembly; the entire
+AXAudit text section also matches DeviceSupport: VM **0x24FDB53E0**, **140140 bytes**, SHA256
+**336586969277ccb93a27eac61260c0514deb7d93737674396fb46981857cc956**.
+The matching physical axauditd accepts the RSD FD into DTXSocketTransport at **0x10000D26C**,
+then AXAuditDevicesAppRemoteServer at **0x10000D2D0–0x10000D2F8**. Its Developer Mode check
+is **0x10000CB94**. The host framework's similarly named server method is a platform-specific
+noop; it is not evidence that the iOS method is a noop.
+
+This corrects an earlier inference based on the AXAudit framework alone: DeviceKit supplies
+the CoreDevice socket caller. The Inspector launch shim remains a different server entry.
+
+The own CoreDevice `createservicesocket` control currently fails for AX with **4000 / POSIX 83**,
+while the same ordinary HID socket control returns an FD. The normal paired RSD connection
+succeeds. The cause of that FD-path discrepancy remains open; it is not a device AX refusal.
+
+### Captured wire contract
+
+1. Discover the exact selected phone and AX service port from the **current RSD advertisement**
+   on an existing paired tunnel. Both RSD and service ports are dynamic. Direct TCP to that
+   advertised AX port carries **DTX**, with the control channel **0**; do not perform a RemoteXPC
+   upgrade. The current advertisement's `UsesRemoteXPC=true` / `Entitlement=AppleInternal`
+   does not establish the actual payload protocol or a refusal of this ordinary client.
+2. Serve the phone's DTX `hostAPIVersion` invocation with boxed integer **7**. Host invocation
+   `deviceAPIVersion` returns boxed **26**. These are API versions, not OS versions.
+3. Invoke `clientNeedsAccessibility:` with boxed Bool **true**. The phone pushes archived
+   NSData through `processDataFromRemoteDevice:`. These are real **NSKeyedArchiver
+   AXPTranslatorResponse** objects, not XADAudit dictionary/node wrappers.
+4. Send each archived **AXPTranslatorRequest** as NSData with `processDataFromHost:`. The
+   control invocation completes empty; its semantic response arrives separately through the
+   data callback. A zero/empty DTX reply is not the requested node result.
+5. Invoke `clientNeedsAccessibility:false`, then close the owned DTX socket and tunnel assertion.
+   Some runs observe socket termination while awaiting the stop acknowledgement; retain that
+   cleanup outcome separately from successful data capture.
+
+The six secure request fields are `parameters`, `requestType`, `actionType`, `attributeType`,
+`clientType`, `translation`. Tested read requests use native default **clientType=0** and zero
+unused action/attribute fields. Original dispatch's relative jump table at **0x24FE215A8**
+resolves request types **1=application**, **4=frontmost**, **5=multiple attributes**,
+**6=hit test**. No guessed request-type sweep was used.
+
+| Request | Captured parameters / carrier | Semantic result |
+| --- | --- | --- |
+| **1** | `parameters={pid: <actual process PID>}`, nil translation. Native factory **0x24FE1BEE0** sets type 1 and key `pid`; receiver creates the application AX element. | An **AXPTranslationObject** with matching PID, native objectID and isApplicationElement=true. |
+| **5** | Received translation object; `parameters={attributes: [8,21,3,25,53]}`. Key `attributes` is read by physical receiver **0x24FE0E9F0**. | Dictionary of available values keyed by integer attribute IDs. **8** is children, **21** native frame, **3** label, **25** identifier, **53** value. Missing values stay absent. |
+| **6** | Native blank AXPTranslationObject carrier: pid=0, false application/populated flags, nil bridge token/raw data, locally generated objectID. `parameters={point: NSValue(CGPoint), displayId:0}`. | Real hit element with device PID/objectID, or an error/nil result. The tested point **(195,400)** is in the phone's portrait logical coordinates. No touch event is generated. |
+| **4** | Native blank carrier and displayId=0. | Application result; in the observed Home/Settings state this selects unrelated **PDUIApp PID 5965**, so it cannot currently be trusted as the visible-app resolver. |
+
+Native translation-object initialization generates an eight-byte ID (**0x24FE1F6A4–0x24FE1F6FC**);
+the blank carrier is not a fabricated live node or an authentication identity. Live handles
+must come from device replies. Application/child tokens contain `pid`, `objectID`,
+`isApplicationElement`, `didPopuldateAppInfo` (Apple spelling), `bridgeDelegateToken` and
+`rawElementData`. Preserve objectID's **64-bit bit pattern**: the archive may show an unsigned
+number while native NSInteger prints a negative value. Cross-session token lifetime is unproven.
+
+Unit type-5 replies in these captures have nil associatedTranslationObject; the probe keeps
+**one outstanding semantic read** and matches request type, preserving unsolicited type-11
+packets separately. Pipelining arbitrary node requests would lack a demonstrated response
+correlator. Per-node attribute batches are short reads, not per-node preview/render/screenshot.
+
+A type-11 bulk response contains `resultData={treeDumpType,treeDump}`. Its collection mixes
+response types; only type **5** leaves are node attribute dictionaries. Initial Calculator
+capture: **34699 bytes**, **24 unique nodes**, all **24** with frames, all child references
+resolved. Additional capture: **129617 bytes**. Python decoding agrees with the native host
+codec on PID/ID, labels, frames and children. Attributed labels encode their text under
+`NSString`; CGRect NSValue uses `NS.rectval`. Handle non-tree notifications with nil resultData
+rather than treating every callback as a snapshot.
+
+### Root selection, geometry and proof limits
+
+Bulk receipt alone does not establish current-page coverage. Both automatic Home/Settings bulk
+and ordinary type-4 frontmost requests returned PDUIApp's unrelated tree. Inspector target PID
+and enable/monitor controls did not repair it. Physical bulk generation calls processFrontMostApp
+(**0x24FE16EC4**), which queries system-app native attribute **1102** and selects its first object
+(**0x24FE15B94–0x24FE15D64**). Why that native result selects PDUIApp remains unresolved.
+
+**Working runtime alternative:** type-6 system hit test returned **SpringBoard PID 39** on Home
+and **Preferences PID 8642** on Settings, in approximately **46 / 23 ms**. Type 1 then returns
+that application's root; following its type-5 children gives the displayed app's AX graph and
+frames. A fully Python-encoded hit-test → application → traversal control correctly selected
+Preferences on the Battery page and read **32 nodes / 32 frames** in **941 ms**, measured from
+the Python coroutine's start through fresh tunnel/DTX setup and cleanup; interpreter/import
+and app-launch time are excluded. No Apple AX framework, firmware reader or native codec is
+used by that client. Automatic Calculator main-page traversal returns **24/24 in 740 ms**.
+Automatic Home traversal returns **29/29 in 768 ms**.
+A normal installed third-party app, **哔哩哔哩 9.13.0** (builtByDeveloper=false,
+containerAccessible=false), returns **40/40 in 1744 ms**, including its login modal, empty
+phone-number field and numeric keyboard. No credentials are supplied. Its initial launch-splash
+hit test returns **error 8 / nil**; a later visible-page control succeeds. That observation
+does not establish a universal readiness signal or a permanent third-party restriction.
+Centre hit testing is a tested target-selection strategy, not proof it
+selects the desired app for every overlay, keyboard or split-display state.
+
+Explicit application traversal also matches Settings' main page (**13/13**), Battery (**32/32**)
+and Home (**29/29**). Children resolve within each observed graph. This is the application's
+**accessibility graph**, not every UIView/CALayer object, hidden view or combined system/app
+snapshot. The sampled graphs are mostly flattened accessibility children. Closure is not proof
+of complete page coverage for arbitrary apps, WebViews, secure fields or offscreen lists.
+The third-party modal/keyboard is one positive coverage control, not every overlay class.
+
+Frame **21** values are numerical device-space CGRects. The portrait app root is **390×844**;
+13 Pro native display is **1170×2532**, scale **3**. Calculator History frame **(20,51,36,36)**
+normalizes its centre to **(38/390,69/844)**. One ipb HID tap at that centre opens the History
+sheet, and the same AX connection pushes its **4-node / 4-frame** tree. A later fresh Settings
+Battery-node centre tap opens Battery; same-session explicit traversal returns the new 32-node
+page. Screenshots confirm both transitions. Rotation/clipping, stale tokens and concurrent
+page mutations still need a versioned observation/action contract.
+
+The first History run's concurrent screenshot call timed out; a screenshot after AX closure
+confirmed the sheet. A later Home screenshot succeeds while a short AX traversal is active.
+There is no reproduced permanent screenshot/AX incompatibility or diagnosed cause yet.
+Direct semantic AX actions remain untested on this route. Current product HID behavior and
+the supported macOS 27 gate are unchanged. See the [condensed physical record](verification.md#2026-10-11--devicesapp-raw-dtx-tree-rectangles-and-explicit-application-control).
+
+### Additional AX queries and DTX discovery (2026-10-11)
+
+**Physical read-only replies, same 24A437 seed:** request type **9** takes
+`parameters.actions` and returns the supported subset of the supplied action numbers; type
+**10** takes `parameters.attributes` and returns an attribute-number → Bool dictionary.
+Both preserve a translation object received in this connection and use the same NSData
+callback transport. Original APT dispatch **0x24FE1EC1C–0x24FE1EC24** selects
+`processSupportedActions:` (implementation **0x24FE14C18**); **0x24FE1EAEC–0x24FE1EAF4**
+selects `processSupportsAttributes:` (**0x24FE14E18**). The actions parameter key is the
+original CFString at **0x275E89020**, and attributes remains **0x275E89000**.
+
+On the visible XCTest authentication sheet, the received application root has label/Frame 21
+and 15 child handles. A type-9 query over the **1…17** action cases in the shipped implementation
+returns `[]` for that root and `[2,7,8,12]` for its first child, with error 0. No action is sent.
+Type 10 reports false for `[8,21,3,25,53]`, including fields already returned by type 5.
+Thus this Bool query is **not yet a reliable oracle of readable fields**; its semantics and
+client-context discrepancy remain open. Do not discard a successfully read frame/label based
+on that result or equate an advertised action with a verified visible effect.
+
+**Static action branches only:** request type **7** reaches the original iOS action dispatcher
+**0x24FE0F07C**. Its actionType **5** calls `press` (**0x24FE0F16C–0x24FE0F180**), and
+actionType **11** calls `scrollToVisible` (**0x24FE0F194–0x24FE0F1A8**); other cases call
+`performAction:withValue:`. Request type **8** reaches `processSetAttribute:`
+(**0x24FE1EB40–0x24FE1EB48**, implementation **0x24FE146C8**). None of these mutation
+paths has been exercised by this investigation. Existing centre actions still use ipb HID.
+
+**DTX is a transport shared by different servers, not a single permission/capability domain.**
+An ordinary connection to the current 13 Pro's `com.apple.instruments.dtservicehub` returns
+**111 published capability/version keys** during its handshake. These include target metadata,
+codec flags and per-service capabilities; they are not 111 independently callable services.
+Selected advertisements are `processcontrol.capability.viewdebuggingutils=1`,
+`deviceinfo.app-life-cycle=1`, `mobilenotifications=2`, `filetransfer=1`,
+`httparchiverecording=2`, `coreml.perfrunner=4` and `coreai.perfrunner=27001`, each under
+`com.apple.instruments.server.services.`. Their arbitrary-app reachability and usefulness
+remain untested. Process control is used successfully to launch/stop this run's own Runner.
+Existing telemetry/process/screenshot clients are already implemented by
+[pymobiledevice3](https://github.com/doronz88/pymobiledevice3/blob/master/docs/api/dvt.md);
+these advertisements should not all be presented as newly discovered functions.
+
+The Xcode B6 host `Contents/SharedFrameworks/DVTInstrumentsFoundation.framework/Versions/A/`
+`DVTInstrumentsFoundation` is version **65000**, arm64 UUID
+**8C827C84-C90A-3FC6-8EC5-F0CAF47DD689**. Its
+`-[DTProcessControlService insertViewDebuggingLibrariesForPid:]` at **0x3C4A0** chooses
+`libViewDebuggerSupport.dylib`, calls **task_for_pid at 0x3C588**, and has a failure branch
+if no task is obtained. This is host static evidence of a process-debugging/injection path,
+not proof of a universal UIView-tree interface for installed App Store applications.
+No library is injected by this run.
+
+### XCTest retry after unlock (2026-10-11)
+
+**Runtime evidence on the same 13 Pro, supplementary macOS 26 host:** native Xcode B6
+initializes the ordinary testmanagerd control/main sessions, installs/launches the temporary
+signed WDA reference and reaches `Running tests...`. The earlier password sheet is not visible
+in this retry. Its reverse `dtxproxy:XCTestDriverInterface:XCTestManager_IDEInterface` channel
+is refused, and native testing ends with exit 65 / Runner bootstrap exit 74. A native run
+without the comparison collector reproduces this outcome. This is not yet a working XCTest
+snapshot or a complete proof of all UI-testing permission gates.
+
+An ordinary Python control reports successful session initialization and
+`_IDE_authorizeTestSessionWithProcessID:` returns **true** for the just-launched owned PID.
+The phone's testmanagerd PID **8118**, executable `/System/Developer/usr/libexec/testmanagerd`,
+emits sender UUID **F154543F-6075-34E5-8ACF-C8245D4F2611**. Its filtered activity stream
+records the matching session UUID's request for an IDE transport, then **serialized transport
+handoff**, a barrier, `Socket will not be closed`, and the harness transport's disconnection
+and session closure. The Python peer closes before a usable driver channel arrives. The
+isolated native run also reaches this handoff before its failure. These observations locate
+the failure stage; they do **not** establish why the transferred connection fails or whether
+the handoff's initial disconnect notification is itself erroneous.
+
+Live `devicectl device info ddiServices` reports DDI **27A5252f**, CoreDevice **642.15**,
+XCTest **25227**, variant `external`, with `isUsable=true` and `contentIsCompatible=true`.
+A separate reference retaining the older artifact's embedded XCTest **24904** frameworks
+also closes before the driver channel; this does not isolate a single changed variable or
+prove a version-independent defect. It supplies no successful baseline.
+
+The advertised direct `com.apple.dt.testmanagerd.remote.automation` endpoint does not
+complete the normal DTX capability handshake within **five seconds** in a bounded control.
+No `_XCTD_beginSession…`, capability exchange or snapshot request is sent there. This timeout
+does not prove the advertised endpoint is usable or identify its admission policy.
+
+The temporary owned Runner is subsequently uninstalled. The independent DevicesApp AX path
+still obtains Calculator **24 nodes / 24 frames**, with a normal stop, on the same phone.
+Same-page XCTest node/rectangle and warm-latency comparison remains pending; failed bootstrap
+times must not be compared with successful AX capture times.
+
+### Device Hub foreground and USB transport control (2026-10-11)
+
+**Runtime evidence:** Device Hub 255.2.3.5 on the same macOS 26 / Xcode B6 host is
+foreground, explicitly selecting the allocated 13 Pro and displaying Calculator value **7**.
+A target-only socket inventory maps its connections to HID, display, pasteboard, configuration
+and location services. No connection to either advertised testmanagerd port is present in
+that inventory. This does not rule out every other host/session or every possible contention.
+Native testing while Device Hub stays open again reaches `Running tests`, then exits
+**Runner 74 / Xcode 65** after **23.467 seconds**. A filtered device activity stream covers
+both the owned Runner and testmanagerd; it records the transfer and IDE disconnection, without
+identifying a sandbox/local-network refusal. The concrete reason for this native-path failure
+remains open. Fresh independent AX capture with Device Hub open still returns Calculator
+**24 nodes / 24 frames** in **892 ms** for the complete fresh session.
+
+An exact-UDID **USB** connection through Mac-M2's usbmuxd validates its existing pairing and
+identifies iPhone14,2 / iOS 27.0 / 24A437. The legacy service
+`com.apple.testmanagerd.lockdown.secure` returns **InvalidService**. Using pymobiledevice3
+**11.10.2** on Mac-M2's macOS **27.2 / 26B5091g**, an independent, unprivileged
+**CoreDeviceProxy userspace RSD tunnel** instead connects to the ordinary remote testmanagerd.
+The same installed Xcode B6-signed reference receives its reverse
+`dtxproxy:XCTestDriverInterface:XCTestManager_IDEInterface` channel, sends
+`_XCT_testRunnerReadyWithCapabilities:`, receives the XCTest configuration and
+`_IDE_startExecutingTestPlanWithProtocolVersion:36`, and loads its test bundle.
+It links device `XCTAutomationSupport` version **25227** before waiting for
+**enabling automation mode**. This is not yet an HTTP-ready WDA or a successful snapshot.
+
+Device Hub's mirrored display shows **“为 XCTest 输入 iPhone 密码 / Enable UI Automation”**
+at that stage. This is a mirror observation, not proof of presentation on the physical panel;
+the user's subsequent physical-panel report and authorization control are recorded below.
+Ordinary unlock and the earlier true PID authorization are therefore insufficient for this
+separate gate. The credential step is left to the user. No security setting, profile or
+certificate is changed by the probe. These successful driver-establishment runs also contain
+the same harness handoff/disconnection sequence: **that sequence alone is normal transfer
+evidence, not the demonstrated failure cause**. Host OS and transport both differ in this
+control; the subsequent same-client-host USB control is recorded below. A pre-launch capability
+handshake timeout is recorded separately, with its cause unresolved.
+
+### Automation authorization presentation and lifetime (2026-10-11)
+
+**Runtime evidence, same 13 Pro / 24A437:** the USB CoreDeviceProxy userspace client also
+establishes Driver/configuration/protocol-36 execution when run on the **local macOS 26.5.1
+host with Python 3.12 / pymobiledevice3 11.10.2**, forwarding Mac-M2's usbmuxd over SSH.
+Thus moving the Python process to macOS 27 is unnecessary for this observed Driver success.
+It does not isolate every route, paired-host identity or service-lifetime difference from
+the local NativeRemotedTunnel failure; that failure's precise cause remains open.
+
+Runner PID **67654** waits **60 seconds** for enabling automation mode, then reports
+`com.apple.dt.XCTest.XCTFuture`, code **1000**, **“Timed out while enabling automation mode.”**
+`_XCT_initializationForUITestingDidFailWithError:` reaches the host. There is no WDA HTTP
+readiness or snapshot. A subsequent Driver-success run, PID **67684**, repeats this gate.
+The external research probe now propagates this failure instead of continuing its 180-second
+HTTP readiness loop; no production implementation changes.
+
+Device logs trace the request through `_XCT_enableAutomationModeWithReply:` → testmanagerd's
+**AutomationMode** client → `com.apple.dt.automationmode.writer`. Its reply requires
+authentication, followed by LocalAuthentication **`evaluatePolicy:2`**, caller **XCTest**,
+reason **Enable UI Automation**. coreauthd receives the request; SpringBoard activates and
+finishes presenting a remote transient overlay for testmanagerd PID **8118**, with
+**LocalAuthenticationUIService** in the overlay stack. These are device-side presentation
+records, not confirmation that authentication succeeded or that the physical panel displayed
+the overlay. AutomationMode runtime UUID is **4867BF17-FF7C-3D4D-A08F-C601FF4021F8**.
+Shipped 24A437 symbols/raw-cache disassembly corroborate
+`XAMLocalAuthenticationProvider.authorizationWithError:` at **0x255aa3014** calling
+`evaluatePolicy:options:error:` at **0x255aa30a0**.
+
+The user reports **no physical-panel prompt**, then confirms the authorization is input-capable
+in **Device Hub**, with one mistyped attempt. No successful authorization is inferred from
+that report. CUA still observes the authorization sheet after the owned Runner has ended;
+the Runner's 60-second deadline is therefore **not the lifetime of the visible authentication
+sheet**. A following startup fails its pre-launch DTX capability handshake in approximately
+15 seconds. An outstanding authentication request blocking progress is a hypothesis, not
+a demonstrated cause of that handshake timeout. Do not stack more Runner launches or assume
+a visible sheet proves a live comparison session. Device Hub is restored to the same 13 Pro;
+the attempted no-Device-Hub startup is not a valid control because the app had not fully
+exited before that run began. Credentials and authorization remain human-operated.
+
+A bounded passive trace subsequently receives the same context's authentication timeout at
+**10:35:56**, approximately **320 seconds** after its request at **10:30:36**:
+LocalAuthentication code **-1003**, **“Timeout expired.”** testmanagerd then releases the
+`_XCT_enableAutomationModeWithReply:` transaction. At **10:36:03**, a fresh USB userspace
+**handshake-only** connection succeeds in **9.8 ms**, without a Runner launch, test session
+or automation-mode request. This establishes recovery after authentication expiry; it is
+temporal evidence, not a proved queue-level causal explanation of the earlier 15-second timeout.
+The user identifies the missing streamed password keypad as the practical input obstacle and
+requests numeric controls in ipb's own mirror. The actual XCTest baseline remains pending.
 
 ## XCTest snapshot service boundary (2026-09-22)
 
