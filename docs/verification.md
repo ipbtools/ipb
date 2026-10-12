@@ -15,6 +15,14 @@ Homebrew keg. Source VERSION0.2.0 is not a release/provenance identifier. This r
 merge main, publish a tag/binary, or change the tap target. Development source can be built
 and installed explicitly; the full supported matrix remains open.
 
+**PR submission decision:** the user now requests compressing the accumulated50 commits
+and opening a PR. A separate segmented `codex/devicehub-alignment-pr` branch preserves
+`codex/devicehub-alignment` and its original history. Product code matches09bc118; the full
+supported matrix remains open, so [PR #1](https://github.com/ipbtools/ipb/pull/1) is Draft.
+Both source/tap Actions workflow APIs
+return total_count0/workflows[], and there is no existing automated release pipeline.
+[Manual release checklist](releasing.md) is documentation, not executed publication.
+
 Current user guides are [README installation](../README.md#installation-channels),
 [UI](ui.md), [mirror](mirror.md) and [the document map](README.md). Protocol facts and dated
 verification history retain their existing sources/seed and append-only boundary.
@@ -6813,3 +6821,29 @@ zsh parse, Formula Ruby syntax, report-size build checks and local doc link targ
 The new update regression is host-only. No new HID/media/AX real-device run or full supported
 macOS27/Xcode27 smoke gate is claimed. Raw model replies, API snapshots, installed-wrapper
 backup and checks stay outside Git at `~/.local/state/ipb/20261012-docs-release-update/`.
+
+
+## 2026-10-12 — Compressed PR submission and Actions/release inventory
+
+User requests: “那你整理压缩下，然后提 pr，然后目前是否有 github action，有没有标准的 release 流程”.
+Original alignment branch09bc118 has50 commits ahead of mainf2e85a6, zero behind. Its final
+tracked tree8cdaeec93209e3ada8bd3b199211e3fa1c8d900e is copied exactly into an isolated managed
+worktree before submission-only documentation edits. Product source, tests and captured wire
+format remain identical. The PR preserves14 exploration/feature/fix segments plus a submission-document commit;
+original research history is retained. The user explicitly rejects an all-in-one squash,
+and no single-commit squash is created.
+Guide EOF whitespace is trimmed, the current plan/head records the submission decision, and
+releasing.md adds a manual checklist plus future automation scope. Old dated records remain
+byte-identical. The unrelated original window_dump.xml is not copied, edited or committed.
+
+Read-only GitHub workflow APIs return total_count0/workflows[] for ipb and its Homebrew tap;
+no .github/workflows exists in either default branch. Runs are0; tags/releases are absent.
+This proves no workflow/release pipeline is configured, not whether the Actions account feature
+is enabled. Existing distribution is make/install plus VERSION0.2.0 and a HEAD-only main formula.
+Branch protection/ruleset requirements are not established by a blocked protection query.
+
+A Draft PR is appropriate for review while the supported macOS27/Xcode27/iOS27 full smoke gate
+remains open. Earlier supplementary real-device and installed results retain their own scope.
+Local build/host checks for the copied product tree are retained outside Git; no new phone
+interaction, runner installation, signing credential, tag/release, main merge or tap update is
+performed. Raw squash/tree comparisons and submission checks stay in local ipb state.

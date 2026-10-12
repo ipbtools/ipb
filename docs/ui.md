@@ -78,4 +78,3 @@ Real-device development verification covers macOS 26.5.1 locally and the AX help
 27.2 through an SSH-forwarded USB connection. The latter host still has Xcode 26.4; this does
 **not** close the full supported macOS 27 + Xcode 27 smoke gate. MCP integration and direct
 semantic AX actions are not implemented by this command.
-

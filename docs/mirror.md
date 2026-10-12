@@ -122,4 +122,3 @@ bin/ipb service-id keyboard
 bin/ipb service-id buttons
 bin/ipb service-id avp
 ```
-

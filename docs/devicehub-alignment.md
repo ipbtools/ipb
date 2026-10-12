@@ -521,6 +521,20 @@ prefix. This prevents an installed Homebrew copy from being updated in place of 
 running manual copy. No new persistent install-origin metadata or release automation is added.
 Homebrew HEAD still tracks `main`; source-branch availability does not mean a tag/release.
 
+## Compressed PR and publishing scope
+
+The user requested compressing the accumulated50 commits and opening a PR. Keep
+`codex/devicehub-alignment` as the research history; submit the tested product tree through
+`codex/devicehub-alignment-pr` as14 topic commits plus a submission/release-document commit,
+based on main f2e85a6. The human explicitly rejected an all-in-one squash: “不是 1 个”. Product source is unchanged
+from09bc118; submission changes only document the history/CI/release boundary and trim guide EOF
+whitespace. Retain all dated verification records and protocol sources.
+
+[PR #1](https://github.com/ipbtools/ipb/pull/1) is Draft while the full supported
+macOS27/Xcode27 device gate remains open.
+Both source and tap have zero configured Actions workflows. [Releasing](releasing.md)
+records a manual checklist; no workflow, tag, release, main merge or tap change is triggered.
+
 ## Remaining work
 
 1. Complete the supported release-matrix gate with an available host/device pair.
