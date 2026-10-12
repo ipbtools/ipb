@@ -46,7 +46,7 @@ device selection
   device                print the UUID the other commands would use
   doctor                layered self-check: install, Apple stack, device, DDI, HID services
   version               ipb, macOS and CoreDevice versions
-  update                update ipb in place (Homebrew install or git checkout)
+  update                host-only update of this Homebrew install or git checkout
 
 input
   tap <x> <y>                                  a touch, down and up
@@ -821,7 +821,7 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror|ui) DEVICE="" ;;
+  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror|ui|update) DEVICE="" ;;
   *) DEVICE="$(resolve_device)" || exit 3 ;;
 esac
 
@@ -957,7 +957,8 @@ case "$cmd" in
       git -C "$ROOT" pull --ff-only || { print -u2 "ipb: git pull failed (local changes?); resolve and re-run"; exit 1; }
       make -C "$ROOT" || { print -u2 "ipb: build failed"; exit 1; }
       print -r -- "ipb: updated to $(cat "$IPB_VERSION_FILE" 2>/dev/null || print -r -- unknown)"
-    elif command -v brew >/dev/null 2>&1 && brew list --formula ipb >/dev/null 2>&1; then
+    elif command -v brew >/dev/null 2>&1 && brew list --formula ipb >/dev/null 2>&1 &&
+         brew_root="$(brew --prefix ipb 2>/dev/null)" && [[ "${brew_root:A}" == "$ROOT" ]]; then
       print -r -- "ipb: Homebrew install; updating tap and formula"
       brew update || true
       installed="$(brew list --versions ipb 2>/dev/null | awk '{print $2}')"   # HEAD-<sha>
@@ -981,11 +982,13 @@ case "$cmd" in
         print -u2 "ipb: reinstall finished at ${updated:-unknown}, but the remote HEAD is $remote"
         exit 1
       fi
-      print -r -- "ipb: updated ${installed:-unknown} -> ${updated:-unknown} ($(command ipb version 2>/dev/null || true))"
+      brew_prefix="$(brew --prefix ipb 2>/dev/null || true)"
+      brew_ipb="${brew_prefix}/bin/ipb"
+      print -r -- "ipb: updated ${installed:-unknown} -> ${updated:-unknown} $("$brew_ipb" version 2>/dev/null || true)"
     else
-      print -u2 "ipb: not a git checkout and not a Homebrew install; update manually"
-      print -u2 "  brew:   brew update && brew upgrade --fetch-HEAD ipb"
-      print -u2 "  source: git -C <checkout> pull && make -C <checkout>"
+      print -u2 "ipb: manual install at $ROOT; update manually from its source checkout"
+      print -u2 "  git -C <checkout> pull --ff-only"
+      print -u2 "  make -C <checkout> install PREFIX=\"$ROOT\""
       exit 2
     fi
     ;;

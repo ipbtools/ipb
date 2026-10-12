@@ -13,13 +13,18 @@ location, screenshots.
 the DevicesApp raw DTX service. It uses an optional host Python backend; it installs nothing
 on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
 
-The interaction path is verified, and the CLI uses DeviceHub's own async descriptor-discovery path
-to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
+The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
+service when `UHID_SERVICE_ID=auto`. Feature validation is host/device specific; the current
+macOS 27 + Xcode 27 full gate for these branch changes remains open. See
+[current verification scope](docs/verification.md#open-items--current-state-living-section).
+
+[Install and update](#installation-channels) · [Commands](#usage) · [UI tree](docs/ui.md) ·
+[Mirror](docs/mirror.md) · [Documentation map](docs/README.md)
 
 ## Requirements
 
 - A host whose installed CoreDevice package is 636.x or newer. This ships with Xcode 27 beta (`XcodeSystemResources.pkg`); it is what puts `UniversalHIDService`, the `HIDServiceID` helpers, and the embedded `UniversalHID.framework` into `/Library/Developer/PrivateFrameworks`.
-- macOS 27 + Xcode 27 beta on the host (the current v1 release matrix). macOS 26.5.1 has separate development verification records; those do not expand the supported release matrix. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
+- macOS 27 + Xcode 27 beta on the host (the supported target matrix). macOS 26.5.1 has separate development verification records; those do not expand the supported release matrix. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
 - A connected iOS 27+ device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted. iOS 26 is no longer a supported target (dropped 2026-09-20, no device available to verify against). On iOS 26 the `touchscreenGesture` service (`0x501`) was absent, so `pointer`, `abs-pointer`, `scroll-report`, `scroll-gesture` and the mirror's scroll wheel never worked there. See `docs/verification.md`.
 - GitHub-hosted code should be treated as beta/private-ABI research, because Apple may change these interfaces between seeds.
 
@@ -33,18 +38,46 @@ export DEVELOPER_DIR=/path/to/Xcode-beta.app/Contents/Developer
 
 Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefer.
 
-## Install (Homebrew, stage 1 distribution)
+## Installation channels
 
-The tap `ipbtools/homebrew-ipb` carries the same formula as `Formula/ipb.rb` here; it builds from source, so the machine needs Xcode 27 beta selected for the build and its CoreDevice package for runtime:
+This README describes the `codex/devicehub-alignment` source branch. As checked on
+2026-10-12, `ipb ui`, the Bilibili text fix and the new mirror keyboard/clipboard work are
+on that branch; they are not on `main`. There is no tagged GitHub release or downloadable
+release binary. `VERSION=0.2.0` alone does not identify these branch changes.
+
+| Channel | What it installs | Update path |
+| --- | --- | --- |
+| Homebrew HEAD | Default branch `main`; currently lacks the new UI and mirror additions | Use `brew reinstall --HEAD ipbtools/ipb/ipb`; host-only `ipb update` needs the fix in `main` |
+| Development source | The selected source branch, including the features described here | Run `bin/ipb update` in that checkout |
+| `make install PREFIX=...` | A local copy of the selected checkout | Pull/build the checkout, then repeat `make install` with the same prefix |
+
+### Homebrew HEAD
+
+The tap builds from source. Select Xcode 27 beta for the build and install its CoreDevice
+package for runtime. A fully qualified formula name trusts only that formula:
 
 ```sh
-brew tap ipbtools/ipb
-brew trust ipbtools/ipb      # current Homebrew refuses third-party taps until trusted
-brew install --HEAD ipb      # builds from source; ~10 s once Xcode 27 beta's CoreDevice package is present
-ipb version                  # ipb 0.1.0 (macOS ..., CoreDevice 642.15)
+brew install --HEAD ipbtools/ipb/ipb
+ipb version                  # source VERSION plus macOS/CoreDevice versions
 ipb doctor                   # layered self-check, names the next step on failure
 ipb devices                  # then: ipb screenshot before.png; ipb tap 0.15 0.12; ipb home
 ```
+
+### Development source and local installation
+
+To install the features documented by this branch, with Xcode 27 beta selected:
+
+```sh
+git clone --branch codex/devicehub-alignment https://github.com/ipbtools/ipb.git
+cd ipb
+make install PREFIX="$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+ipb help                     # confirm `ui` and mirror clipboard commands are present
+```
+
+For an existing checkout, pull its selected branch and repeat `make install` with the same
+prefix. `command -v ipb` shows which copy your shell runs; a Homebrew copy and a manual copy
+can coexist and contain different code.
 
 ### Shell completion
 
@@ -72,11 +105,18 @@ autoload -Uz compinit && compinit
 
 Only zsh is provided; bash has no completion.
 
-`ipb update` refreshes a Homebrew install or a source checkout in place. On a Homebrew install it
+### Updating the running copy
+
+In this development branch, `ipb update` is a host-only command: it does not enumerate/select phones and needs no `-s`,
+regardless of how many devices are attached. It refreshes the running Homebrew install or
+source checkout. A manual-prefix install returns exit 2 with its exact reinstall prefix;
+it does not update another Homebrew copy. Source updates follow the checkout's configured
+branch, while Homebrew follows the formula's `main` branch. On a Homebrew install it
 compares the installed `HEAD-<sha>` against the remote HEAD and reinstalls only when they differ:
 `brew upgrade --fetch-HEAD` cannot be used, because it compares against a cached clone it does not
 refresh and answers "already installed" when the remote has moved. An install predating this fix
-runs the old wrapper and will report a false success once; `brew reinstall ipb` lands the new one.
+runs the old wrapper; after the fix reaches `main`, use `brew reinstall --HEAD ipbtools/ipb/ipb`
+to replace it. Reinstalling current `main` does not obtain development-branch features.
 
 `make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`,
 the helpers in `libexec/` (including the optional AX backend), `share/ipb/VERSION`,
@@ -84,69 +124,23 @@ the helpers in `libexec/` (including the optional AX backend), `share/ipb/VERSIO
 
 ### Application elements (`ipb ui`)
 
-The host backend needs Python 3.11+ and the verified `pymobiledevice3==11.10.2`.
-It uses an existing USB pairing, Developer Mode and the advertised iOS 27 AX service.
-It does not pair automatically or fall back to another phone/transport. Other ipb commands
-do not depend on this optional Python package.
-
-Create an optional environment once (from a source checkout; an installed copy puts the
-requirements file in `<prefix>/share/ipb/requirements-ax.txt`):
-
 ```sh
-python3.12 -m venv "$HOME/.local/share/ipb/ax-venv"
-"$HOME/.local/share/ipb/ax-venv/bin/python" -m pip install -r requirements-ax.txt
-ipb -s '12 mini' ui
-ipb -s '12 mini' ui --json > page.json
+ipb -s <device> ui
+ipb -s <device> ui --json
 ```
 
-ipb prefers that environment (or `$XDG_DATA_HOME/ipb/ax-venv` when set), then `python3`.
-`IPB_AX_PYTHON=/path/to/python` selects another existing environment. Installation/update
-does not install Python packages automatically.
+Returns the application's actual AX child graph, text, logical-point rectangles and state.
+JSON includes `children`, `parentId` and `depth`; the text output is indented by depth.
+It needs an optional Python 3.11+ / pymobiledevice3 11.10.2 environment on the Mac,
+an existing USB pairing and Developer Mode. It starts no XCTest session or phone app.
 
-By default, a read-only hit test at the screen centre selects the displayed application's
-PID. `--point 0.3 0.4` chooses another normalized point; `--pid 1234` selects a known app
-explicitly, including a background app. A keyboard/overlay can select a different process.
-Hit-test selection currently requires portrait `rot0`; explicit PID reads retain the raw
-AX coordinate space. Failed or nil hit tests fail the command, with no automatic replay.
+AX can merge text and omit backing containers: the tested Settings page gives AX 13 nodes
+versus XCTest 176. `ipb` preserves the graph returned by the service. Description-first text
+reads avoid the reproduced Bilibili rich-Label encoding failure. Other read failures remain
+explicit; timeout recovery on a fresh connection is not implemented.
 
-JSON schema 1 contains `snapshotId`, application PID/selection, a `nodes` array with
-snapshot-local `id`, `parentId`, ordered `children`, depth and available attributes:
-label, identifier, value, description, placeholder, frame, role/subrole codes, traits and
-enabled/focused/selected/visible flags. Frames are **device logical points**. Traits are a
-decimal string to preserve all 64 bits. Unavailable properties are omitted; `CGRectNull`
-is reported as `frameUnavailable`. Parent edges come from actual AX children, and navigation
-order is separate. IDs are valid only within that output; they are not reusable action tokens.
-
-`attributePolicy="description-first"` queries Description before the optional Label field.
-When Description contains text, Label is not requested; otherwise a separate Label read is
-made. This avoids a reproduced iOS AX Label timeout on Bilibili's video title. JSON preserves
-`description` and `label` separately and omits fields not queried/returned. The text tree shows
-Label, then Description, then Identifier. Trees and rectangles are still fully validated;
-an actual request timeout fails with its request type, node identity and attribute IDs.
-The captured rich Label reply fails device-side secure encoding; its plain Description succeeds.
-
-Collection is serial and bounded (512 nodes, depth 32, 30 s plus bounded cleanup).
-`atomic=false` is intentional: pre/post checks confirm root text (Description, or Label when
-Description has no text), frame/children and selected PID
-stability, not an atomic page snapshot. Missing children, changed roots, exhausted budgets
-or cleanup failures return nonzero without a partial tree. The cleanup field records the
-known phone-close-before-stop-ack case separately from acknowledged teardown.
-
-For `ui`, exit 2 means usage/Python/dependency failure, 3 means device selection or
-UUID-to-USB resolution failure, 5 means timeout/cancellation, and 1 means tunnel,
-protocol, changed/incomplete graph or cleanup failure. `SMOKE_AX=1` adds the read gate
-to the normal smoke matrix; `SMOKE_AX_ONLY=1` runs only that gate.
-
-On the tested 12 mini Settings page, AX returns 13 nodes while XCTest returns 176. The
-additional nodes include structural containers, icon/text descendants, hidden rows and a
-duplicate Dictate node. Richer attributes do not restore that backing hierarchy: Parent was
-absent and navigation children matched ordinary children. The integration exposes the real
-AX graph without inventing containers. See [protocol findings](docs/protocol.md#settings-structure-and-richer-attributes-2026-10-12).
-
-Real-device development verification covers macOS 26.5.1 locally and the AX helper on macOS
-27.2 through an SSH-forwarded USB connection. The latter host still has Xcode 26.4; this does
-**not** close the full supported macOS 27 + Xcode 27 smoke gate. MCP integration and direct
-semantic AX actions are not implemented by this command.
+See [the UI guide](docs/ui.md) for setup, JSON fields, text policy, bounds and the AX/XCTest
+comparison. Availability depends on the [installation channel](#installation-channels).
 
 ## Build
 
@@ -219,8 +213,9 @@ export DEVICE_ID=<coredevice-uuid>           # the default for this shell
 A selector is matched most-specific-first — whole UUID, then UUID prefix, then a case-insensitive
 substring of the device name or marketing model. `xcrun devicectl --device` accepts none of these
 shorthands, so `ipb` resolves them itself against `devicectl list devices --json-output`; a full
-UUID is passed straight through and costs no enumeration. Anything that matches nothing, or more
-than one device, exits 3 and lists what is attached. `ipb devices` prints the same list, and
+UUID is passed straight through and costs no enumeration. For device commands, a selector that matches nothing or more
+than one device exits 3 and lists what is attached. Host-only `help`, `version`, `update`
+and `service-ids` bypass device selection. `ipb devices` prints the same list, and
 `ipb device` prints the UUID the other commands would use.
 
 Device identity is the CoreDevice UUID, not the UDID: the 642.x `devicectl list devices` table view
@@ -296,115 +291,24 @@ than the device, frames are **dropped, not queued**; the count is reported on ex
 
 ### Interactive mirror: `ipb mirror`
 
-One window displays the device screen and accepts mouse control, without DeviceHub, injection
-into any Apple process, or any special entitlement.
-
 ```sh
-bin/ipb mirror [--seconds S] [--csv PATH]
-bin/ipb mirror --help
+ipb -s <device> mirror
+ipb mirror --help
 ```
 
-Click, hold, drag, and scroll directly on the screen; trackpad and wheel scrolling both drive the
-device's own scroll path (`0x501`, iOS 27 only). The shortcuts match DeviceHub:
+A GUI window displays the phone and accepts mouse, keyboard and text clipboard input.
+Click the phone view to focus it. Mac input-method composition stays on the Mac and sends
+committed Unicode text by clipboard paste; iOS may show its normal paste permission prompt.
+Paste/IME commits replace the iPhone text clipboard; continuous clipboard sync is not provided.
 
-| Shortcut | Action |
-| --- | --- |
-| ⇧⌘H | Home |
-| ⌃⇧⌘H | App Switcher |
-| ⌘L | Lock, or wake a dark screen — the same side-button press |
-| ⌘K / `123` button | Show or hide the numeric keypad |
-| ⌘A / ⌘C / ⌘X / ⌘V | Select all / copy to Mac / cut to Mac / paste Mac text |
-| ⌃Space | Next Mac input method (also available in Edit) |
-| ⌘W / ⌘Q | Close the mirror / quit |
-| ⌘↑ / ⌘↓ | Volume up / down |
-| ⇧⌘S | Save the latest decoded frame as a PNG in `~/Pictures` |
-| ⌘← / ⌘→ | Rotate device left / right, then update the preview and input mapping |
-| ⌘0 | Zoom to fit |
-| ⌘1 | Actual size (falls back to fit if it exceeds the available screen) |
+Common shortcuts: **⇧⌘H** Home, **⌃⇧⌘H** App Switcher, **⌘L** lock/wake,
+**⌘C / ⌘X / ⌘V** text Copy/Cut/Paste, **⌘K** numeric keypad and **⌘W** close.
+A desktop GUI login session is required. Secure-field/lockscreen keyboard acceptance and
+physical trackpad parity remain unverified.
 
-The `123` button in the window title bar opens digits **0–9**, **Backspace** and **Return**
-for focused numeric input. This can help with hidden streamed keypads if iOS accepts keyboard
-input on that page. It sends keyboard keys; its buttons do not
-represent reconstructed iPhone touch positions. While open, Mac number keys, Backspace and
-Return are forwarded too. Close it with `123`, `⌘K`, or its close button. Keyboard usages are
-omitted from event CSV and diagnostics. Password-sheet and lockscreen acceptance still require
-device validation; a visible panel does not prove iOS will accept its keyboard events.
-
-Click the phone view to focus the window, then type normally. Letters, numbers, punctuation,
-navigation/function keys and modifier combinations use the discovered keyboard HID service.
-Key down/up preserve the full held-key set; ordinary key repeat is forwarded. Existing mirror
-shortcuts above remain local/reserved and do not repeat. Focus loss and close release held keys.
-Physical key input follows the iPhone's keyboard layout/input method.
-
-Choose an enabled Mac input method in **Edit → Input Method**, or use **Control-Space** / Edit →
-Next Input Method. System-wide shortcuts can be intercepted by macOS; the menu remains available.
-Mac input methods keep composition/candidates on the Mac and send committed text by UTF-8
-clipboard paste. The composing text appears at the bottom of the mirror. Emoji and other Unicode
-commits use the same path. This does not provide a local copy of the phone's editable document
-for reconversion or replacement of previously committed ranges.
-
-The Edit menu also exposes text Cut, Copy, Paste and Select All. Copy/Cut wait for a changed
-iPhone clipboard before retrieving text; if nothing is selected, the mirror stays open. A newer
-Mac clipboard is preserved. Paste replaces the iPhone text clipboard. Transfers are ordered with
-keyboard input, capped at 2 MiB of UTF-8, and never retried after a submitted chord. Images/rich
-text and continuous clipboard synchronization are not implemented. iOS may ask the focused app
-to allow paste from `dtpasteboardd`; handle that prompt normally. Sender success does not prove
-the app inserted text. Secure-field/lockscreen acceptance remains unverified.
-
-**Requires a GUI login session**, just like `ipb stream`: in-process decoding needs
-`CVDisplayLink`. It works with SIP enabled and needs no entitlement; plain ssh is unsupported.
-
-While a mirror session runs, `ipb` holds a resident `devicectl notification observe`
-subscription to keep the CoreDevice tunnel lease alive. HID traffic alone does not renew the
-lease. This proxy keepalive is the accepted workaround; see `docs/verification.md`.
-
-A static display can stop publishing frames and resume when the screen changes. After the first
-valid frame, silence alone does not close the mirror or stream. Explicit stream/connection errors
-still fail; collection and shutdown remain bounded. A silent transport failure without an error
-callback cannot currently be distinguished from an idle display until new content arrives.
-
-The default run lasts 300 seconds; `--seconds` accepts values greater than 0 and at most 3600.
-The existing 8192-input-event cap also ends the run. Statistics retain their existing fields and
-go to **stderr**. No CSV is produced by default; `--csv PATH` writes the event header and rows to
-that file (overwriting it; its parent directory must exist). CSV open/write failures exit 8.
-`IPB_MIRROR_HELPER` overrides the helper; otherwise `libexec/ipb-mirror` is preferred over
-`build/ipb-mirror`. The source is `Sources/mirror.m`. The helper's existing `--service-id ID`
-option is also passed through for a known touchscreen ID; descriptor discovery remains the default.
-
-The mirror reads the live primary display before opening and refreshes it on a serial background
-queue once per second, with at most one query in flight. Each query has a 5-second Apple timeout
-and a 6-second host bound; close cancels the active child. Query/geometry errors fail the session
-explicitly. Metadata changes drain old input before changing the crop or transform. External
-orientation changes can take a refresh interval to appear; there is no atomic frame/metadata epoch
-in this version. Device direction controls the preview; touch coordinates map back to native axes,
-while pointer coordinates stay in preview space. Saved PNGs retain the cropped native orientation.
-
-Decoded frames carry encoder padding for 16-pixel alignment (on the iPhone 13 Pro, 1184×2576
-against a 1170×2532 screen). The mirror crops it rather than compensating for it, so the window's
-aspect ratio matches the phone's and a click lands where it is drawn. Live primary `nativeSize`
-is preferred, followed by the existing model table, Xcode lookup and content detector; see the 2026-09-09 record in
-[docs/verification.md](docs/verification.md).
-
-Not implemented: Siri (⇧⌥⌘H), screen recording (⇧⌘R), Action Button, and Camera Control. A Device Hub Siri invocation has now been captured (code `0xcf`, states 0/1), but produced no visible
-Siri UI on the tested phone; its full typed page encoding and functional behavior still need validation.
-The other hardware buttons lack usage-code evidence; recording lacks capture/recording behavior evidence. The local 13 Pro also lacks Action Button and Camera Control hardware.
-
-Exit codes: 0 success, **1 input/connection failure**, 2 usage/local setup, 3 service socket or
-descriptor discovery failure, 4 tunnel/interface/bind failure, 5 negotiation failure,
-6 media/decoder/display failure, 7 no initial media frame within 12 seconds, **8 local I/O failure**
-(including CSV output, descriptor capture, or screenshot shutdown drain), 9 setup/run/shutdown
-watchdog or input-drain timeout, 130 SIGINT, 143 SIGTERM. Unlike `stream`, mirror has input
-failure code 1 and no `--count` contract. Sent input is never automatically replayed.
-
-Supported `service-id` roles:
-
-```sh
-bin/ipb service-id touchscreen
-bin/ipb service-id gesture
-bin/ipb service-id keyboard
-bin/ipb service-id buttons
-bin/ipb service-id avp
-```
+See [the mirror guide](docs/mirror.md) for all shortcuts, input behavior, geometry,
+keepalive, limits and exit codes. These keyboard/clipboard additions follow the
+[development installation channel](#installation-channels).
 
 ## First run: `ipb doctor`
 
@@ -438,7 +342,7 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Screen recording | `screenrecord` | `ipb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
 | Live screen stream | scrcpy (an on-device server) | `ipb stream` (own, JPEG frames) | no | no |
 | Interactive mirror | scrcpy | `ipb mirror` (own) | no | Device Hub, GUI only |
-| UI hierarchy | `uiautomator dump` | no CLI yet; AXAudit research reads attributes/partial hierarchy, with target-dependent detail and unresolved frames ([protocol](docs/protocol.md#accessibility-inspector-and-axaudit-2026-09-22)) | `ui describe-all` (simulator) | no |
+| UI hierarchy | `uiautomator dump` | `ipb ui` ([development branch](#installation-channels)): actual AX tree, text, frames and state; coverage differs from XCTest ([guide](docs/ui.md)) | `ui describe-all` (simulator) | no |
 | Install / uninstall | `install` / `uninstall` | `ipb install` / `ipb uninstall` (devicectl) | yes | `install app` / `uninstall app` |
 | Launch / kill / ps | `am start` / `am force-stop` / `ps` | `ipb launch` / `ipb kill <pid>` / `ipb ps` (devicectl) | launch / terminate | `process launch/signal`, `info processes` |
 | Open URL / deep link | `am start -a VIEW -d` | `ipb open <url>` (devicectl) | `open` | `process openURL` |
@@ -474,15 +378,16 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 - `power` / `lock` / `wake`: CoreDevice HID button service, consumer usage `0x0c`/`0x30` held 0.4 s (the side button's own duration gate is 0.29 s; 0.7 s opens Siri)
 - `screenshot`: `devicectl device capture screenshot`, using the copy shipped in the CoreDevice package
 - `stream` and `mirror`: the device's own AVConference media path over the CoreDevice tunnel, decoded in process; `mirror` sends input over the same UniversalHID services as the commands above
+- `ui`: an existing-paired USB userspace RSD plus DevicesApp raw DTX; optional host Python dependency
 
 `CoreDevice.framework` exposes `HIDKeyboard` and `HIDPointer` protocols, but on the verified Xcode 27 beta 2 build their implementations are `UniversalHIDKeyboard` / `UniversalHIDPointer` adapters backed by the UniversalHID service, not separate `feature.remote.hid.keyboard` or `feature.remote.hid.pointer` sockets.
 
 ## Verified Scope
 
-Every claim in this README rests on a dated record in [docs/verification.md](docs/verification.md),
+Feature verification is recorded in [docs/verification.md](docs/verification.md),
 which names the host, the device, the CoreDevice and DDI builds, and the artefacts. The oldest
 records are against an iPhone 13 Pro on iOS 27.0 with Xcode 27 beta 2 (CoreDevice 636.3); the
-compatibility matrix at the top of that file is the current state.
+living open-items section at the top of that file names the current validation boundaries.
 
 The smoke gate is what keeps this honest: `scripts/smoke_matrix.sh` exercises service discovery,
 device selection, one report per HID feature, and — with `SMOKE_INTERACTIVE=1` — home, tap,
@@ -505,7 +410,7 @@ the living open-items list is at the head of [docs/verification.md](docs/verific
   dismissed the same SpringBoard “Remove App” confirmation with Cancel. The older blanket claim
   that all system dialogs ignore ipb is withdrawn; the original permission prompt was not recreated.
 - **The long-running paths hold the CoreDevice tunnel by proxy.** `ipb mirror` and `ipb stream`
-  keep a resident `devicectl` subscription alive because the tunnel is a ~10 s lease and taking a
+  keep a resident `devicectl` subscription alive because the tunnel has an idle lease and taking a
   usage assertion directly needs an entitlement. If the mirror is killed abnormally the
   subscription is swept on exit, but a hard `SIGKILL` can leave it running for the grace period.
 - **`ipb screenrecord` is unsupported on the tested iOS 27.0 device** (devicectl reports error
@@ -517,8 +422,15 @@ the living open-items list is at the head of [docs/verification.md](docs/verific
 
 ## License and notice
 
-MIT (see `LICENSE`). ipb talks to undocumented Apple interfaces (CoreDevice, RemoteXPC, the developer disk image's HID daemon) and redistributes no Apple components; the CoreDevice package and the disk image come from Xcode on the user's machine. Apple may change these interfaces between releases. A future Python client built on pymobiledevice3 (GPL-3.0) will live in a separate repository so this one stays MIT.
+MIT (see `LICENSE`). ipb talks to undocumented Apple interfaces (CoreDevice, RemoteXPC, the developer disk image's HID daemon) and redistributes no Apple components; the CoreDevice package and the disk image come from Xcode on the user's machine. Apple may change these interfaces between releases. The optional AX backend requires separately installed
+[pymobiledevice3 (GPL-3.0)](https://github.com/doronz88/pymobiledevice3/blob/master/LICENSE).
+The current installer does not bundle that dependency. The Xcode-free client remains a
+distribution plan, distinct from the optional AX backend.
 
 See [docs/protocol.md](docs/protocol.md) for the current protocol map, symbol evidence, and known gaps.
 
-See `AGENTS.md` for the four-stage roadmap (macOS 27 → macOS 26 → Xcode-free hosts) and [docs/standalone-distribution.md](docs/standalone-distribution.md) for the adb-style distribution plan and [docs/research/](docs/research/) for the 2026-09-07 landscape research (adb capability boundary, agent frameworks, peer iOS tools) and the direction review.
+See [the documentation map](docs/README.md) for current guides and research. `AGENTS.md`
+records the roadmap; older platform rows are historical, while the current supported target
+is macOS 27 + Xcode 27 + iOS 27+. [Standalone distribution](docs/standalone-distribution.md)
+describes the Xcode-free direction; [research](docs/research/) contains capability and peer-tool
+comparisons plus independent direction reviews.

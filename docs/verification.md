@@ -4,9 +4,24 @@
 
 **Updated 2026-10-12. This section is overwritten; dated records below are append-only.**
 
-The latest 13 Pro AX result is now **native element trees and numerical rectangles through
-DevicesApp's raw DTX service**, reached by an ordinary Python client on the existing paired
-local-network tunnel. Host is supplementary macOS 26.5.1 / 25F80, Xcode 27 B6 / CoreDevice
+### Distribution and documentation scope (checked 2026-10-12)
+
+GitHub default `main` is f2e85a6d60c45f18e6f9f2a306f709ffb9710392; no tags or GitHub
+releases are listed. Homebrew HEAD tracks `main` and the installed Homebrew keg is
+HEAD-f2e85a6. The new UI backend, Bilibili fix and mirror keyboard/clipboard exist on
+`codex/devicehub-alignment`, whose audited baseline is 1a3618e. They are installed separately
+under `~/.local`; the absolute wrapper there includes `ui` and mirror clipboard, unlike the
+Homebrew keg. Source VERSION0.2.0 is not a release/provenance identifier. This round does not
+merge main, publish a tag/binary, or change the tap target. Development source can be built
+and installed explicitly; the full supported matrix remains open.
+
+Current user guides are [README installation](../README.md#installation-channels),
+[UI](ui.md), [mirror](mirror.md) and [the document map](README.md). Protocol facts and dated
+verification history retain their existing sources/seed and append-only boundary.
+
+The 13 Pro AX result is **native element trees and numerical rectangles through
+DevicesApp's raw DTX service**. The initial research used an existing-paired local-network
+tunnel; current `ipb ui` uses the selected existing-paired USB userspace RSD. Host is supplementary macOS 26.5.1 / 25F80, Xcode 27 B6 / CoreDevice
 642.15; device is iPhone14,2 / iOS 27.0 / 24A437, Developer Mode enabled. No XCTest, Runner,
 new phone app, entitlement/signing/security change, VoiceOver operation or new Mirroring login
 was used by this client. The supported macOS 27 product gate remains open.
@@ -15,7 +30,9 @@ Calculator bulk: **24 nodes / 24 frames**, closed observed child graph, first pu
 **1.18 s after subscription**. Native and Python decoders agree. A fresh History-node centre
 HID tap opens its **4-node / 4-frame** sheet and the same session pushes the changed tree.
 Explicit application reads also match **Settings main 13/13**, **Battery 32/32**, **Home 29/29**.
-Ordinary installed **哔哩哔哩 9.13.0** returns **40/40**, including its modal/number keyboard.
+Earlier ordinary **哔哩哔哩 9.13.0** modal/number-keyboard reads return **40/40**.
+The later title-visible page returns **25/25** with Description-first reads; these are different
+page states, not a count regression. See the October12 Label failure and secure-archive records.
 A fresh Battery-node tap opens Battery and same-session reads return the new page; screenshots
 confirm the actions. This replaces the earlier no-physical-tree/native-rectangle boundary.
 
@@ -105,6 +122,17 @@ successful unlock. The October 12 native display failures remain open.
 | **Probe commands and standalone transport** | Raw reports may return 0 without visible effects. Xcode-free Python transport has a spike, not a completed CLI/MCP/screenshot implementation. | Keep probes labelled and stage-4 work separate. |
 
 ### Confirmed fixes in the current alignment work
+
+- **Host-only update and install ownership:** `update` no longer resolves a phone before
+  dispatch. Canonical Homebrew-prefix matching prevents a manual install from updating
+  another keg. Zero/multiple phones and irrelevant selectors do not block host maintenance;
+  manual installs report their exact prefix and exit2. Isolated host regressions cover source,
+  Homebrew, opt-symlink, manual coexistence and updater failures. No device action is needed.
+- **Current documentation:** user guides are separated from the command/install overview;
+  stale “UI CLI absent” and incomplete-keyboard current summaries are corrected. Historical
+  records remain byte-identical. Default main/Homebrew, development source and tagged release
+  are explicitly distinguished; no new publication is claimed.
+
 
 - **Bilibili title read:** unconditional Label3 requests stalled a real title node and
   discarded the whole page. Description33 already supplies its text; the client now queries
@@ -6714,3 +6742,74 @@ runtime log/probe summaries and final regular-read JSON stay outsideGit in
 `/private/tmp/ipb-ax-label-internals.bpfDXm/`. Key references: processLabel.txt,
 labelConversion.txt, attemptToSendResponse.txt, class-references.json,
 runtime-description/summary.json, runtime-label/summary.json and after-probes-result.json.
+
+
+## 2026-10-12 — Host-only update, install ownership and documentation channels
+
+User asks why XCTest has176 nodes versus AX13, requests discussion with Grok4.7,
+DeepSeekFlash and Opus (corrected to5.5), and asks whether the new ipb is published/installable.
+The user then supplies `ipb update` failing at device selection while three phones are listed.
+These are ordinary host-maintenance and documentation triggers; no device interaction is required.
+Local host is supplementary macOS26.5.1 /25F80, Xcode27B6 /CoreDevice642.15.
+Source baseline1a3618e is on codex/devicehub-alignment; VERSION remains0.2.0.
+
+**Confirmed updater defects and fix:** the early dispatcher omitted update from its
+no-eager-selection list, so a host update entered the device resolver before reaching the
+updater. A copied old wrapper in an isolated source fixture reproduces exit3 with three
+stubbed devices and no git/make update calls. Update now bypasses selection. The running
+manual prefix `~/.local` coexists with a Homebrew keg; the old ownership check used only
+“brew lists ipb”, which could update that other copy. Canonical ROOT / `brew --prefix ipb`
+matching now limits Homebrew operations to its own wrapper. Manual-prefix installs exit2
+and print the exact prefix's source reinstall command. After reinstall, version is read
+from the newly resolved Homebrew prefix rather than a different `ipb` earlier on PATH.
+A PATH-shadow fixture reproduces the misleading old version report and verifies its fix.
+
+Host regressions cover zero devices, multiple devices without a selector, invalid DEVICE_ID,
+explicit irrelevant selectors, source git/build calls and git failure, Homebrew reinstall
+failure, opt-symlink equivalence, manual/Homebrew coexistence and PATH-shadow version reporting.
+No fixture calls the phone service or real git pull/brew update/reinstall. The actual
+installed manual wrapper matches source; `update` with an invalid DEVICE_ID and a devicectl
+sentinel returns its expected manual-install exit2, reports `/Users/borealin/.local`, and
+makes zero device calls. Its help retains ui and mirror clipboard. Native/AX behavior is
+unchanged; no phone app, credentials, pairing or host settings are changed.
+
+**Distribution check:** authenticated GitHub API and local tap/keg inspection identify main
+f2e85a6d60c45f18e6f9f2a306f709ffb9710392, no tags or GitHub releases, tap
+3a7b986d2fd73021bc99ff5165f2391f5ebfc92d, and installed keg HEAD-f2e85a6.
+Main lacks Sources/ipb_ax.py and the new mirror IME/clipboard implementation. The enhanced
+absolute `~/.local/bin/ipb` does contain those features; an initial peer PATH-based assertion
+that it did not is disproved by the absolute file/hash check. Source pushed to the alignment
+branch is distinct from main/Homebrew and tagged release. This round does not merge main,
+change the tap target or publish a release. Development source remains explicitly installable.
+
+**Actual model discussion and arbitration:** Grok4.7 (returned canonical grok-4.7-build),
+DeepSeekFlash (existing configured sub2api/deepseek-flash) and Opus5.5 (returned canonical
+claude-opus-5-5) each finish an independent read-only review, then a shared-results round.
+An initial unspecific Opus5 attempt timed out; the human's5.5 correction is verified by
+actual modelUsage before the completed review. Full transcripts remain local. Initial automatic
+approval rejected sending local excerpts as potentially private; GitHub public visibility and
+anonymous public-document downloads provided a safer first packet, and the human subsequently
+explicitly authorized sharing all review material. No blocked approval remains.
+
+All three support separating installation channels from command availability and preserving
+historical proof. Root fixes stale “no UI CLI”, future-only AX-backend wording, incomplete
+keyboard/UI remaining-work summaries, version0.1.0 example and overloaded current-channel
+claims. Detailed UI and mirror usage moves to docs/ui.md /docs/mirror.md; README keeps overview,
+installation/updates, quick commands and limitations, while docs/README.md routes readers.
+AGENTS document roles and the current plan are updated; protocol wire format is untouched.
+The verification living head is updated; every pre-existing dated byte is checked unchanged.
+The known Settings121 structural +19 text +19 image +3 Button +1 Switch delta is retained
+with native-frame identity limits and no invented hierarchy or163-missing-actions claim.
+
+Rejected review suggestions include redirecting Homebrew HEAD to an unreleased branch,
+treating more attributes as a proven deep-tree fix, and declaring dependency licence compliance
+from file placement. Current Homebrew7.0.9 install.rb:197 and official Tap-Trust documentation
+confirm fully qualified installation trusts the named formula; whole-tap trust is unnecessary.
+CoreDevice636 is the existing minimum API check;642.15 is the verified seed. The optional AX
+backend names its external GPL3 dependency without a new redistribution/compliance conclusion.
+
+`test_update_host_only.py`, existing device CLI fixtures and16 AX regressions pass;
+zsh parse, Formula Ruby syntax, report-size build checks and local doc link targets pass.
+The new update regression is host-only. No new HID/media/AX real-device run or full supported
+macOS27/Xcode27 smoke gate is claimed. Raw model replies, API snapshots, installed-wrapper
+backup and checks stay outside Git at `~/.local/state/ipb/20261012-docs-release-update/`.
