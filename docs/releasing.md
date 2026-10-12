@@ -2,10 +2,51 @@
 
 ## Current channels
 
-As checked on 2026-10-12, neither `ipbtools/ipb` nor `ipbtools/homebrew-ipb` has a
-GitHub Actions workflow, tag or GitHub Release. The source VERSION is `0.2.0`;
-Homebrew offers HEAD from `main`. The alignment PR is a development change, not a release.
-This document defines a manual checklist; no publishing workflow is implemented here.
+PR CI is implemented in [.github/workflows/ci.yml](../.github/workflows/ci.yml).
+It runs on pull requests to main, pushes to main and manual dispatch. Native build and
+host tests use GitHub's ARM64 `xcode-27` runner with Xcode 27.0 selected explicitly.
+The first cloud build and final downloaded artifact are pending validation.
+
+No tag or GitHub Release has been published. VERSION remains `0.2.0`; Homebrew HEAD
+still builds `main` from source. CI artifacts are development packages, not releases.
+
+## PR test packages
+
+The job checks the OS, architecture, selected Xcode and required Apple frameworks, builds
+all native targets, then runs `make check-host`. This includes existing AX, CLI/update,
+smoke-assertion, bounded-sender, display, device-control, input-report and mirror-keyboard
+fixtures. These tests use host mocks; no physical device or real clipboard is accessed.
+
+`scripts/package_test_build.py` stages the existing `make install` layout and adds the MIT
+license, build metadata and trial instructions. Only ipb-owned files are included. The
+package records the actual checkout commit (a PR merge commit on pull_request), PR head,
+OS/Xcode/CoreDevice versions and file hashes. Install-time signing finishes before hashing.
+CI checks ARM64 slices, signatures, the exact file list, extraction and host startup of
+all three helpers. It then uploads the tarball, SHA256, BUILD_INFO.json and TEST_PACKAGE.md
+as an Actions artifact retained for 14 days.
+
+Download from a successful run's **Artifacts** section. Unzip the artifact, verify and
+extract the tarball, then run the extracted CLI by its full path:
+
+```sh
+shasum -a 256 -c *.sha256
+tar -xzf ipb-*-macos27-arm64.tar.gz
+./ipb-<version>-ci.<commit>-macos27-arm64/bin/ipb version
+./ipb-<version>-ci.<commit>-macos27-arm64/bin/ipb help
+```
+
+Keep bin/libexec/share together. The optional AX Python dependencies remain a separate
+host setup. Existing Apple runtime components are still required; no Apple framework or
+DDI is redistributed. Signatures are ad-hoc, not Developer ID/notarized. Downloaded-copy
+quarantine and physical HID/media/AX behavior need separate supported-host verification.
+Fetch another CI artifact to update a trial copy; `ipb update` does not upgrade these copies.
+
+A green PR job does not close the full supported physical-device gate or publish a release.
+Release/Homebrew automation follows only after the cloud build and downloaded package have
+been verified; stable publication still follows the acceptance checklist below.
+
+Sources: [runner software](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md),
+[artifact permissions and tar archives](https://github.com/actions/upload-artifact#permission-loss).
 
 ## Before a release
 
@@ -45,11 +86,10 @@ archive SHA256, synchronize the intended formula into the tap, then install/test
 version on the supported host/device. Retain HEAD separately for main development.
 Neither formula nor tap is switched to a stable release by this PR.
 
-Recommended first automation is a PR workflow for syntax, archive/CLI host contracts and
-report-size checks. A native build job needs a confirmed macOS27/Xcode27 environment.
-Physical HID/media/UI validation remains explicit device evidence; a green host job must
-not represent the full device gate. Add tag/manual release automation only after these
-roles and the actual runner environment are established. Do not assume an existing
-self-hosted runner, signing identity or release secret.
+PR automation now provides the native ARM64 build and test artifact described above.
+The workflow has contents-read permission, no publishing credentials, pinned official actions,
+a 20-minute job timeout and cancellation of superseded PR runs. It does not merge, tag, write
+a Release or update the tap. Once the first build/package validation passes, add the tag/manual
+release and bottle flows without presenting host CI as physical-device acceptance.
 
 See [workflow triggers](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).

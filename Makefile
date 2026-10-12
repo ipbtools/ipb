@@ -18,9 +18,18 @@ OBJS := \
 	$(BUILD_DIR)/universalhid_abi.o \
 	$(BUILD_DIR)/uhid_request_abi.o
 
+DEVICE_LDFLAGS = \
+	-F/Library/Developer/PrivateFrameworks \
+	-F/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks \
+	-F/Library/Apple/System/Library/PrivateFrameworks \
+	-F$(SDK_PRIVATE_FRAMEWORKS) \
+	-framework Foundation -framework CoreFoundation \
+	-framework CoreDevice -framework CoreDeviceUtilities \
+	-framework RemoteXPC -framework Mercury -framework UniversalHID
+
 PREFIX ?= /usr/local
 
-.PHONY: all clean smoke install check-reports
+.PHONY: all clean smoke install check-reports check-host
 
 all: check-reports $(TARGET) $(VIDEO_TARGET) $(MIRROR_TARGET) $(MIRROR_PROBE_TARGET)
 
@@ -56,19 +65,7 @@ $(BUILD_DIR)/universalhid_glue.o: $(SOURCES_DIR)/universalhid_glue.swift | $(BUI
 	swiftc -parse-as-library -c $< -o $@
 
 $(TARGET): $(OBJS)
-	swiftc $(OBJS) \
-		-o $@ \
-		-F/Library/Developer/PrivateFrameworks \
-		-F/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks \
-		-F/Library/Apple/System/Library/PrivateFrameworks \
-		-F$(SDK_PRIVATE_FRAMEWORKS) \
-		-framework Foundation \
-		-framework CoreFoundation \
-		-framework CoreDevice \
-		-framework CoreDeviceUtilities \
-		-framework RemoteXPC \
-		-framework Mercury \
-		-framework UniversalHID
+	swiftc $(OBJS) -o $@ $(DEVICE_LDFLAGS)
 
 
 $(VIDEO_TARGET): $(SOURCES_DIR)/video_stream.m | $(BUILD_DIR)
@@ -84,15 +81,8 @@ $(BUILD_DIR)/mirror_probe.o: Experiments/mirror/mirror_probe.m | $(BUILD_DIR)
 		-c $< -o $@
 
 $(MIRROR_PROBE_TARGET): $(BUILD_DIR)/mirror_probe.o $(MIRROR_GLUE)
-	swiftc $^ -o $@ \
-		-F/Library/Developer/PrivateFrameworks \
-		-F/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks \
-		-F/Library/Apple/System/Library/PrivateFrameworks \
-		-F$(SDK_PRIVATE_FRAMEWORKS) \
-		-framework Foundation -framework CoreFoundation \
+	swiftc $^ -o $@ $(DEVICE_LDFLAGS) \
 		-framework CoreMedia -framework CoreVideo \
-		-framework CoreDevice -framework CoreDeviceUtilities \
-		-framework RemoteXPC -framework Mercury -framework UniversalHID \
 		-Xlinker -undefined -Xlinker dynamic_lookup
 	codesign -s - -f $@
 
@@ -102,18 +92,26 @@ $(BUILD_DIR)/mirror.o: $(SOURCES_DIR)/mirror.m $(SOURCES_DIR)/bounded_sender.h $
 		-Wno-deprecated-declarations -c $< -o $@
 
 $(MIRROR_TARGET): $(BUILD_DIR)/mirror.o $(MIRROR_GLUE)
-	swiftc $^ -o $@ \
-		-F/Library/Developer/PrivateFrameworks \
-		-F/Library/Developer/PrivateFrameworks/CoreDevice.framework/Frameworks \
-		-F/Library/Apple/System/Library/PrivateFrameworks \
-		-F$(SDK_PRIVATE_FRAMEWORKS) \
-		-framework Foundation -framework CoreFoundation \
+	swiftc $^ -o $@ $(DEVICE_LDFLAGS) \
 		-framework AppKit -framework AVFoundation -framework QuartzCore -framework CoreImage \
 		-framework CoreMedia -framework CoreVideo \
-		-framework CoreDevice -framework CoreDeviceUtilities \
-		-framework RemoteXPC -framework Mercury -framework UniversalHID \
 		-Xlinker -undefined -Xlinker dynamic_lookup
 	codesign -s - -f $@
+
+$(BUILD_DIR)/test-input-reports: scripts/test_input_reports.swift $(SOURCES_DIR)/universalhid_glue.swift $(filter-out $(BUILD_DIR)/universalhid_glue.o,$(MIRROR_GLUE))
+	swiftc -parse-as-library $^ -o $@ $(DEVICE_LDFLAGS)
+
+$(BUILD_DIR)/test-mirror-keyboard.o: scripts/test_mirror_keyboard.m $(SOURCES_DIR)/mirror.m $(SOURCES_DIR)/keyboard_input.h $(SOURCES_DIR)/device_control.h $(SOURCES_DIR)/bounded_sender.h $(SOURCES_DIR)/display_geometry.h | $(BUILD_DIR)
+	clang -fobjc-arc -fblocks -Wno-deprecated-declarations -c $< -o $@
+
+$(BUILD_DIR)/test-mirror-keyboard: $(BUILD_DIR)/test-mirror-keyboard.o $(MIRROR_GLUE)
+	swiftc $^ -o $@ $(DEVICE_LDFLAGS) \
+		-framework AppKit -framework AVFoundation -framework QuartzCore -framework CoreImage \
+		-framework CoreMedia -framework CoreVideo \
+		-Xlinker -undefined -Xlinker dynamic_lookup
+
+check-host: all $(BUILD_DIR)/test-input-reports $(BUILD_DIR)/test-mirror-keyboard
+	sh scripts/check_host.sh
 
 smoke: all
 	bin/ipb screenshot $(BUILD_DIR)/smoke.png

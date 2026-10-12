@@ -43,11 +43,12 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 This README describes the `codex/devicehub-alignment` source branch. As checked on
 2026-10-12, `ipb ui`, the Bilibili text fix and the new mirror keyboard/clipboard work are
 on that branch; they are not on `main`. There is no tagged GitHub release or downloadable
-release binary. `VERSION=0.2.0` alone does not identify these branch changes.
+release binary. PR CI produces temporary test packages; see [download and verification instructions](docs/releasing.md#pr-test-packages). `VERSION=0.2.0` alone does not identify these branch changes.
 
 | Channel | What it installs | Update path |
 | --- | --- | --- |
 | Homebrew HEAD | Default branch `main`; currently lacks the new UI and mirror additions | Use `brew reinstall --HEAD ipbtools/ipb/ipb`; host-only `ipb update` needs the fix in `main` |
+| PR CI test package | Precompiled macOS 27 ARM64 development build, with exact commit metadata | Download a newer Actions artifact; requires existing Apple runtime components |
 | Development source | The selected source branch, including the features described here | Run `bin/ipb update` in that checkout |
 | `make install PREFIX=...` | A local copy of the selected checkout | Pull/build the checkout, then repeat `make install` with the same prefix |
 

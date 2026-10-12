@@ -527,13 +527,17 @@ The user requested compressing the accumulated50 commits and opening a PR. Keep
 `codex/devicehub-alignment` as the research history; submit the tested product tree through
 `codex/devicehub-alignment-pr` as14 topic commits plus a submission/release-document commit,
 based on main f2e85a6. The human explicitly rejected an all-in-one squash: “不是 1 个”. Product source is unchanged
-from09bc118; submission changes only document the history/CI/release boundary and trim guide EOF
-whitespace. Retain all dated verification records and protocol sources.
+from09bc118; the initial submission changes document the history/release boundary and trim
+guide EOF whitespace. Follow-up CI changes add build/test/package automation without altering
+the device protocol or input implementation. Retain all dated verification records and protocol sources.
 
 [PR #1](https://github.com/ipbtools/ipb/pull/1) is Draft while the full supported
 macOS27/Xcode27 device gate remains open.
-Both source and tap have zero configured Actions workflows. [Releasing](releasing.md)
-records a manual checklist; no workflow, tag, release, main merge or tap change is triggered.
+The user requests PR CI and a downloadable test package first, then Release/Homebrew
+automation after an actual successful build/package verification. [Releasing](releasing.md)
+defines this sequence. The PR workflow builds ARM64 targets and runs host regressions on
+`xcode-27`, then verifies the staged archive and uploads a temporary artifact. First cloud
+execution is pending. No tag, release, main merge or tap change has occurred.
 
 ## Remaining work
 

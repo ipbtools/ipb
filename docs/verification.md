@@ -19,9 +19,11 @@ and installed explicitly; the full supported matrix remains open.
 and opening a PR. A separate segmented `codex/devicehub-alignment-pr` branch preserves
 `codex/devicehub-alignment` and its original history. Product code matches09bc118; the full
 supported matrix remains open, so [PR #1](https://github.com/ipbtools/ipb/pull/1) is Draft.
-Both source/tap Actions workflow APIs
-return total_count0/workflows[], and there is no existing automated release pipeline.
-[Manual release checklist](releasing.md) is documentation, not executed publication.
+The default-branch inventory found zero workflows in source/tap. The user has since authorized
+PR CI builds/test packages first and Release/Homebrew automation only after an actual passing
+build and downloaded-package verification. The PR workflow and package verifier are implemented;
+first cloud execution is pending. [Releasing](releasing.md) defines the current sequence. No
+Release or tap publication has occurred.
 
 Current user guides are [README installation](../README.md#installation-channels),
 [UI](ui.md), [mirror](mirror.md) and [the document map](README.md). Protocol facts and dated
