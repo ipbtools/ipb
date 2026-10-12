@@ -18,7 +18,9 @@ sender ownership and no uncertain input replay. No XCTest or third-party phone s
 
 `device_control.h` runs one background metadata query at most per second, never overlapping.
 Apple timeout is 5 s with a 6 s host kill bound. Read queries do not wait on HID; explicit rotation
-waits at most 2 s for old input releases. Close cancels the current query and prevents new launches.
+waits at most 2 s for old input releases on a separate waiter before entering the device-control
+queue. The queue never waits on input that itself needs a clipboard child. Close cancels the
+current query and prevents new launches.
 Unsent rotation requests are coalesced while the query is busy. Query/schema failures end the session
 explicitly. Polling is not frame-synchronous: external orientation may lag by a refresh interval.
 `devicectl displays --stream` did not yield structured JSON updates, so its human console output is
@@ -70,8 +72,10 @@ not a current prerequisite check. This local macOS 26 run is supplementary valid
 ## Mirror keyboard and text clipboard
 
 User request on 2026-10-12: complete ordinary keyboard input, modifiers/repeat, host IME
-composition and text Copy/Cut/Paste in mirror. Implementation is in progress on the same
-branch; verification below must distinguish build, host checks and real-device effects.
+composition and text Copy/Cut/Paste in mirror. Implemented on this branch and installed locally.
+The supplementary macOS 26.5.1 / Xcode 27 B6 / iPhone 13 Pro iOS 27.0 run verifies ordinary
+typing, Shift punctuation, caret movement, repeat, text Copy/Cut/Paste and native Mac Chinese
+composition. The installed noninteractive smoke passes; the supported macOS 27 gate remains open.
 
 - Keep the existing serial input FIFO and bounded sender. Raw key down/up carry the complete
   held-usage set; AppKit repeats re-edge the repeated key while preserving modifiers. Keypad
@@ -79,16 +83,30 @@ branch; verification below must distinguish build, host checks and real-device e
   and close release keys; unsent stale keyboard operations are cancelled, never replayed.
 - Extend the existing makeKeyboardHIDReport array builder with a bounded C entry. No new
   Apple private symbol/ABI shim, transport/socket, device app or entitlement is introduced.
-- MirrorView implements NSTextInputClient. Marked text stays on the Mac; committed non-ASCII
+- MirrorView owns and activates an NSTextInputContext implementing NSTextInputClient. Public
+  handleEvent dispatch and Edit → Input Method / Control-Space select enabled host input methods.
+  Marked text stays on the Mac; committed non-ASCII
   or composed text uses exact UTF-8 clipboard copy plus the captured Command+V chord. Plain
   single-byte typing remains physical HID and follows the iPhone keyboard layout/input method.
-- Command+V snapshots Mac text; Command+C/X send device copy/cut, require a device clipboard
+- Command+V reads Mac text when it reaches the FIFO head, after any preceding Copy publishes its
+  result. Command+C/X send device copy/cut, require a device clipboard
   change count, then retrieve UTF-8 and update Mac text only if its clipboard/focus is unchanged.
   Clipboard tasks share the bounded device-control runner and hold FIFO ownership through
-  completion. Text/payloads never enter argv, CSV or diagnostics; total pending text is capped.
-- Existing mirror shortcuts remain reserved. Transfer failures and uncertain sends are explicit;
-  paste permissions remain operator-controlled. Images/rich text and continuous clipboard sync
+  completion. Text/payloads never enter argv, CSV or diagnostics; total pending UTF-8 is capped at
+  2 MiB. No selected text is a nonfatal notice; newer Mac clipboard contents are retained.
+- Existing mirror shortcuts and Command-W/Q remain reserved. Transfer failures and uncertain sends
+  are explicit. The product leaves iOS paste prompts visible; this synthetic-text bench approves
+  them under the user's explicit instruction. Images/rich text and continuous clipboard sync
   are outside this text clipboard feature.
+
+Confirmed integration fixes: metadata rotation waiting on the input group would deadlock clipboard
+input waiting on device control, so the bounded wait now precedes that queue. Generic Command
+forwarding swallowed the Mac Close shortcut in a live run; explicit reservation and menu targets
+restore normal close. Host tests cover exact report bytes, bounded child failure contracts, held
+modifiers/repeat, FIFO clipboard order and stale-input release. Real tests confirm `ipb-中文🙂 A1!`,
+local `ce’shi` composition with no premature phone text, committed/copied `测试`, eleven deletions
+during a 1.4 s Backspace hold, numeric panel, Home and final Command-W exit 0. Secure-field/keypad
+acceptance, every key-layout mapping and other-app coverage remain unverified.
 
 Only ipb host tooling changes. Android/iOS application repositories, Bluetooth/ISP firmware,
 schema/rpc and audio bindings are unaffected: the existing Apple DDI/clipboard contract is used.

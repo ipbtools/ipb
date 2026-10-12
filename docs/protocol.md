@@ -610,6 +610,35 @@ usage/digit field. No new wire shape is introduced. Password-sheet/lockscreen ac
 and the supported macOS 27 host gate remain unverified; a successful barrier proves no
 particular page accepted input. See the dated numeric-panel record in `verification.md`.
 
+**Mirror keyboard/text integration (2026-10-12, runtime + shipped host metadata):** same
+macOS 26.5.1 / 25F80, Xcode 27 B6 / CoreDevice 642.15 and iPhone14,2 / iOS 27.0 /
+24A437 seed. Ordinary key down/up send the existing 39-byte held-usage report; repeat
+temporarily releases/represses the repeated usage while retaining modifiers. The bounded
+C export wraps the existing `makeKeyboardHIDReport(usages:)` builder, introducing no new
+Apple private symbol or wire shape. Host keycodes use the shipped SDK's
+`HIToolbox.framework/Headers/Events.h`; modifier flags normalize to left Control/Shift/
+Option/Command usages. This is host mapping, not evidence that every mapped key is accepted
+by every iOS page.
+
+The shipped Xcode 27 B6 MacOSX SDK AppKit `NSTextInputClient.h` and
+`NSTextInputContext.h` define the host composition interface. Mirror owns/activates that
+context and submits marked/committed text through its public event API. Composed/Unicode
+commits and Command-V reuse CoreDevice pasteboard copy plus the captured
+`{Cmd}`, `{Cmd,V}`, `{V}`, `{}` chord. Command-C/X use the analogous C/X usages, read
+`device pasteboard info`'s runtime-observed `changeCount`, and retrieve UTF-8 text only
+after a change. Each transfer owns the existing input FIFO through completion; Paste
+reads the Mac clipboard at FIFO execution, so Copy then Paste uses the newly copied text.
+No selected text yields a notice; a different newer Mac clipboard is preserved. Clipboard
+children have the same 5 s Apple / 6 s host bounds as metadata and a 2 MiB payload limit.
+These are client bounds, not Apple protocol limits. No payload or key usage is logged.
+
+Real Settings-search observations verify Shift text `A1!`, Copy/Cut, exact Unicode paste
+`ipb-中文🙂 A1!`, Mac WeChat IME composition `ce’shi` staying local until committed
+`测试`, and exact Unicode Copy back to the Mac. Repeated Backspace and caret insertion also
+have visible device effects. iOS paste permission can interpose; report/barrier success
+does not establish insertion. Password-sheet/lockscreen acceptance and the macOS 27 full
+matrix remain open. See the dated mirror-keyboard record in `verification.md` for scope.
+
 ## CoreDevice Keyboard / Pointer Capability Adapters
 
 CoreDevice still exposes typed protocols for keyboard and pointer capability use:

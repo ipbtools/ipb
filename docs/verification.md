@@ -94,7 +94,7 @@ successful unlock. The October 12 native display failures remain open.
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
 | **UI element / semantic context research** | DevicesApp raw DTX returns real AX trees/frames on the 13 Pro: Calculator 24/24, History 4/4, Settings main 13/13, Battery 32/32, Home 29/29, ordinary Bilibili modal/keyboard 40/40. Native/Python bulk codecs agree; node-centre HID transitions have screenshot and tree confirmation. Automatic bulk/frontmost can select unrelated PDUIApp; explicit PID reads and system hit-test-derived PID reads work on tested pages. Pure Python fresh-session capture takes 740 ms for Calculator, 941 ms for Battery and 1744 ms for Bilibili. A launch-splash hit test returns nil/error 8 before visible-page success. This is AX graph coverage, not every UIKit view. One concurrent screenshot timeout and stop-ack closure races remain undiagnosed. Earlier Inspector/Mirroring restrictions are separate entry paths. | `ipb ui` exports the captured graph and richer fields through an optional pinned host Python backend; source/installed AX-only gates pass. Target/overlay coverage, persistent-session/MCP work and the full supported gate remain agent work. Keep one outstanding semantic read and preserve unsolicited packets. Do not use arbitrary first foreground event, replay uncertain input or claim all apps complete. The earlier target selection was **“用 13 pro 吧”**; the latest comparison decision is **“先看 12 mini 结果”**. Page-wide serial preview remains rejected. See [current protocol](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11). |
-| **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
+| **Keyboard and focused text** | Mirror now handles ordinary down/up, modifiers, repeat, host composition and text Copy/Cut/Paste on its existing FIFO. Live 13 Pro Settings search verifies Shift punctuation, exact `ipb-中文🙂 A1!`, local Mac IME composition followed by committed/copied `测试`, repeat and caret insertion. The product leaves paste prompts visible; the user explicitly authorizes this bench to allow ordinary synthetic-text paste. Final installed noninteractive smoke and host regressions pass on supplementary macOS 26.5.1 / Xcode27B6 / iOS27.0. rc0 alone remains submission only. | Scoped text/keyboard implementation is complete and installed locally. Secure fields, other apps/layouts and the supported macOS27 gate remain open. Text only, 2 MiB bound; no continuous clipboard sync or product-level automatic permission approval. |
 | **Mirror numeric controls / hidden system input** | Code implemented. The user completes 12 mini's password entry on the phone and real XCTest sources are obtained; this does not validate our mirror keypad on the secure sheet. Native Device Hub still had Connecting display during the earlier control. Agent: resolve native display path and verify the numeric panel on a secure page; the 13 Pro repeat is deferred by the latest user decision. No supported-host pass is claimed. | The latest user decision is **“先看 12 mini 结果”**. On 12 mini, human password entry and the corrected reference HTTP client yield actual XCTest sources; the temporary reference is now removed. Native Device Hub display startup and our keypad on the secure page remain unverified. Any future secure-page test needs a working input/display path and fresh human readiness. No supported-host pass is claimed. |
 | **Mirror periodic display refresh timeout** | Bench mirror runs intermittently exit 1 when the existing one-second `device info displays` refresh exceeds devicectl's five-second bound (exit 2). Reproduced with Device Hub closed and zero keyboard events; other input sessions close normally, and a later standalone display query succeeds. | Agent-fixable investigation; cause open. Keyboard-event causality is not established. Preserve the explicit failure rather than hiding stale orientation or replaying input. |
 | **AX vs XCTest baseline and additional DTX functions** | First real same-page baseline succeeds on 12 mini: Calculator AX 24/XCTest 45 nodes, Settings main 13/176; 23 and 12 nonroot elements match and their native frames are identical over three stable interleaved rounds. AX is flat (depth 1), XCTest retains depth 16/21. A combined AX explanation corresponds to a XCTest Cell plus separate text. Query medians 343/869 ms and 186/2710 ms include different graph and field scopes. The independent reference is removed and AX alone still returns 13/13 without an active Runner. LocalAuthentication -1004 alone had been overinterpreted; real Mode-enable completion and successful source collection supersede that diagnosis. HTTP readiness polling required Content-Length handling on WDA keep-alive. | The user now asks to resolve the Settings node delta/enrich fields and integrate. `ipb ui` is implemented: 121 structural + 19 text + 19 image + 3 Button + 1 Switch residual entries explain the count delta; richer state/role/traits are read, but Parent is absent and navigation children stay flat. Snapshot attr52/95006 returns nil for tested options; cause open. Source/installed AX smoke and macOS27 AX-helper USB-forwarded reads pass; the native Xcode27 matrix/MCP remain open. 13 Pro's repeat stays deferred. No universal completeness/speed claim. Additional DTX actions remain separate research. |
@@ -105,6 +105,12 @@ successful unlock. The October 12 native display failures remain open.
 
 ### Confirmed fixes in the current alignment work
 
+- **Mirror keyboard/text integration:** one held-usage/FIFO path now covers raw keys, repeat,
+  clipboard chords and Mac IME commits. Copy → Paste reads the newly copied text; no selection
+  is nonfatal and different newer Mac clipboard contents are preserved. Rotation drains input
+  outside the device-control queue, preventing clipboard/input dependency deadlock. A live
+  generic-Command forwarding regression swallowed Command-W; reservation/menu targets fix it,
+  and the final candidate closes with exit 0. Focus/stale-release contracts have host regressions.
 - **Selected display/text/orientation work:** versioned metadata queries, live primary crop,
   focused clipboard paste and four-way mirror transforms are implemented. A malformed `info: []`
   query fixture now fails without crashing; active metadata children cancel on close. The first
@@ -6462,3 +6468,95 @@ shared companion PID0, ordinary testmanagerd handshake11.845ms; the existing sha
 remains installed. Host test environments stay isolated for reuse. Local references:
 ax-integration-final-manifest.json,mac27-settings-ui-final.json,
 12mini-process-preflight-1791777819045684000.json. Formal native supported matrix remains open.
+
+
+## 2026-10-12 — Mirror keyboard, Mac input methods and text clipboard
+
+Host: local macOS26.5.1 /25F80, Xcode27 Beta6 at
+`/Applications/Xcode-27.0.0-Beta.6.app`, CoreDevice642.15 /UniversalHID90.1.
+Device: only USB iPhone13 Pro /iPhone14,2 /iOS27.0 /24A437,
+CoreDevice UUID7F2FE6E9-5423-552A-A2A2-C499F1D8672F,
+USB00008110-0014711C3CC3801E. This is supplementary host validation, not the
+supported macOS27 release gate. Source baseline913b245 plus this implementation;
+the plan was committed as92d745d. No XCTest/Runner, phone app, certificate,
+entitlement, passcode/security change or credential entry is used in this run.
+
+**Reachable problem:** the user asks to complete mirror keyboard/paste after ordinary
+typing did not behave like adb. The earlier mirror only accepted numeric-panel keys
+and its reserved shortcuts; ordinary typing, full held state, Mac composition and
+bidirectional text clipboard had no product path. Implemented raw key down/up with
+full held usages/repeat, an owned public NSTextInputContext/NSTextInputClient and
+Edit input-method selection, plus bounded text Copy/Cut/Paste. All operations share
+the existing input FIFO/sender and device-control child runner. Text never enters
+argv/CSV/diagnostics; aggregate pending payload is capped at2MiB. Focus/geometry/close
+invalidate unsent keyboard intent; empty releases survive that invalidation. Chords
+retain FIFO ownership through clipboard completion and are never replayed.
+
+**Integration fixes:** Copy then Paste must sample Mac clipboard at the FIFO head,
+after Copy publishes its result. Universal Clipboard may already write the same
+text; that equal value is accepted, while a different newer Mac value is retained.
+Unchanged clipboard/no selection produces a nonfatal notice. Rotation previously
+waited for input on the same queue required by clipboard input; its bounded2s drain
+now precedes that queue on a separate waiter. Main callbacks are pumped during
+bounded shutdown. In a real candidate run, generic Command forwarding swallowed
+Command-W and left the window open; explicit W/Q reservation and menu targets fix
+the reachable regression. The final GUI bench candidate closes via Command-W
+with exit0 and no abandoned HID sends.
+
+**Host checks:** `make XCODE_PATH=/Applications/Xcode-27.0.0-Beta.6.app` succeeds.
+Report tests verify exact39B bitmap bytes, multiple held keys/modifiers, empty
+release and invalid array bounds. Device-control fixtures cover exact UTF-8 stdin/
+stdout, malformed metadata, deadline/cancellation and2MiB input/output bounds.
+Keycode/bitmap checks pass. The actual mirror FIFO regression with mocked transport
+verifies clipboard-before-chord ordering, exact four-state chord, subsequent key
+order, repeat preserving Shift, key-up retaining modifiers, stale cancellation/
+release and Copy→Paste selecting the new text. No mock test opens a device socket
+or modifies the user's clipboard. These establish host contracts, not phone effects.
+
+**Real-device observations:** Settings search accepts ordinary`ab12`, Shift`A1!`,
+Command-A selection, Copy to Mac and Cut clearing the phone field. Exact
+`ipb-中文🙂 A1!` insertion is confirmed by native AX value and inspected screenshot.
+Select the already-enabled Mac WeChat input method from Edit; individual c/e/s/h/i
+key events show local`ce’shi` composition while the phone remains empty. Space
+commits`测试`; the ordinary paste permission is manually allowed by this agent
+under the user's “为什么你不自己允许” instruction. Screenshot inspection confirms
+the Chinese value and Copy back matches exact`测试`. CUA typeText bypassed normal
+IME composition, so the successful test uses key events and the real Mac input
+engine; no general typeText/IME equivalence is claimed.
+
+Enter`12345678901234567890`, hold Backspace1.4s:11 characters are deleted, leaving
+`123456789`. Left then0 gives`1234567809`, verifying caret placement. Copy from the
+cleared field is nonfatal and subsequent typing works. Command-K numeric panel and
+its9 button, closing the panel, clearing and Command-Shift-H are verified. The phone
+is left Home with native screenshot confirmation. Mac input source is restored to
+ABC. Earlier window-button closes and final Command-W close return0; owned mirror/
+keepalive children are reaped. No12mini/15Pro or user Device Hub process is changed.
+
+**Installed gate:** back up existing paths locally, then `make install
+PREFIX=/Users/borealin/.local` succeeds. The installed
+`/Users/borealin/.local/share/ipb/smoke_matrix.sh /Users/borealin/.local` runs with
+the exact13Pro UUID and ends`SMOKE PASSED`, including mirror SIGTERM/orphan checks.
+This is the noninteractive gate; the new keyboard/IME paths have the separate live
+observations above, not a new full interactive matrix pass. An earlier invocation
+of the source smoke script against the installed root failed only its completion
+lookup because that invocation's relative fallback path was wrong; invoking the
+installed script resolves the harness mismatch without a source patch. Final
+source/build/installed fingerprints and checks are retained locally. The GUI bench
+wraps the built helper in a temporary app bundle for computer-control selection;
+its ad-hoc signature differs, but signature-removed build/installed/bench bytes
+match. The actual installed executable is used by the passing smoke gate.
+
+**Limits:** clipboard supports text, not images/rich text or continuous sync; iOS
+paste prompts remain possible and the product does not answer them. Secure-field/
+lockscreen input, every ISO/JIS/function-key mapping, other apps and macOS27 native
+release matrix remain unverified. The prior intermittent display-refresh timeout
+has an open cause and was also reproduced without keyboard input; normal runs
+here do not establish a causal fix for that older symptom.
+
+Local-only references: `~/.local/state/ipb/mirror-keyboard-1791779403682645000/`
+contains host test binaries, backed-up install paths, mirror-ime/release logs/CSV,
+unicode-paste.json/png, ime-commit.png, unicode-copy-result.json, repeat-before.json,
+final-home.png, smoke-final/, final-manifest.json and handoff.md. Raw screenshots,
+snapshots and the temporary GUI bench bundle stay outside Git. The earlier dated
+verification history is checked byte-identical; only the living head and this new
+record are changed.

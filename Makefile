@@ -97,7 +97,7 @@ $(MIRROR_PROBE_TARGET): $(BUILD_DIR)/mirror_probe.o $(MIRROR_GLUE)
 	codesign -s - -f $@
 
 # Interactive mirror: existing oracle glue, with AppKit presentation.
-$(BUILD_DIR)/mirror.o: $(SOURCES_DIR)/mirror.m $(SOURCES_DIR)/bounded_sender.h $(SOURCES_DIR)/display_geometry.h $(SOURCES_DIR)/device_control.h | $(BUILD_DIR)
+$(BUILD_DIR)/mirror.o: $(SOURCES_DIR)/mirror.m $(SOURCES_DIR)/bounded_sender.h $(SOURCES_DIR)/display_geometry.h $(SOURCES_DIR)/device_control.h $(SOURCES_DIR)/keyboard_input.h | $(BUILD_DIR)
 	clang -fobjc-arc -fblocks -Wall -Wextra -Wno-unused-parameter \
 		-Wno-deprecated-declarations -c $< -o $@
 

@@ -37,6 +37,8 @@ static NSString *make_fixture(NSString *directory, NSString *marker) {
          "non-dict) printf '%%s\\n' '[]' ;;\n"
          "info-array) printf '%%s\\n' '{\"info\":[]}' ;;\n"
          "nonzero) printf '%%s\\n' '{\"info\":{\"outcome\":\"success\"}}'; exit 7 ;;\n"
+         "payload) exec /bin/cat ;;\n"
+         "oversized) exec /bin/dd if=/dev/zero bs=1048576 count=3 2>/dev/null ;;\n"
          "timeout) exec /bin/sleep 10 ;;\n"
          "stop) printf '%%s\\n' x >> '%@'; exec /bin/sleep 10 ;;\n"
          "*) printf '%%s\\n' '{\"info\":{\"outcome\":\"success\"},\"result\":{}}' ;;\n"
@@ -63,6 +65,7 @@ static NSDictionary *run_fixture_catching(NSString *mode, NSString **failure, BO
 }
 
 int main(void) { @autoreleasepool {
+    signal(SIGPIPE,SIG_IGN);
     NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:
         [NSString stringWithFormat:@"ipb-device-control-%d", getpid()]];
     [[NSFileManager defaultManager] createDirectoryAtPath:directory
@@ -86,6 +89,17 @@ int main(void) { @autoreleasepool {
           "non-dictionary info fails without crashing");
     failure = nil;
     check(run_fixture(@"nonzero", &failure) == nil && failure.length > 0, "non-zero process exit fails");
+    NSData *input=[@"keyboard-中文🙂\nno extra newline" dataUsingEncoding:NSUTF8StringEncoding];
+    failure=nil;
+    NSData *output=ipbDeviceCommand(@"fixture-device",@[@"fixture",@"payload"],input,NO,&failure);
+    check([output isEqualToData:input] && !failure, "stdin/stdout preserves exact UTF-8 clipboard payload");
+    failure=nil;
+    check(ipbDeviceCommand(@"fixture-device",@[@"fixture",@"oversized"],nil,NO,&failure)==nil &&
+          [failure containsString:@"2 MiB"], "oversized output fails within its bound");
+    failure=nil;
+    NSData *large=[NSMutableData dataWithLength:IPBDevicePayloadLimit+1];
+    check(ipbDeviceCommand(@"fixture-device",@[@"fixture",@"payload"],large,NO,&failure)==nil && failure.length,
+          "oversized input rejected before launch");
 
     failure = nil;
     double started = monotonic_seconds();

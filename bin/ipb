@@ -72,7 +72,7 @@ screen
   screenrecord <path> [seconds]                (devicectl; unsupported on the tested iOS 27.0)
   stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout
                                                live JPEG frames, no DeviceHub
-  mirror [--seconds S] [--csv PATH]            live screen, mouse, shortcuts and numeric keypad (GUI)
+  mirror [--seconds S] [--csv PATH]            live screen, mouse, keyboard and text clipboard (GUI)
   ui [--json] [--pid PID | --point X Y]        read the application's AX tree, frames and state (USB)
 
 apps and processes (devicectl)
