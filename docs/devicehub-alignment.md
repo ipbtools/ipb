@@ -287,15 +287,93 @@ record source identity, handlers, captures and limitations. A separate native ac
 attempt still has no getter result because debugger attachment stalled; the extra Apple Lab
 reference with zero incoming messages remains invalid as a physical control.
 
+**Latency constraint / revised priority:** the user rejected page-wide serial preview with
+“耗时太久了吧，一个个来不知道要多久，没有更直接的方案吗”. Preview is retained as a
+bounded single-target fallback and a proof of local geometry. Do not expand it into one
+render/screenshot transaction per page node or claim an unmeasured latency. The main goal is
+a device-side snapshot or an existing remote AX data/cache stream carrying node properties
+and geometry together. AXAudit issue batches cover reported problems, not every page node.
+
 **Next discriminators, in order:**
 
-1. Follow preview geometry first: compare multiple fresh nodes, stable/dynamic pages and
-   rotation, then distinguish frame/path padding and clipping. Prefer extracting already
-   computed geometry from a demonstrated transport/rendering path if one exists; otherwise
-   evaluate screenshot-difference bounds explicitly as an observation fallback. Do not expose
-   them as native Frame. The coordinate RPC now has a concrete native backend **91701** and
-   a 0.1 s cached-result window; trace that backend and CGPoint decoding before another live
-   hit-test probe. Its success on iOS is still unproven despite the method's presence.
+1. Prioritize the separate iPhone Mirroring AX stream and its host cache: the inspected code
+   now has a resolved initial/incremental tree schema, secure archive fields and Frame **21**
+   in the priority attribute batch. Physical iOS 27 code maps this to native attribute **2003**;
+   its `AXPBackedAccessibilityServerPrimitives` starts `AXPRemoteCacheManager`, which generates
+   the tree in the background. Full instruction sections match the original Apple firmware.
+   The synthetic host codec preserves a node rectangle, but no phone tree has been received.
+   The `clientNeedsAccessibility` Bool now resolves through the physical consumer's protocol
+   table to AXP start/stop. Its outer ControlMessage envelope passes five native codec controls,
+   including a synthetic tree/Frame decode. Normal host subscription additionally checks
+   AX demand (`AXSSHasClientsWithAccessRemoteDeviceContent`) and server capability flag `0x2`;
+   the phone consumer must be activated with non-nil primitives. The October 10 live 13 Pro
+   run now completes manual Mac login, displays real phone pages and logs native control startup.
+   The user authorized temporary VoiceOver and it connects to Mirroring, but HIServices clears
+   its remote-content permission despite a successful entitlement lookup, while the current
+   client identification is 0. The AX-demand getter reads the calling process's connection cache;
+   separate Python queries do not establish Mirroring's demand. No physical AX archive is received.
+   The next live trace resolves this: two VoiceOver processes send ID **7**, but the ordinary
+   attribute route checks permission before storing that ID, filters the entitlement to 0,
+   then resets ID on return. A peer-filtered follow-up reads cached flags **0x0E** without
+   remote bit **0x10**, and remote permission remains 0 even after ID becomes 7. Mac-M2 is now
+   reachable on **macOS 27.2 / 26B5091g**; its HIServices retains the check/store/filter order
+   statically. The newer Mirroring layers still expose demand/start/stop/data plumbing;
+   inspected direct imports/dlsyms show no identification override. Other initialization
+   routes remain unverified. USB serial and CoreDevice UUID now identify the same 13 Pro on
+   Mac-M2, after the user confirms connection and trust. CoreDevice reports unsupported pairing
+   and an unavailable tunnel; this is not evidence that trust was omitted. Native Mirroring
+   launches but defaults to another phone, so its displayed error is excluded from 13 Pro
+   evidence. The user's account observation exposes the next prerequisite: native Mirroring
+   requires the same Apple Account with two-factor authentication on both ends. Establish an
+   eligible 13 Pro session before activating VoiceOver and running the prepared bounded taps;
+   do not substitute repeated USB pairing for this requirement. Account setup is user-owned.
+   CoreDevice enumeration is not a proven prerequisite for native Mirroring. The selected Xcode
+   reports **26.4 / 17E192**, although devicectl reports **642.15** and LLDB **2100.0.16.4**;
+   this mixed installation does not establish the Xcode 27 product gate prerequisite.
+   Repeated Welcome/tutorial toggling adds no new discriminator. The native
+   authentication broker is separately gated: an ordinary client's read-only inventory returns
+   permission error 111, and sharingd checks the private unlock-manager entitlement before the
+   authentication methods. An independent network client is still unproven. Continue tracing
+   legitimate establishment and transport framing. Validate target identity, geometry space, coverage and
+   cancellation. The external Mac AX `remoteDeviceContent` entitlement gate is distinct from
+   network-session authentication; Inspector's `inspection` entitlement does not establish
+   access to this content. The phone command-line interface has its own entitlement check and
+   exposes only ping/state/stop, so it is not a dump shortcut. See the
+   [resolved bulk path](protocol.md#mirroring-bulk-ax-schema-frame-and-physical-server-2026-10-09).
+   The [subscription follow-up](protocol.md#mirroring-ax-subscription-control-codec-and-host-trigger-2026-10-10)
+   identifies the actual message nesting and activation gates; the annotation entitlement
+   string is not a discovered remote service.
+   Normal initialization is now checked through the permission-helper callers and the
+   AccessibilityBundles/AppKitAdditions loaders. Of 19 inspected direct permission routes,
+   18 install the incoming ID after the check and keyboard posting has no ID store. The
+   loaders provide no direct ID/cache writer, and `AXEnhancedUserInterface` only announces
+   demand if remote permission already
+   exists. Other indirect routes remain open, but repeated ordinary attribute/notification
+   probes have no new discriminator. The phone-side trace now reaches the continuity
+   session's `initializePlaybackServer(using:)`: its AX consumer is wrapped and installed
+   alongside `ControlMessageSession` into an actual `PlaybackServer` object. The next
+   concrete boundaries are **MediaTransportServerSession / MediaTransportControlStream**
+   (Rapport remote-display/stream objects) and **MCKBackedContinuityServerSession /
+   MCKControlStreamBackedControlTransport** (MediaContinuityKit session/control stream).
+   Trace these providers' constructors, normal listener authorization and session acceptance;
+   a conformance or object installation is not a working independent session. See the
+   [resolved provider path](protocol.md#mirroring-ax-consumer-installation-and-transport-providers-2026-10-11).
+   Mark unresolved Swift/ObjC indirect calls explicitly; the single-image conformance scan
+   does not exclude external implementations or USB reuse. These offline tasks do not require
+   a Mac-M2 account change. Only after a concrete normal initialization or transport entry
+   justifies a live control, compare the two legitimate startup orders in an eligible 13 Pro session.
+   Record the same peer/port through permission cache, demand, capability, subscription and
+   an actual incoming archive, with bounded captures and restoration. The bulk receive path
+   is separate from ordinary attribute requests, but the default demand getter reads the
+   remote-content permission cache, so identification 0 is still a relevant upstream lead;
+   neither that failure nor a future permission success settles the entire session chain.
+   USB reuse requires a normal paired host entry, authorization, primitives/activation,
+   transport and a genuine initial archive. See the
+   [review arbitration](verification.md#2026-10-10--independent-ax-research-direction-reviews-and-arbitration).
+   Independent-client access, arbitrary-app coverage and a bulk rectangle export remain
+   unverified. Keep the existing testmanagerd
+   direct snapshot RPC as the second structured candidate, with its internal-policy/session
+   gates explicitly tracked. Do not repeat generic handshakes without a new protocol clue.
 2. Resolve the existing-app debugger attachment before attempting native `accessibilityFrame`.
    Retain a fresh PID/address and explicit stopped-target proof; a hang or vanished old PID is
    not a Frame denial. Treat this as a development-app-only fallback, separately from a generic
@@ -308,12 +386,29 @@ reference with zero incoming messages remains invalid as a physical control.
    traversal cycle or graph closure is not completeness. Several app-state PIDs can report
    Foreground Running together; last-event-wins is not a validated foreground resolver.
 
+For occasional single-node selection, the coordinate RPC's concrete backend **91701** and
+0.1 s cache remain a useful lead; they do not replace a page snapshot. Inspect the backend and
+CGPoint decoding before another hit-test probe. The physical screenshot handler also hides
+visuals and supplies CGRectZero to the platform screenshot method, so it is not a demonstrated
+shortcut for retrieving the current cursor rectangle.
+
+WDA is a separate existing bulk option if a signed Runner is accepted: current upstream
+`/source?format=json` takes an application snapshot and recursively emits nodes including rect
+([source handler](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Commands/FBDebugCommands.m),
+[tree serialization](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Categories/XCUIApplication%2BFBHelpers.m)).
+It has not been tested on this project's current iOS 27 device. Preinstalled startup avoids
+rebuilding each session but still requires a signed Runner; current Appium documentation also
+requires working RemoteXPC on iOS 27 rather than the devicectl launch fallback
+([preinstalled WDA](https://appium.github.io/appium-xcuitest-driver/latest/guides/run-preinstalled-wda/)).
+
 Keep Apple service-start failures separate from DTX/API/semantic results. A menu highlight
 or one successful capability response does not validate the target. Accept a matching focus
 push as selection evidence, keep empty OK distinct from object-null/error/timeout, never pair
 across connections by identifier alone, and clean up each session. Generic XCTest handshakes
-still have not established a runner-free snapshot session. iPhone Mirroring's host AX cache
-remains a separate static lead with untested authorization and external retrieval.
+still have not established a runner-free snapshot session. iPhone Mirroring's bulk producer,
+schema and Frame field are now resolved static evidence, with a synthetic codec control.
+The allocated 13 Pro's authentication and native video/control session now have live positive
+controls. Received physical AX trees, element rectangles and independent retrieval remain open.
 
 ## Remaining work
 
