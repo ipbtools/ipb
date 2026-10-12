@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from draft_release import draft
 from render_formula import render_formula
+from release_tag import parse_tag
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,6 +64,38 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.run_draft(subprocess.CompletedProcess([], 1, "", "HTTP 404 Not Found"))
         self.assertEqual(self.calls, [])
+
+    def test_branch_test_creates_only_explicit_prerelease_draft(self):
+        tag = "release-test-v0.2.0-20261012160000"
+        (self.output / "BUILD_INFO.json").write_text(json.dumps({"kind": "branch-release-test",
+            "version": "0.2.0", "releaseTag": tag, "commit": "a" * 40}))
+        self.run_draft(subprocess.CompletedProcess([], 1, "", "HTTP 404 Not Found"))
+        create = next(x for x in self.calls if x[:2] == ("release", "create"))
+        for option in ("--draft", "--verify-tag", "--prerelease", "--latest=false"):
+            self.assertIn(option, create)
+        self.assertIn("deletable", create[create.index("--title") + 1])
+
+    def test_branch_tag_cannot_claim_stable_candidate_kind(self):
+        (self.output / "BUILD_INFO.json").write_text(json.dumps({"kind": "release-candidate",
+            "version": "0.2.0", "releaseTag": "release-test-v0.2.0-20261012160000"}))
+        with self.assertRaises(ValueError):
+            self.run_draft(subprocess.CompletedProcess([], 1, "", "HTTP 404 Not Found"))
+        self.assertEqual(self.calls, [])
+
+    def test_tag_parser_keeps_version_and_lane_separate(self):
+        self.assertEqual(parse_tag("v0.2.0", "0.2.0"), ("release-candidate", "0.2.0"))
+        self.assertEqual(parse_tag("release-test-v0.2.0-20261012160000", "0.2.0"),
+                         ("branch-release-test", "0.2.0"))
+        for tag in ("v0.2.1", "release-test-v0.2.1-20261012160000", "release-test-v0.2.0-20261399160000", "main"):
+            with self.assertRaises(ValueError):
+                parse_tag(tag, "0.2.0")
+
+    def test_branch_formula_pins_test_url_without_changing_product_version(self):
+        source = (ROOT / "Formula/ipb.rb").read_text()
+        tag = "release-test-v0.2.0-20261012160000"
+        formula = render_formula(source, tag, "b" * 64)
+        self.assertIn(f"releases/download/{tag}/ipb-0.2.0-macos27-arm64.tar.gz", formula)
+        self.assertIn('version "0.2.0"', formula)
 
     def test_formula_pins_archive_and_preserves_head(self):
         source = (ROOT / "Formula/ipb.rb").read_text()

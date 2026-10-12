@@ -29,6 +29,11 @@ release/tap automation prepares drafts and candidate branches, with physical acc
 publication still separate. [Releasing](releasing.md) defines the current sequence. The paired [tap PR #1](https://github.com/ipbtools/homebrew-ipb/pull/1) passes its
 offline contract/syntax CI. No Release, main merge or stable tap-target update has occurred.
 
+The user now explicitly requests a disposable branch Release test. The isolated
+`release-test-vX.Y.Z-<UTC timestamp>` lane will use the real Actions token for draft/upload,
+publish as prerelease/latest=false, and check public download/Homebrew installation.
+Execution is pending; formal main/version/physical-acceptance boundaries remain in place.
+
 Current user guides are [README installation](../README.md#installation-channels),
 [UI](ui.md), [mirror](mirror.md) and [the document map](README.md). Protocol facts and dated
 verification history retain their existing sources/seed and append-only boundary.

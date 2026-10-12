@@ -6,11 +6,12 @@ import json
 import os
 from pathlib import Path
 import plistlib
-import re
 import shutil
 import subprocess
 import tarfile
 import tempfile
+
+from release_tag import parse_tag
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALL_FILES = {
@@ -64,12 +65,11 @@ def package(output, release_tag=None):
     version = (ROOT / "VERSION").read_text().strip()
     if not version or any(c not in "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-" for c in version):
         raise ValueError("invalid VERSION for package filename")
+    kind = "ci-test-package"
     if release_tag:
-        if release_tag != f"v{version}" or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", release_tag):
-            raise ValueError("release tag must match VERSION as vX.Y.Z")
+        kind, _ = parse_tag(release_tag, version)
         if run("git", "rev-parse", "refs/tags/" + release_tag + "^{commit}") != revision:
             raise ValueError("release tag does not identify this checkout")
-    kind = "release-candidate" if release_tag else "ci-test-package"
     name = f"ipb-{version}-macos27-arm64" if release_tag else f"ipb-{version}-ci.{revision[:12]}-macos27-arm64"
     with tempfile.TemporaryDirectory(prefix="ipb-package-") as tmp:
         prefix = Path(tmp) / name
@@ -151,6 +151,6 @@ CI package to update this extracted copy; `ipb update` does not upgrade it.
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
-    parser.add_argument("--release-tag", help="existing vX.Y.Z tag at this checkout; emits a release candidate")
+    parser.add_argument("--release-tag", help="existing version or release-test tag at this checkout")
     args = parser.parse_args()
     package(args.output.resolve(), args.release_tag)

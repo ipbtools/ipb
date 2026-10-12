@@ -55,6 +55,23 @@ This uses a precompiled archive formula, not Homebrew's bottle format.
 Sources: [runner software](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md),
 [artifact permissions and tar archives](https://github.com/actions/upload-artifact#permission-loss).
 
+## Disposable branch Release test
+
+The user explicitly authorizes a branch-built release test that can be deleted afterwards.
+Push a tag named `release-test-vX.Y.Z-YYYYMMDDHHMMSS` at the selected branch commit, with
+X.Y.Z matching VERSION and the timestamp in UTC. The same release workflow builds/tests
+and uploads real GitHub Release assets using its own GITHUB_TOKEN. This lane records
+`kind: branch-release-test`, creates a draft, attaches its assets, then publishes only that
+release as a prerelease with `latest=false`. It downloads the public archive/sidecar, checks
+SHA256 and runs an actual precompiled Homebrew installation from the public release URL.
+
+This test lane does not merge main, alter VERSION, change the stable tap or certify the
+physical device gate. Formal `vX.Y.Z` tags still require main ancestry and stay draft-only.
+The stable tap validator rejects the test tag and prerelease. To clean up after testing,
+delete the test Release first and then its tag (for example `gh release delete <test-tag>
+--cleanup-tag --yes`). Keep the test URL, source commit and verified scope in the local
+handoff and condensed verification record.
+
 ## Before a release
 
 1. Review the exact candidate commit and its dependencies. Preserve the recorded Apple
