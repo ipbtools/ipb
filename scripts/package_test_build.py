@@ -124,8 +124,7 @@ CI package to update this extracted copy; `ipb update` does not upgrade it.
         if f"ipb {version}" not in run(str(cli), "version"):
             raise ValueError("installed CLI version mismatch")
         run(str(cli), "help")
-        run(str(cli), "help", "ui")
-        run(str(cli), "help", "mirror")
+        run(str(cli), "help", "hid")
         # Start each Mach-O without device arguments; usage errors are expected,
         # but loader errors, crashes and missing private symbols must fail CI.
         for binary in BINARIES:
