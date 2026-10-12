@@ -2,24 +2,24 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-10-12. This section is overwritten; dated records below are append-only.**
+**Updated 2026-10-13. This section is overwritten; dated records below are append-only.**
 
 ### Distribution and documentation scope (checked 2026-10-12)
 
-GitHub default `main` is f2e85a6d60c45f18e6f9f2a306f709ffb9710392; no tags or GitHub
-releases are listed. Homebrew HEAD tracks `main` and the installed Homebrew keg is
+GitHub default `main` is f2e85a6d60c45f18e6f9f2a306f709ffb9710392; no stable version tag or
+stable GitHub Release is published. A disposable branch-test prerelease is now available below. Homebrew HEAD tracks `main` and the installed Homebrew keg is
 HEAD-f2e85a6. The new UI backend, Bilibili fix and mirror keyboard/clipboard exist on
 `codex/devicehub-alignment`, whose audited baseline is 1a3618e. They are installed separately
 under `~/.local`; the absolute wrapper there includes `ui` and mirror clipboard, unlike the
 Homebrew keg. Source VERSION0.2.0 is not a release/provenance identifier. This round does not
-merge main, publish a tag/binary, or change the tap target. Development source can be built
+merge main or change the stable tap target; a separately authorized branch-test tag/binary is now published. Development source can be built
 and installed explicitly; the full supported matrix remains open.
 
 **PR submission decision:** the user now requests compressing the accumulated50 commits
 and opening a PR. A separate segmented `codex/devicehub-alignment-pr` branch preserves
 `codex/devicehub-alignment` and its original history. The initial 14-segment product tree matches09bc118; follow-up CI/release work adds
 host packaging and stable-update support without changing the AX/HID/media protocol. The full
-supported matrix remains open, so [PR #1](https://github.com/ipbtools/ipb/pull/1) is Draft.
+supported matrix remains open, and [PR #1](https://github.com/ipbtools/ipb/pull/1) remains open for review.
 The default-branch inventory found zero workflows in source/tap. The user has since authorized
 PR CI builds/test packages first and Release/Homebrew automation only after an actual passing
 build and downloaded-package verification. The PR workflow and package verifier are implemented;
@@ -27,12 +27,16 @@ native build, host tests, package checks and actual precompiled Homebrew install
 on macOS27 in [run 38244949806](https://github.com/ipbtools/ipb/actions/runs/38244949806). The follow-up
 release/tap automation prepares drafts and candidate branches, with physical acceptance and
 publication still separate. [Releasing](releasing.md) defines the current sequence. The paired [tap PR #1](https://github.com/ipbtools/homebrew-ipb/pull/1) passes its
-offline contract/syntax CI. No Release, main merge or stable tap-target update has occurred.
+offline contract/syntax CI. No stable Release, main merge or stable tap-target update has occurred; the disposable test prerelease below is published.
 
 The user now explicitly requests a disposable branch Release test. The isolated
 `release-test-vX.Y.Z-<UTC timestamp>` lane will use the real Actions token for draft/upload,
 publish as prerelease/latest=false, and check public download/Homebrew installation.
-Execution is pending; formal main/version/physical-acceptance boundaries remain in place.
+[Actual run38274014354](https://github.com/ipbtools/ipb/actions/runs/38274014354) passes at e30cf71.
+The [test prerelease](https://github.com/ipbtools/ipb/releases/tag/release-test-v0.2.0-20261012155616)
+is published with five uploaded assets, prerelease=true and immutable=false. Real Actions
+token draft/upload, public download/checksum and Homebrew install/test are verified.
+Formal main/version/physical-acceptance boundaries remain in place.
 
 Current user guides are [README installation](../README.md#installation-channels),
 [UI](ui.md), [mirror](mirror.md) and [the document map](README.md). Protocol facts and dated
@@ -6898,3 +6902,35 @@ Both changes are Draft PRs. Existing supported physical HID/media/AX acceptance 
 open; no main merge, real tag, GitHub Release or stable tap-target update occurs in this run.
 Local references: `~/.local/state/ipb/20261012-ci-release/`; procedures are in
 [releasing.md](releasing.md). Earlier dated records retain their bytes.
+
+## 2026-10-13 — Actual disposable branch Release test
+
+User authorization: “那你能在分支包构建一次release测试下吗，后面我可以删除”.
+The existing PR branch receives a distinct `release-test-vVERSION-<UTC timestamp>` lane;
+formal `vVERSION` main ancestry and draft-only rules remain unchanged. Ten offline release
+safeguards and the full host gate pass before the tag is pushed.
+
+**Real run:** [38274014354](https://github.com/ipbtools/ipb/actions/runs/38274014354),
+head e30cf71a2148e06d6a6216798843da8c5cfcc3e1, push tag
+`release-test-v0.2.0-20261012155616`. All steps complete successfully on macOS27.0.1/26A434,
+Xcode27.0/27A266a, CoreDevice651.19/ARM64: native build/host tests, branch-tag package,
+local archive Homebrew test, real Actions GITHUB_TOKEN draft creation/asset upload,
+publication as prerelease/latest=false, public archive/sidecar SHA256 read and actual
+Homebrew install/test from that public URL. Installed product hashes match.
+
+**Published artifact:** [Release410783203](https://github.com/ipbtools/ipb/releases/tag/release-test-v0.2.0-20261012155616),
+draft=false, prerelease=true, immutable=false, published UTC2026-10-12T15:58:47Z.
+Five uploaded assets are BUILD_INFO.json, the native tarball, its SHA256, pinned formula
+and package guide; GitHub also presents its two automatic source archives. Tarball SHA256
+is feb9e545bb7f953777e863583e7c01f0b26d5ec9fa26fd3b9ca3fd17ca08ad51. An independent local
+public download, safe extraction, BUILD_INFO.kind/tag/commit and every packaged file hash
+also pass. This is real Release API/download evidence, not a mocked publication control.
+
+The test Release/tag are deliberately retained for the user to inspect/delete. Main,
+VERSION, stable tap and user installation remain unchanged. No phone operation or supported
+physical HID/media/AX gate runs here. The actual stable tap prepare/merge lane is not
+executed by this prerelease; its validator rejects test tags/prereleases.
+
+Local raw artifacts/logs/metadata and handoff stay outside Git at
+`~/.local/state/ipb/20261013-branch-release-test/`. Native host checks do not certify
+browser-download quarantine or physical-device behavior. Earlier dated history retains its bytes.

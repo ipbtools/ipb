@@ -10,7 +10,7 @@ Native build, host/package checks and actual precompiled Homebrew install/test p
 Xcode 27.0 / CoreDevice 651.19. The first verified archive from run38242939599 starts on Mac-M2 macOS 27.2 / CoreDevice
 642.15. These are host/package results, not physical device acceptance.
 
-No tag or GitHub Release has been published. VERSION remains `0.2.0`; Homebrew HEAD
+No stable version tag or stable GitHub Release has been published. The disposable branch test below has been published as a prerelease. VERSION remains `0.2.0`; Homebrew HEAD
 still builds `main` from source. CI artifacts are development packages, not releases.
 
 ## PR test packages
@@ -56,6 +56,14 @@ Sources: [runner software](https://github.com/actions/runner-images/blob/main/im
 [artifact permissions and tar archives](https://github.com/actions/upload-artifact#permission-loss).
 
 ## Disposable branch Release test
+
+Actual end-to-end test passes in [run38274014354](https://github.com/ipbtools/ipb/actions/runs/38274014354)
+at source commit e30cf71. The [published test Release](https://github.com/ipbtools/ipb/releases/tag/release-test-v0.2.0-20261012155616)
+contains five uploaded assets and remains deletable (`immutable=false`). The job creates the
+draft and uploads with its actual Actions GITHUB_TOKEN, publishes the prerelease, downloads
+its public archive/sidecar and passes Homebrew install/test plus installed-file hashes.
+An independent local download also matches every payload hash. No stable publication or
+physical device acceptance is implied.
 
 The user explicitly authorizes a branch-built release test that can be deleted afterwards.
 Push a tag named `release-test-vX.Y.Z-YYYYMMDDHHMMSS` at the selected branch commit, with

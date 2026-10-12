@@ -42,12 +42,12 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 This README describes the alignment work submitted in [PR #1](https://github.com/ipbtools/ipb/pull/1),
 with the research history retained on `codex/devicehub-alignment`. As checked on 2026-10-12, `ipb ui`, the Bilibili text fix and the new mirror keyboard/clipboard work are
-on that branch; they are not on `main`. There is no tagged GitHub release or downloadable
-release binary. PR CI produces temporary test packages; see [download and verification instructions](docs/releasing.md#pr-test-packages). `VERSION=0.2.0` alone does not identify these branch changes.
+on that branch; they are not on `main`. There is no stable GitHub release. A [disposable branch-test prerelease](https://github.com/ipbtools/ipb/releases/tag/release-test-v0.2.0-20261012155616) provides a downloadable binary and has passed the real release/upload/public-download flow. PR CI produces temporary test packages; see [download and verification instructions](docs/releasing.md#pr-test-packages). `VERSION=0.2.0` alone does not identify these branch changes.
 
 | Channel | What it installs | Update path |
 | --- | --- | --- |
 | Homebrew HEAD | Default branch `main`; currently lacks the new UI and mirror additions | Use `brew reinstall --HEAD ipbtools/ipb/ipb`; host-only `ipb update` needs the fix in `main` |
+| Branch-test Release | Explicit `release-test-*` branch tag, published as a disposable prerelease | Download another test release manually; no stable tap update |
 | PR CI test package | Precompiled macOS 27 ARM64 development build, with exact commit metadata | Download a newer Actions artifact; requires existing Apple runtime components |
 | Development source | The selected source branch, including the features described here | Run `bin/ipb update` in that checkout |
 | `make install PREFIX=...` | A local copy of the selected checkout | Pull/build the checkout, then repeat `make install` with the same prefix |
