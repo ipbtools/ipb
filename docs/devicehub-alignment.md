@@ -91,6 +91,18 @@ and lockState queries time out; `displays --json` fails RSD device allocation wi
 0xE8000003. Cause remains open. Mac UI control reports a locked Mac. No source fix,
 secure-page keyboard acceptance or supported-host gate is claimed by this control.
 
+**Current comparison attempt (2026-10-12):** the user resumes 13 Pro testing, then reports
+its 15-minute password retry restriction and selects 12 mini. Current USB/DVT inventory
+finds no competing Runner on 12 mini. The shared installed reference does not satisfy
+standard TestConfig's PlugIns/.xctest path and fails bootstrap 104. A separately identified
+standard WDA reference, signed using the existing profile, resolves that stage without
+replacing the shared app. It then times out enabling UI Automation after 60 seconds.
+No WDA source or comparative query timing is obtained. Native 12 mini info/display queries
+also time out and Device Hub stays at Connecting display. Confirm the human password
+input path before another authentication attempt; preserve startup/query separation and
+same-page stability checks in the prepared three-round benchmark. The reference is a
+temporary investigation tool, not a product phone-server dependency.
+
 Automatic bulk/frontmost selection can return unrelated PDUIApp. A native system hit-test
 request instead selects the displayed application's PID on the tested pages; the pure-Python
 hit-test → application → attribute traversal reads Battery's 32-node graph in 941 ms including
