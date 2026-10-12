@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import subprocess
 import tarfile
@@ -53,7 +54,7 @@ def verify(prefix):
     return deps
 
 
-def package(output):
+def package(output, release_tag=None):
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise ValueError("output directory must be empty")
@@ -63,7 +64,13 @@ def package(output):
     version = (ROOT / "VERSION").read_text().strip()
     if not version or any(c not in "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-" for c in version):
         raise ValueError("invalid VERSION for package filename")
-    name = f"ipb-{version}-ci.{revision[:12]}-macos27-arm64"
+    if release_tag:
+        if release_tag != f"v{version}" or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", release_tag):
+            raise ValueError("release tag must match VERSION as vX.Y.Z")
+        if run("git", "rev-parse", "refs/tags/" + release_tag + "^{commit}") != revision:
+            raise ValueError("release tag does not identify this checkout")
+    kind = "release-candidate" if release_tag else "ci-test-package"
+    name = f"ipb-{version}-macos27-arm64" if release_tag else f"ipb-{version}-ci.{revision[:12]}-macos27-arm64"
     with tempfile.TemporaryDirectory(prefix="ipb-package-") as tmp:
         prefix = Path(tmp) / name
         subprocess.run(["make", "install", f"PREFIX={prefix}"], cwd=ROOT, check=True, timeout=120)
@@ -73,7 +80,7 @@ def package(output):
         # Hash only after install has finished its ad-hoc signing.
         hashes = {p: hashlib.sha256((prefix / p).read_bytes()).hexdigest() for p in sorted(INSTALL_FILES | {"LICENSE"})}
         info = {
-            "kind": "ci-test-package", "version": version, "commit": revision,
+            "kind": kind, "version": version, "releaseTag": release_tag, "commit": revision,
             "pullRequestHead": os.environ.get("IPB_PR_HEAD") or None,
             "runUrl": (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
                        if os.environ.get("GITHUB_RUN_ID") else None),
@@ -85,9 +92,9 @@ def package(output):
             "runtimeRequirements": "macOS 27 ARM64, compatible Xcode 27 Apple development components, paired iOS 27+; UI additionally needs optional host Python dependencies",
         }
         (prefix / "BUILD_INFO.json").write_text(json.dumps(info, indent=2) + "\n")
-        (prefix / "TEST_PACKAGE.md").write_text("""# ipb CI test package
+        (prefix / "TEST_PACKAGE.md").write_text("""# ipb package
 
-This development package is not a tagged release. BUILD_INFO.json identifies the
+This package has passed host checks only; it does not prove physical-device acceptance. BUILD_INFO.json identifies the
 built commit, PR head, compiler environment and file hashes. No Apple framework,
 DDI or Python dependency is bundled. Compatible Apple development components
 must already be installed; see https://github.com/ipbtools/ipb#requirements.
@@ -134,10 +141,15 @@ CI package to update this extracted copy; `ipb update` does not upgrade it.
                 raise ValueError(f"{binary} host startup failed: rc={result.returncode} {result.stdout} {result.stderr}")
         shutil.copyfile(installed / "BUILD_INFO.json", output / "BUILD_INFO.json")
         shutil.copyfile(installed / "TEST_PACKAGE.md", output / "TEST_PACKAGE.md")
-        print(f"Verified test package: {archive.name}\nSHA256: {digest}")
+        if release_tag:
+            from render_formula import render_formula
+            (output / "ipb.rb").write_text(render_formula((ROOT / "Formula/ipb.rb").read_text(), release_tag, digest))
+        print(f"Verified {kind}: {archive.name}\nSHA256: {digest}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
-    package(parser.parse_args().output.resolve())
+    parser.add_argument("--release-tag", help="existing vX.Y.Z tag at this checkout; emits a release candidate")
+    args = parser.parse_args()
+    package(args.output.resolve(), args.release_tag)

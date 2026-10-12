@@ -5,7 +5,10 @@
 PR CI is implemented in [.github/workflows/ci.yml](../.github/workflows/ci.yml).
 It runs on pull requests to main, pushes to main and manual dispatch. Native build and
 host tests use GitHub's ARM64 `xcode-27` runner with Xcode 27.0 selected explicitly.
-The first cloud build and final downloaded artifact are pending validation.
+The first cloud build and downloaded-package host startup passed:
+[run 38242939599](https://github.com/ipbtools/ipb/actions/runs/38242939599), macOS 27.0.1 /
+Xcode 27.0 / CoreDevice 651.19. The same archive starts on Mac-M2 macOS 27.2 / CoreDevice
+642.15. These are host/package results, not physical device acceptance.
 
 No tag or GitHub Release has been published. VERSION remains `0.2.0`; Homebrew HEAD
 still builds `main` from source. CI artifacts are development packages, not releases.
@@ -42,8 +45,12 @@ quarantine and physical HID/media/AX behavior need separate supported-host verif
 Fetch another CI artifact to update a trial copy; `ipb update` does not upgrade these copies.
 
 A green PR job does not close the full supported physical-device gate or publish a release.
-Release/Homebrew automation follows only after the cloud build and downloaded package have
-been verified; stable publication still follows the acceptance checklist below.
+The first cloud build and downloaded package passed host verification. Follow-up automation
+prepares Draft Releases and a Homebrew stable formula while preserving the acceptance
+checklist below. The source formula remains HEAD-only until a verified published release
+provides a generated stable formula. CI also installs the real archive through that formula
+on its disposable VM, verifies the installed product hashes and runs `brew test`.
+This uses a precompiled archive formula, not Homebrew's bottle format.
 
 Sources: [runner software](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md),
 [artifact permissions and tar archives](https://github.com/actions/upload-artifact#permission-loss).
@@ -64,32 +71,34 @@ Sources: [runner software](https://github.com/actions/runner-images/blob/main/im
 The alignment branch's full supported matrix is still open. A Draft PR can be reviewed
 while that remains open; a release must not be described as validated until it passes.
 
-## Publish the reviewed version
+## Prepare and publish the reviewed version
 
-1. Merge the reviewed change, verify the resulting main commit, and tag that exact commit
-   with the matching `v<version>`. Do not infer release readiness from VERSION alone.
-2. Prepare GitHub release notes naming scope, requirements, validated seed and unresolved
-   limits. Start as a draft; publish only after the checklist is complete.
-3. Source archives are sufficient for the current source-build distribution. If binaries
-   are added later, validate their install layout, checksums, runtime dependencies and
-   support scope before advertising them. Do not bundle Apple components.
-4. Keep the published tag and notes tied to the tested source. Homebrew installation is a
-   separate validation step, not proof that the GitHub release is usable on a device.
+1. Merge the reviewed source change, verify the resulting main commit and matching VERSION,
+   then push an existing tag `vX.Y.Z`. The tag-push workflow, or a manual **Draft release
+   candidate** run for that tag, requires the commit to be an ancestor of main and VERSION
+   to match. It never creates a tag from an arbitrary branch.
+2. The job repeats native build/host checks, generates `ipb-X.Y.Z-macos27-arm64.tar.gz`, its
+   SHA256, BUILD_INFO.json and the pinned `ipb.rb` stable formula, and exercises the binary
+   formula with Homebrew on the CI VM. It creates/updates only a **Draft Release** using
+   this repository's GITHUB_TOKEN. A published release is never overwritten.
+3. Complete the supported physical-device gate against the actual candidate package,
+   inspect downloaded-copy behavior, and review the draft notes/requirements. Publish
+   manually only after these results are satisfactory. A green candidate job alone is
+   not approval to publish. No Developer ID credential or Apple component is bundled.
+4. In `ipbtools/homebrew-ipb`, dispatch **Prepare stable formula** with the published tag.
+   That tap-owned workflow checks the public release/assets and Homebrew installation,
+   then pushes a candidate branch and supplies a compare link. Create/review/merge the
+   formula PR from that link. The tap's default token cannot create PRs under its current
+   repository policy; this flow does not change that policy or require a cross-repo PAT.
+5. Install the stable formula from the merged tap and verify it on the supported host/device.
+   Stable installs use `brew upgrade` through `ipb update`; existing HEAD installs retain
+   their HEAD reinstall behavior and the development channel still follows main.
 
-See [GitHub release management](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
+No tag, draft or published release is created by adding these workflows to the PR. They
+become available after review/merge; no stable tap target changes until the separate formula
+PR is merged. Native host/package, download quarantine and physical-device checks retain
+their distinct scopes.
 
-## Homebrew and future automation
-
-The coordinated repositories are `ipbtools/ipb` and `ipbtools/homebrew-ipb`. After tagging
-and validating a source release, add a stable formula source pinned to that tag and its
-archive SHA256, synchronize the intended formula into the tap, then install/test that
-version on the supported host/device. Retain HEAD separately for main development.
-Neither formula nor tap is switched to a stable release by this PR.
-
-PR automation now provides the native ARM64 build and test artifact described above.
-The workflow has contents-read permission, no publishing credentials, pinned official actions,
-a 20-minute job timeout and cancellation of superseded PR runs. It does not merge, tag, write
-a Release or update the tap. Once the first build/package validation passes, add the tag/manual
-release and bottle flows without presenting host CI as physical-device acceptance.
-
-See [workflow triggers](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+Sources: [GitHub release management](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository),
+[Homebrew precompiled bottles](https://docs.brew.sh/Bottles),
+[workflow triggers](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).

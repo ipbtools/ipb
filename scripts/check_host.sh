@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 python3 scripts/test_ax.py
 python3 scripts/test_device_features.py
 python3 scripts/test_update_host_only.py
+python3 scripts/test_release.py
 sh scripts/test_bounded_sender.sh
 zsh scripts/test_smoke_matrix.sh
 zsh -n bin/ipb completions/_ipb scripts/smoke_matrix.sh

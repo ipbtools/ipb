@@ -1,19 +1,31 @@
 # Homebrew formula for ipb (iOS Physical-device Bridge).
-# Install: brew install --HEAD ipbtools/ipb/ipb (tracks main, not a feature checkout)
-# Build needs Xcode 27 beta selected (xcode-select or DEVELOPER_DIR); runtime needs the
-# CoreDevice package that Xcode 27 beta installs (/Library/Developer/PrivateFrameworks).
+# The source formula exposes the --HEAD channel. A tagged stable release formula adds
+# a pinned prebuilt archive above this block; runtime still needs compatible CoreDevice.
 class Ipb < Formula
   desc "Drive a physical iPhone from a Mac like adb: tap, swipe, keys, home, screenshot, live stream, interactive mirror"
   homepage "https://github.com/ipbtools/ipb"
-  head "https://github.com/ipbtools/ipb.git", branch: "main"
+  head do
+    url "https://github.com/ipbtools/ipb.git", branch: "main"
+  end
   license "MIT"
 
   depends_on :macos
-  depends_on xcode: :build
+  depends_on xcode: :build if build.head?
 
   def install
-    system "make"
-    system "make", "install", "PREFIX=#{prefix}"
+    if build.head?
+      system "make"
+      system "make", "install", "PREFIX=#{prefix}"
+    else
+      odie "the prebuilt ipb release supports ARM64 only" unless Hardware::CPU.arm64?
+      odie "the prebuilt ipb release requires macOS 27" if MacOS.version.major != 27
+
+      %w[bin libexec share].each do |directory|
+        odie "release package is missing #{directory}/" unless Pathname.new(directory).directory?
+      end
+      prefix.install "bin", "libexec", "share"
+      prefix.install "BUILD_INFO.json" if File.file?("BUILD_INFO.json")
+    end
   end
 
   def caveats
@@ -31,7 +43,11 @@ class Ipb < Formula
       `ipb mirror` also requires a GUI login session: in-process decoding needs
       CVDisplayLink. It is unavailable over plain ssh; use the desktop session.
 
-      This HEAD formula tracks main; it does not install the development checkout.
+      The tagged stable formula installs the pinned prebuilt macOS 27 ARM64
+      package. The `--HEAD` channel builds current main and requires Xcode 27 for build.
+      Both channels require compatible Apple CoreDevice components at runtime; neither
+      installs Xcode components or Python dependencies automatically.
+
       For a source revision that includes `ipb ui`, Python 3.11+ and the optional
       dependency in #{share}/ipb/requirements-ax.txt are needed. See docs/ui.md;
       no Python packages or phone application are installed automatically.

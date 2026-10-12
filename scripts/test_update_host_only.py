@@ -20,6 +20,7 @@ def make_fixture(root: Path, *, homebrew: bool = False):
     commands = root.parent / (root.name + "-commands")
     commands.mkdir()
     log = root.parent / (root.name + "-calls.jsonl")
+    upgrade_marker = root.parent / (root.name + "-upgraded")
 
     def stub(name, source):
         path = commands / name
@@ -30,6 +31,8 @@ def make_fixture(root: Path, *, homebrew: bool = False):
     git = stub("git", """
 import json, os, sys
 with open(os.environ['CALL_LOG'], 'a') as f: f.write(json.dumps(['git', *sys.argv[1:]])+'\\n')
+if sys.argv[1:3]==['ls-remote','https://example.invalid/ipb']:
+ print(os.environ.get('GIT_REMOTE_SHA',''))
 sys.exit(int(os.environ.get('GIT_RC', '0')))
 """)
     make = stub("make", """
@@ -54,12 +57,24 @@ import json, os, sys
 a=sys.argv[1:]
 with open(os.environ['CALL_LOG'], 'a') as f: f.write(json.dumps(['brew', *a])+'\\n')
 if a[:2]==['list','--formula']: sys.exit(0)
-if a[:2]==['list','--versions']: print('ipb HEAD-old'); sys.exit(0)
+if a[:2]==['list','--versions']:
+ version=os.environ.get('BREW_VERSION','HEAD-old')
+ if os.path.exists(os.environ['BREW_UPGRADE_MARKER']):
+  version=os.environ.get('BREW_AFTER_REINSTALL',os.environ.get('BREW_AFTER_UPGRADE',version))
+ print('ipb '+version); sys.exit(0)
 if a[:2]==['info','--json=v2']:
- print(json.dumps({'formulae':[{'urls':{'head':{'url':'https://example.invalid/ipb'}}}]})); sys.exit(0)
+ print(json.dumps({'formulae':[{'urls':{'head':{'url':'https://example.invalid/ipb'}},
+   'versions':{'stable':os.environ.get('BREW_STABLE_VERSION','1.2.0')}}]})); sys.exit(0)
 if a[:2]==['--prefix','ipb']: print(os.environ['BREW_PREFIX']); sys.exit(0)
 if a and a[0]=='update': sys.exit(0)
-if a and a[0]=='reinstall': sys.exit(int(os.environ.get('BREW_REINSTALL_RC','0')))
+if a and a[0]=='reinstall':
+ rc=int(os.environ.get('BREW_REINSTALL_RC','0'))
+ if rc==0: open(os.environ['BREW_UPGRADE_MARKER'],'w').close()
+ sys.exit(rc)
+if a and a[0]=='upgrade':
+ rc=int(os.environ.get('BREW_UPGRADE_RC','0'))
+ if rc==0: open(os.environ['BREW_UPGRADE_MARKER'],'w').close()
+ sys.exit(rc)
 sys.exit(0)
 """)
     stub("ipb", """
@@ -70,12 +85,16 @@ print('ipb WRONG_COPY')
     env = {**os.environ, "PATH": f"{commands}:{os.environ['PATH']}",
            "DEVICECTL": str(devicectl), "DEVELOPER_DIR": "/unused",
            "CALL_LOG": str(log), "GIT_CONFIG_NOSYSTEM": "1", "ZDOTDIR": str(commands)}
+    env["BREW_UPGRADE_MARKER"] = str(upgrade_marker)
     (commands / ".zshenv").write_text("")
     return env, log
 
 
 def run(root, env, *args, **extra):
     (root.parent / (root.name + "-calls.jsonl")).write_text("")
+    marker = env.get("BREW_UPGRADE_MARKER")
+    if marker:
+        Path(marker).unlink(missing_ok=True)
     result = subprocess.run([str(root / "bin/ipb"), *args], env={**env, **extra},
                             capture_output=True, text=True, timeout=15)
     log = root.parent / (root.name + "-calls.jsonl")
@@ -106,10 +125,14 @@ with tempfile.TemporaryDirectory(prefix="ipb-update-host-") as temp:
     homebrew = base / "homebrew"
     hb_env, _ = make_fixture(homebrew, homebrew=True)
     hb_env["BREW_PREFIX"] = str(homebrew)
-    result, calls = run(homebrew, hb_env, "-s", "ambiguous", "update")
+    result, calls = run(homebrew, hb_env, "-s", "ambiguous", "update",
+                        GIT_REMOTE_SHA="abcdef1234567890", BREW_AFTER_REINSTALL="HEAD-abcdef1")
     assert result.returncode == 0, (result.returncode, result.stderr)
+    assert "updated HEAD-old -> HEAD-abcdef1" in result.stdout, result.stdout
     assert "ipb 0.0-test" in result.stdout and "WRONG_COPY" not in result.stdout, result.stdout
     assert any(c[0] == "brew" and c[1:] == ["reinstall", "ipb"] for c in calls), calls
+    assert not any(c[0] == "brew" and "--HEAD" in c for c in calls), calls
+    assert any(c[0] == "git" and c[1:3] == ["ls-remote", "https://example.invalid/ipb"] for c in calls), calls
     assert not any(c[0] == "PATH_ipb" for c in calls), calls
     assert not any(c[0] == "devicectl" for c in calls), calls
     # Homebrew exposes an opt symlink while the executed wrapper resolves to its keg.
@@ -121,6 +144,32 @@ with tempfile.TemporaryDirectory(prefix="ipb-update-host-") as temp:
     assert not any(c[0] == "devicectl" for c in calls), calls
     result, calls = run(homebrew, hb_env, "update", BREW_REINSTALL_RC="9")
     assert result.returncode == 1 and "brew reinstall failed" in result.stderr
+    assert not any(c[0] == "devicectl" for c in calls), calls
+
+    # Stable formula installs compare the installed version to the formula's stable
+    # version; they never inspect the phone or query the HEAD Git remote.
+    result, calls = run(homebrew, hb_env, "update", BREW_VERSION="1.2.0", BREW_STABLE_VERSION="1.2.0")
+    assert result.returncode == 0 and "already at the latest stable release (1.2.0)" in result.stdout, result.stdout
+    assert not any(c[:2] == ["brew", "upgrade"] or c[0] == "git" for c in calls), calls
+    assert not any(c[0] == "devicectl" for c in calls), calls
+
+    result, calls = run(homebrew, hb_env, "update", BREW_VERSION="1.0.0",
+                        BREW_STABLE_VERSION="1.2.0", BREW_AFTER_UPGRADE="1.2.0")
+    assert result.returncode == 0, (result.returncode, result.stderr, calls)
+    assert "updated 1.0.0 -> 1.2.0" in result.stdout and "ipb 0.0-test" in result.stdout, result.stdout
+    assert any(c[:2] == ["brew", "upgrade"] for c in calls), calls
+    assert not any(c[0] == "git" or c[0] == "devicectl" for c in calls), calls
+    assert not any(c[0] == "PATH_ipb" for c in calls), calls
+
+    result, calls = run(homebrew, hb_env, "update", BREW_VERSION="1.0.0",
+                        BREW_STABLE_VERSION="1.2.0", BREW_UPGRADE_RC="9")
+    assert result.returncode == 1 and "brew upgrade failed" in result.stderr
+    assert any(c[:2] == ["brew", "upgrade"] for c in calls), calls
+    assert not any(c[0] == "devicectl" for c in calls), calls
+
+    result, calls = run(homebrew, hb_env, "update", BREW_VERSION="1.0.0",
+                        BREW_STABLE_VERSION="1.2.0", BREW_AFTER_UPGRADE="1.0.0")
+    assert result.returncode == 1 and "formula stable version is 1.2.0" in result.stderr
     assert not any(c[0] == "devicectl" for c in calls), calls
 
     manual = base / "manual-prefix"

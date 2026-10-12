@@ -22,7 +22,9 @@ supported matrix remains open, so [PR #1](https://github.com/ipbtools/ipb/pull/1
 The default-branch inventory found zero workflows in source/tap. The user has since authorized
 PR CI builds/test packages first and Release/Homebrew automation only after an actual passing
 build and downloaded-package verification. The PR workflow and package verifier are implemented;
-first cloud execution is pending. [Releasing](releasing.md) defines the current sequence. No
+the first cloud build and downloaded-package host startup pass on macOS27. The follow-up
+release/tap automation prepares drafts and candidate branches, with physical acceptance and
+publication still separate. [Releasing](releasing.md) defines the current sequence. No
 Release or tap publication has occurred.
 
 Current user guides are [README installation](../README.md#installation-channels),

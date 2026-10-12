@@ -536,8 +536,10 @@ macOS27/Xcode27 device gate remains open.
 The user requests PR CI and a downloadable test package first, then Release/Homebrew
 automation after an actual successful build/package verification. [Releasing](releasing.md)
 defines this sequence. The PR workflow builds ARM64 targets and runs host regressions on
-`xcode-27`, then verifies the staged archive and uploads a temporary artifact. First cloud
-execution is pending. No tag, release, main merge or tap change has occurred.
+`xcode-27`, then verifies the staged archive and uploads a temporary artifact. The first cloud build and downloaded-package host startup pass. Follow-up automation prepares
+Draft Release candidates and generated stable archive formulas; tap publication uses its own
+manual workflow and reviewed candidate branch. Source `ipb update` separates stable upgrade
+from HEAD reinstall. No tag, release, main merge or stable tap-target change has occurred.
 
 ## Remaining work
 
