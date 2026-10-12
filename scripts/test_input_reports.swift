@@ -79,6 +79,21 @@ struct InputReportTests {
             for usage in 1...0xe7 where bit(data, usage + 8) { actual.append(UInt32(usage)) }
             check(actual == usages.sorted(), "keyboard held set \(actual) != \(usages.sorted())")
         }
+        let chord: [UInt32] = [0xe0,0xe1,0xe2,0xe3,4,80]
+        let data = dataFromOutput { output in
+            chord.withUnsafeBufferPointer { uhidMakeKeyboardStateHIDReport($0.baseAddress,Int32($0.count),output) }
+        }
+        check(data.count == 39, "full keyboard state must retain descriptor size")
+        for usage in 1...0xe7 {
+            check(bit(data,usage+8) == chord.contains(UInt32(usage)), "multi-modifier state mismatch")
+        }
+        let release = dataFromOutput { uhidMakeKeyboardStateHIDReport(nil,0,$0) }
+        check(release.dropFirst().allSatisfy { $0 == 0 }, "release must clear every held key")
+        check(uhidMakeKeyboardStateHIDReport(nil,1,nil) == -1, "missing usage array rejected")
+        check(uhidMakeKeyboardStateHIDReport(nil,233,nil) == -1, "unbounded count rejected")
+        let invalid: [UInt32] = [0xe8]
+        check(invalid.withUnsafeBufferPointer { uhidMakeKeyboardStateHIDReport($0.baseAddress,1,nil) } == -1,
+              "out-of-descriptor usage rejected")
     }
 
     static func main() {

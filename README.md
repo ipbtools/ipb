@@ -304,6 +304,9 @@ device's own scroll path (`0x501`, iOS 27 only). The shortcuts match DeviceHub:
 | ⌃⇧⌘H | App Switcher |
 | ⌘L | Lock, or wake a dark screen — the same side-button press |
 | ⌘K / `123` button | Show or hide the numeric keypad |
+| ⌘A / ⌘C / ⌘X / ⌘V | Select all / copy to Mac / cut to Mac / paste Mac text |
+| ⌃Space | Next Mac input method (also available in Edit) |
+| ⌘W / ⌘Q | Close the mirror / quit |
 | ⌘↑ / ⌘↓ | Volume up / down |
 | ⇧⌘S | Save the latest decoded frame as a PNG in `~/Pictures` |
 | ⌘← / ⌘→ | Rotate device left / right, then update the preview and input mapping |
@@ -318,8 +321,26 @@ Return are forwarded too. Close it with `123`, `⌘K`, or its close button. Keyb
 omitted from event CSV and diagnostics. Password-sheet and lockscreen acceptance still require
 device validation; a visible panel does not prove iOS will accept its keyboard events.
 
-Key repeat is ignored, so holding a shortcut or numeric key sends one press. Other ordinary
-typing is not forwarded; use CLI `key` for individual usages or `text` for a focused paste.
+Click the phone view to focus the window, then type normally. Letters, numbers, punctuation,
+navigation/function keys and modifier combinations use the discovered keyboard HID service.
+Key down/up preserve the full held-key set; ordinary key repeat is forwarded. Existing mirror
+shortcuts above remain local/reserved and do not repeat. Focus loss and close release held keys.
+Physical key input follows the iPhone's keyboard layout/input method.
+
+Choose an enabled Mac input method in **Edit → Input Method**, or use **Control-Space** / Edit →
+Next Input Method. System-wide shortcuts can be intercepted by macOS; the menu remains available.
+Mac input methods keep composition/candidates on the Mac and send committed text by UTF-8
+clipboard paste. The composing text appears at the bottom of the mirror. Emoji and other Unicode
+commits use the same path. This does not provide a local copy of the phone's editable document
+for reconversion or replacement of previously committed ranges.
+
+The Edit menu also exposes text Cut, Copy, Paste and Select All. Copy/Cut wait for a changed
+iPhone clipboard before retrieving text; if nothing is selected, the mirror stays open. A newer
+Mac clipboard is preserved. Paste replaces the iPhone text clipboard. Transfers are ordered with
+keyboard input, capped at 2 MiB of UTF-8, and never retried after a submitted chord. Images/rich
+text and continuous clipboard synchronization are not implemented. iOS may ask the focused app
+to allow paste from `dtpasteboardd`; handle that prompt normally. Sender success does not prove
+the app inserted text. Secure-field/lockscreen acceptance remains unverified.
 
 **Requires a GUI login session**, just like `ipb stream`: in-process decoding needs
 `CVDisplayLink`. It works with SIP enabled and needs no entitlement; plain ssh is unsupported.

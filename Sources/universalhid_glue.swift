@@ -696,6 +696,21 @@ public func uhidMakeKeyboardHIDReport(
     return Int32(MemoryLayout<UHIDHIDReport>.size)
 }
 
+// Bounded C entry to the existing report builder, not a new private-ABI shim.
+@_cdecl("uhid_make_keyboard_state_hid_report")
+public func uhidMakeKeyboardStateHIDReport(
+    _ usages: UnsafePointer<UInt32>?, _ count: Int32, _ output: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard count >= 0, count <= 232, count == 0 || usages != nil else { return -1 }
+    let held = count == 0 ? [] : Array(UnsafeBufferPointer(start: usages, count: Int(count)))
+    guard var report = makeKeyboardHIDReport(usages: held) else { return -1 }
+    retainedHIDReports.append(report)
+    if let output {
+        withUnsafeBytes(of: &report) { output.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
+    }
+    return Int32(MemoryLayout<UHIDHIDReport>.size)
+}
+
 // A report is the complete held-usage set. Captured Device Hub paste sequence:
 // {Command}, {Command,V}, {V}, {} (docs/protocol.md, 2026-09-21).
 @_cdecl("uhid_make_keyboard_pair_hid_report")

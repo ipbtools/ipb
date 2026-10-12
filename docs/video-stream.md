@@ -240,6 +240,30 @@ Rejected alternatives for this input control: guessing hidden keypad rectangles 
 hit the wrong digit; per-key CLI subprocesses duplicate transport and expose usages in argv/logs;
 automatic password-page detection has no product-ready, verified page classifier.
 
+### Keyboard, host composition and text clipboard (2026-10-12)
+
+Mirror now forwards ordinary key down/up, held modifiers, repeat and other Command chords
+on the existing keyboard service/input FIFO. The numeric panel and existing local shortcuts
+remain reserved, including Command-W/Q for close/quit. Focus loss, geometry updates and close
+invalidate unsent keyboard intent and release held usages while the transport remains healthy.
+
+An owned NSTextInputContext/NSTextInputClient handles enabled Mac input methods, selected in
+Edit → Input Method or Control-Space. Marked text stays local with a footer preview; composed
+or Unicode commits use bounded UTF-8 pasteboard transfer plus the existing paste chord.
+Copy/Cut require a changed device clipboard and retrieve text without replacing a different
+newer Mac clipboard. Paste reads Mac text at the FIFO head so Copy → Paste is ordered.
+No selected text is nonfatal. Transfers share device-control cancellation/deadlines; the
+rotation drain waits outside that queue to avoid a clipboard/input dependency cycle.
+Text and key usages never enter argv/event diagnostics. Rich text/images, continuous sync
+and remote-document reconversion are outside the implementation.
+
+The local 13 Pro Settings-search run verifies Shift punctuation, Unicode paste/Copy/Cut,
+native Mac Chinese composition and committed `测试`, Backspace repeat and caret movement.
+Panel/Home/normal close and final Command-W exit 0 pass. Host regressions and installed
+noninteractive smoke pass on supplementary macOS 26.5.1 / Xcode 27 B6 / iOS 27.0. This
+does not close secure-input acceptance or the supported macOS 27 full gate. iOS may still
+present an ordinary paste permission prompt; the product does not answer it automatically.
+
 ### The decoded frame is not the screen: encoder padding
 
 **The frame is larger than the display and the extra area is black padding.** On the 13 Pro the
