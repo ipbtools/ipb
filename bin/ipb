@@ -63,15 +63,15 @@ input
   key-down <usage_or_name> [service_id]        hold a key (paired with key-up)
   key-up [usage_or_name] [service_id]          release it, or all keys
   button <usage_page> <usage_code> [hold_seconds]        a hardware button by HID usage
-  pointer <dx> <dy> [button_mask] [service_id] relative mouse movement (iOS 27 only)
-  abs-pointer <x> <y> [buttons] [service_id]   place the cursor (iOS 27 only)
+  pointer <dx> <dy> [button_mask] [service_id] relative pointer probe; effect unverified
+  abs-pointer <x> <y> [buttons] [service_id]   absolute pointer probe (iOS 27 only)
 
 screen
   screenshot <path>                            (devicectl)
   screenrecord <path> [seconds]                (devicectl; unsupported on the tested iOS 27.0)
   stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout
                                                live JPEG frames, no DeviceHub
-  mirror [--seconds S] [--csv PATH]            live screen plus mouse and keyboard (needs a GUI session)
+  mirror [--seconds S] [--csv PATH]            live screen, mouse and shortcuts (needs a GUI session)
 
 apps and processes (devicectl)
   apps                                         installed apps

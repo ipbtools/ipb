@@ -16,9 +16,9 @@
 #   label <TAB> module <TAB> mangled symbol <TAB> json spec
 
 # --- UniversalHID: the report path (tap, swipe, key, scroll, abs-pointer) ---
-uhid_send_id	CoreDevice	$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HIDReportV_AA0D2IDVtAA0aB5ErrorVYKFTj	{"report_arg":"x0","args_are_words":["x1","x2","x3"]}
+uhid_send_id	CoreDevice	$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HIDReportV_AA0D2IDVtAA0aB5ErrorVYKFTj	{"report_arg":"x0","args_are_words":["x1","x2","x3"],"deref":{"x2":8}}
 uhid_send_u64	CoreDevice	$s10CoreDevice19UniversalHIDServiceP4send6report2toy0C3HID9HIDReportV_s6UInt64VtAA0aB5ErrorVYKFTj	{"report_arg":"x0","args_are_words":["x1","x2"]}
-uhid_send_ext	CoreDevice	$s10CoreDevice19UniversalHIDServicePAAE4send6report2toy0C3HID9HIDReportV_AA0D2IDVtAA0aB5ErrorVYKF	{"report_arg":"x0","args_are_words":["x1","x2","x3"]}
+uhid_send_ext	CoreDevice	$s10CoreDevice19UniversalHIDServicePAAE4send6report2toy0C3HID9HIDReportV_AA0D2IDVtAA0aB5ErrorVYKF	{"report_arg":"x0","args_are_words":["x1","x2","x3"],"deref":{"x2":8}}
 
 # --- Indigo: the event path. Never bound before this manifest. -------------
 indigo_digitizer	CoreDevice	$s10CoreDevice12HIDDigitizerP4send8pointOne0E3Two9eventType4edge6targetyAA14DigitizerPointV_AKSgAA0l5EventI0OAA0L4EdgeOAA0L6TargetOtKFTj	{"args_are_words":["x0","x1","x2","x3","x4","x5","x6","x7"],"doubles":["d0","d1","d2","d3"]}

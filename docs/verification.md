@@ -2,46 +2,50 @@
 
 ## Open items — current state (living section)
 
-**This section is overwritten in place; everything below the first dated heading is append-only.**
-It exists because the records below are 3 700 lines of history in which several "Known, not fixed"
-entries have since been closed or retracted, and a reader cannot tell today's state from them.
-Each entry names its root-cause status and, per the house rule, whether it is mine to fix or the
-user's to decide.
+**Updated 2026-09-21. This section is overwritten; dated records below are append-only.**
+The latest native-runtime evidence is macOS 26.5.1 / CoreDevice 642.15 with an unlocked wired
+13 Pro on iOS 27.0 (24A437). It does not replace the declared macOS 27 release gate.
 
-### Blocked on a decision or on hardware — not mine to close
+### Remaining work, in recommended order
 
-| Item | Root-cause status | Blocker |
+| Item | Current evidence and root-cause status | Owner / next discriminator |
 | --- | --- | --- |
-| **Gap 1: Device Hub drives a locked device, ipb cannot** | **Root-caused.** Escrowed `RemoteUnlockKeypair` + `KeybagProvider.unlock` in `remotepairingd`; our `RemotePairingError 1016` is its `unlockRequired` case. Gated by the `com.apple.dt.Devices` keychain group and `com.apple.private.coredevice.client`, so it is a structural boundary, not a bug. See 2026-09-15 "Gap 1 mechanism found". | User: "这个问题可能也需要 device hub 测试下才行". A Device Hub run would confirm the boundary; it cannot remove it. Recommended outcome: document as a permanent capability limit. |
-| **Gap 2: Device Hub can tap system dialogs, ipb cannot** | **Not root-caused.** Two hypotheses survive: `remoteTimestamp = 0` (weakened — zero is Apple's own nil encoding) and tap framing against Device Hub's real digitizer bytes (never captured). The `contactCount` lift fix was committed on its own merits and is **not** a claimed fix. | **The reproduction problem is solved** (2026-09-21): the home-screen **"Remove App" confirmation** is a genuine system-presented alert, available on demand and dismissible with Cancel, so it no longer depends on finding the app that produced the user's original prompt. The remaining blocker is different — sending a **synthetic touch** is refused by the operator agent's permission classifier, so the experiment has never run. Needs either that authorisation or the user performing the clicks. |
-| **`TODO(media-lifetime)`** | **Not root-caused.** Identical runs produced 1 236 and 265 frames; the earlier "constant ~266 frames" claim was retracted as host-state noise. | User: "同样复现下". Planned reproduction: a run against a *continuously changing* screen (loop home/recents) to separate an idle-screen watchdog from a genuine media limit. |
-| **`TODO(tunnel-keepalive)`** | **Root-caused, workaround accepted.** The tunnel is a lease with a ~10–11 s grace, identical wired and localNetwork; we hold it by proxy with a resident `devicectl notification observe` instead of taking our own assertion, because `acquireusageassertion` needs an entitlement. `bin/ipb:273`. | User closed it: "就维持现状把". Do not reopen. |
+| **Supported release matrix gate** | macOS 27 host build and host fault test passed in isolation, but that host currently selects Xcode 26.4 and its paired iOS 27 device is unavailable. | Hardware/environment prerequisite: macOS 27 + Xcode 27 + an available unlocked iOS 27 phone. Do not label the local macOS 26 run a release pass. |
+| **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
+| **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
+| **Agent observation contract** | Pixel change alone is not action success. Stream lacks frame identity/PTS/orientation metadata. Live `devicectl info displays` now provides primary size, display direction, scale and backlight; `info details` provides capability IDs. UI tree remains unverified. | Agent-fixable: structured display/capability snapshot first, then frame/action correlation. Select the primary display explicitly; a Wireless entry disappeared after Device Hub quit. AX remains a separate research path. |
+| **Keyboard and focused text** | Device Hub chords use a held-usage set; Command+A/Backspace cleared search. `aA1!` became `啊A1!` with the phone input method. Synthetic Unicode emitted no HID reports; host paste only emitted Command+V. Existing UTF-8 clipboard copy/get works historically, but focused insertion is unverified; current clipboard info returns policy error 26006. | Agent-fixable: chord state and focused mirror capture; separate text-insertion experiment. Do not equate clipboard round-trip or key delivery with literal text insertion. |
+| **Orientation and other Device Hub parity** | Rotate Left changed device orientation to landscapeLeft while Settings display stayed rot0; rotated clicks work and pointer/touch coordinate pairs differ. Mirror lacks this transform layer. Siri code/state had no visible effect; recording and Action Button were disabled on the 13 Pro. | Agent can implement device/display/presentation separation after the full orientation matrix. Other buttons require corresponding evidence/hardware; absent recording/audio-selection capabilities should be surfaced explicitly. |
+| **Tap/keyboard timestamp and contact identity** | Captured count and sizes now agree. Device Hub uses max=5, identifier=2, identity=2 and nonzero timestamp; current ipb differs. No demonstrated failing effect caused by these differences. | Known, not patched speculatively. Compare on an actual remaining failure before changing fields. |
+| **Silent media loss / cold-start budgets** | Static silence is now correctly tolerated; explicit stream/connection errors fail. Silent loss without an error callback remains indistinguishable from idle until content changes. Setup/watchdog margins are policy values without cold-start calibration. | Agent-fixable measurement work; do not treat a frame-count ceiling as an established transport lifetime. |
+| **Probe commands and standalone transport** | Raw reports may return 0 without visible effects. Xcode-free Python transport has a spike, not a completed CLI/MCP/screenshot implementation. | Keep probes labelled and stage-4 work separate. |
 
-### Mine to fix
+### Confirmed fixes in the current alignment work
 
-| Item | Root-cause status | Next step |
-| --- | --- | --- |
-| ~~**`KeyboardReport` is 31 B against a 312-bit (39 B) descriptor**~~ | **Fixed 2026-09-21.** `makeKeyboardHIDReport` now allocates `0x138` = 312 bits; verified on the wire at 39 B with the usage bit still at `usage + 8`. `scripts/check_report_sizes.py` runs on every `make` and fails the build on any hardcoded allocation short of its descriptor — it was confirmed to fail on the old `0xf8`. | Done. |
-| **Report-send timeouts are fatal, and an abandoned send is not serialised** | **Partly root-caused.** A timed-out `sendBounded` returns while the real call "still runs to completion in the background" (record of 2026-09-14), so a later send can race it on the same `xrc_t`. Barrier timeouts were made non-fatal; report timeouts were not. | Make a report timeout drop the gesture and force an UP so the contact is released, rather than killing the session; serialise per-connection sends so an abandoned call cannot race the next one. |
-| **The smoke gate treats identical consecutive frames as advisory** | N/A — a gate defect, not a device defect. `scripts/smoke_matrix.sh:171` prints `WARN` and continues, while Rule 4 says an identical frame "is a warning that must be explained ... not ignored". | Require an explanation (an allow-list of expected-identical steps) or fail. |
-| **Smoke gate identical-frame handling, and silent no-ops as a design question** | **Under-ranked, per the 2026-09-21 review.** The gate prints `WARN` and continues where Rule 4 says an identical frame "must be explained ... not ignored", so it violates the project's own written rule on every run. Separately, silent no-ops have now surfaced twice (App Switcher `0x100`, the voided `contactCount` test), which is Rule 3's own redesign trigger. | Gate: allow-list the steps expected to produce identical frames and fail otherwise. No-ops: decide whether screenshot-diff assertion is the default, rather than patching command by command. |
-| **UI hierarchy / accessibility-tree read is absent from the roadmap** | **Route settled, nothing attempted.** Not reachable over CoreDevice — the DDI ships no accessibility daemon and none of its 54 features is accessibility-related. `AccessibilityAudit` reaches `axAuditDaemon` over **lockdown**, which is stage 4's transport. | Confirm the service name on the wire, then decide whether it belongs in the stage-4 pymobiledevice3 client. Named by the 2026-09-21 review as the largest capability gap for agent use. |
-| **Raw probe verbs have never shown a device effect** | **Known.** `nav-report`, `dock-report`, `pointer-report`, `scroll-report`, `scroll-event`, `vendor-defined`, `uhid-swipe-report` are accepted by the service and do nothing observable; `nav-report`/`dock-report` additionally rest on a retracted premise. They are now marked as probes in `README.md` and `docs/protocol.md`. | Whether to quarantine them out of the main help (Fable's recommendation) is a CLI surface decision, not a doc fix. Marked, not moved. |
-| **Device Hub's own tap has never been captured** | **Methodology failure fixed; tap itself still uncaptured.** All ten CoreDevice HID send paths are now bound (`taps-full.tsv`) and the rig is proven to record live Device Hub traffic — Home, App Switcher and Lock were captured on 2026-09-21, with a clean zero baseline. What remains uncaptured is specifically a **tap**, because sending a synthetic touch is blocked on the operator's session. `xpc_remote_connection_send_message*` turned out to be unusable: it does not resolve by name under lldb on this host. | Needs tap/long-press authorisation for the operator, or the user performing the clicks. Everything else is ready. |
+- **Input ownership:** host fault injection reproduced two abandoned calls concurrently entering one
+  sender. Per-connection ownership now lasts until the real call returns, with bounded admission
+  and shutdown. Report timeouts stay fatal and uncertain input is never replayed. A forced UP cannot
+  guarantee device release after a transport failure. After manual Mac unlock, native mouse drag,
+  Home/App Switcher shortcuts, bottom-edge Home and normal window close passed on the local host;
+  this covers all three sender connections, without claiming physical scroll calibration.
+- **Media idle timeout:** stream and mirror both reproduced exit 7 on a static Settings screen.
+  Both now survive the idle interval and resume after Home; first-frame, output and overall bounds
+  remain. This explains the reproduced idle failure, not every historical media symptom.
+- **Smoke false passes:** missing unlock proof and unexplained unchanged frames fail. Real screenshot
+  inspection also exposed clock-only false positives and invalid Home-scroll/Escape fixtures; the
+  gate now uses a Settings list, an actual search-key effect, and a minimum material pixel change.
+  Manual semantic inspection is still required.
+- **Trace validity:** all ten breakpoints must resolve and the target resume before readiness is
+  announced. Fixed zero-count shell parsing and double-detach failure; decoder exposes target IDs
+  and digitizer fields. Actual Device Hub taps, drag, keyboard and safe alert Cancel are captured.
+- **Keyboard allocation:** the earlier 39 B fix remains in place and matches the new Device Hub trace.
 
-### Recorded, lower priority
+### Decisions retained
 
-- **Which `HIDServiceID` Device Hub targets is still unobserved.** The IDs ipb uses
-  (`0x101`, `0x200`, `0x402`, `0x501`) are not invented — they are read from the device through
-  `connectedServiceDescriptors()` (see the descriptor dump below). What was never captured is which
-  of them *Device Hub* passes for a given gesture, because the capture never dereferenced `x2`.
-- **Scroll `accelX = dx/40` and the momentum decay are invented**, though the phase sequence around
-  them is captured (`protocol.md`, "Scroll: the full sequence Device Hub sends").
-- **Silent no-ops are structural**: an ineffective usage returns `rc=0`, as the `0xff01/0x100`
-  App Switcher bug did for weeks. The gate cannot distinguish "sent" from "worked" without a
-  screenshot assertion.
-- Older per-record "Known, not fixed" lists remain below for history. Where they conflict with this
-  section, this section wins.
+- `TODO(tunnel-keepalive)`: resident `devicectl notification observe` remains the accepted workaround.
+  User closed it with **“就维持现状把”**. Do not reopen without new evidence.
+- Older per-record “Known, not fixed” claims remain history. This head and the current protocol
+  sections supersede stale claims that no Device Hub tap/service target was ever captured.
 
 
 Host:
@@ -3944,3 +3948,175 @@ nothing has been attempted against a device.
 - Arbitrary Unicode text entry (beyond single key usages) is part of the stated minimum agent loop
   and is not on the roadmap either. Everything else in the adb boundary list is already covered by
   `devicectl` and should not be reimplemented inside `ipb`.
+
+
+## 2026-09-21 — Device Hub alignment: idle timeout, sender ownership, smoke and trace corrections
+
+Start `f2e85a6`, branch `codex/devicehub-alignment`. Measured host macOS **26.5.1 (25F80)**,
+Xcode **27 Beta 6**, Device Hub **27.0 (255.2.3.5)**, CoreDevice **642.15**; wired **iPhone 13 Pro,
+iOS 27.0 (24A437)**. The phone explicitly reported `passcodeRequired: false`, with Home/Settings
+visually observed. This corrects use of older host/CoreDevice seed labels for this session.
+Raw evidence stays outside Git under `~/.local/state/ipb/20260921-alignment/`.
+
+### Confirmed failures and fixes
+
+1. **Static content caused early failure.** `launch com.apple.Preferences`, then `stream --seconds 25
+   --fps 3` exited 7 after three/five distinct images. Repeated after quitting Device Hub: same
+   failure, excluding concurrent viewing as a required trigger. Instrumentation separated decoded
+   frame receipt from output; even decoded frames ceased during static content. An isolated mirror
+   `--seconds 28` also exited 7 (350 received frames, then silence).
+   After the first-frame-only policy, `stream --seconds 32 --fps 3` stayed alive to Home at t+22 s:
+   first three outputs ended near t+2.61 s, new output resumed at t+22.56 s; 41 distinct / 878 decoded,
+   rc=0 at 35.61 s including setup. Mirror `--seconds 32` likewise remained alive, resumed on Home,
+   received 746 frames, and exited 0 at 32.82 s. This establishes an idle failure and recovery,
+   not a universal diagnosis of historical stream freezes. Unread stdout still exited 8 after
+   11.38 s; unattainable `--count 10000 --seconds 3` exited 8 after 6.21 s. No first-frame/stop watchdog
+   was removed. Relevant logs: `stream-static-alone`, `stream-idle-resume`, `mirror-static-before`,
+   `mirror-idle-resume`, `blocked-stdout`, `unmet-count`.
+2. **Caller timeout did not serialize the underlying sender.** The old `sendBounded` algorithm,
+   copied into a host-only semaphore-controlled fixture, produced two timed-out callers with
+   `calls=2 max_active=2`. The new shared implementation keeps ownership through actual completion;
+   its regression verifies no second invocation while occupied, max concurrency 1, bounded close,
+   rejection after close, completion recovery and no replay. Report timeouts remain fatal.
+   `old-sendbound-repro/` retains the original fault evidence. Normal native mirror mouse/shortcut
+   regression remains pending because the computer-use tool later reported the Mac locked; user
+   unlock was requested. CLI input success is not substituted for this mirror-specific check.
+3. **The smoke gate gave false passes.** Its first revised real run still returned 0 while Home
+   swipe/scroll had no intended effect; the clock icon moved (0.0343% / 0.0487% material pixels), and
+   Escape left the context menu visible. That run is **not accepted**. The gate now requires >=1%
+   pixels changing by >=16 in an RGB channel, with explicit no-op reasons; it uses a Settings list
+   and observable `a`/Backspace search effects. An intermediate run correctly failed a scroll fixture
+   sent farther into the bottom boundary; corrected `dy=+0.30` matches `y+dy` and returned toward top.
+   The final **installed-layout** run passed, and key screenshots were inspected: Settings launch,
+   App Switcher, list down/back up, context menu, query `a`, cleared query, final Home. Exact run:
+
+   ```sh
+   DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.6.app/Contents/Developer \
+   DEVICE_ID=<13-pro-coredevice-uuid> SMOKE_INTERACTIVE=1 \
+   TAP_XY='0.61 0.696' LONG_XY='0.845 0.696' \
+   <staged-prefix>/share/ipb/smoke_matrix.sh <staged-prefix> <local-evidence>/smoke-final
+   ```
+
+   Evidence runs are `smoke-local` (rejected), `smoke-settings` (failed), `smoke-final` (passed).
+   This macOS 26 gate is supplementary; it does not close the macOS 27 release gate.
+4. **Trace startup/status was misleading.** Zero-match `grep -c ... || print 0` produced duplicate
+   zeroes and zsh arithmetic errors; double detach gave lldb exit 1 after successful capture.
+   The driver now waits for resolved locations and actual Continue, detaches once and returns
+   failure truthfully. Revised live capture: ten ready taps, 21 calls, no shed taps, clean rc=0
+   detach, Device Hub alive. Missing-symbol host fixture: rc=4, no `.bound`, empty capture, target
+   detached and alive. See `devicehub-verify.*` and `trace-fixture/`.
+
+### Protocol and functional comparison
+
+Before the Mac locked, Device Hub was operated directly: Settings tap/drag, Home, the cancellable
+Remove App confirmation, preview rotate/restore, Siri menu, and keyboard capture into Settings
+search. All test text was cleared; no app was removed and no permission prompt was granted.
+
+- The original digitizer capture has 14 reports plus four typed button calls and a clean zero-input
+  baseline. Both ordinary tap and system Cancel use `0x101`, count=1 even on UP, max=5,
+  identifier/identity=2 and nonzero timestamp. **Current ipb also successfully cancelled the same
+  system alert.** Original TCC/privacy prompts remain untested; no causal credit is assigned to
+  the earlier contact-count fix.
+- The revised capture confirms Keyboard 39 B / `0x200`, AbsolutePointer 19 B / `0x501`, and Scroll
+  21 B / `0x501`. Synthetic wheel emitted only zero-motion may-begin and did not visibly scroll;
+  physical trackpad acceleration/momentum remain uncalibrated. Siri sent code `0xcf` with states
+  0/1 but showed no Siri UI. Rotate changed the host preview; the native screenshot stayed portrait.
+- Device Hub's ordinary text forwarding works; mirror currently has shortcuts only. Record Screen
+  and Action Button were disabled on this 13 Pro. No capability is claimed from these menu labels.
+
+### Build and acceptance boundary
+
+Local `make XCODE_PATH=/Applications/Xcode-27.0.0-Beta.6.app install PREFIX=<local-staged-prefix>`,
+`scripts/test_bounded_sender.sh`, `scripts/test_smoke_matrix.sh`, shell syntax and report-size checks
+passed. Native output/protocol captures and GUI observations above are kept distinct from host fault
+injection. A fresh review found stale current-doc claims about uncaptured taps/31 B output; those
+were corrected. It found no further reachable code defect in the reviewed change.
+
+The remote macOS 27 host (26A5425a, CoreDevice 642.15) built helper/video/mirror and passed the sender
+host test in isolated `/tmp/ipb-alignment-20260921-D2DOwc`. It currently selects **Xcode 26.4** and its
+paired iOS 27 phone reports **unavailable**. Therefore the required **macOS 27 + Xcode 27 + iOS 27**
+real-device gate is still open. Native mirror input also awaits manual Mac unlock. These are
+acceptance limits, not evidence that the release matrix passed.
+
+
+## 2026-09-21 — Mirror native input regression after manual Mac unlock
+
+Revision `1ed76f7`; same local macOS **26.5.1 (25F80)** / Xcode **27 Beta 6** / CoreDevice
+**642.15**, wired **iPhone 13 Pro / iOS 27.0 (24A437)**. `lock-state` explicitly returned
+`passcodeRequired: false`. `make -q XCODE_PATH=/Applications/Xcode-27.0.0-Beta.6.app build/ipb-mirror`
+confirmed the existing build was current; its executable was copied into a local test app bundle
+and ad-hoc signed so the computer-use tool could select its window. No implementation changed.
+
+The app ran through `IPB_MIRROR_HELPER=<local-test-app>/Contents/MacOS/ipb-mirror caffeinate -di
+bin/ipb -s <13-pro-coredevice-uuid> mirror --seconds 600 --csv <local-evidence>/events.csv`, with
+`DEVELOPER_DIR` selecting Beta 6. Direct native-window operations visibly demonstrated:
+
+- Click Settings; drag the list down and back to the top.
+- Home and App Switcher shortcuts; a bottom-edge swipe from Settings back to Home.
+- Screenshot shortcut produced the expected Settings image at 1170 x 2532.
+- Actual Size explicitly fell back to fit because the visible screen was too small; Zoom to Fit
+  remained usable, and a resized-coordinate click opened General as intended.
+- Return Home and close the window normally: helper/wrapper exit 0, reason `window closed`, with
+  no surviving wrapper/helper/keepalive/caffeinate PIDs. The computer-use AX lookup after closing
+  timed out because the target exited; process status and shutdown logs independently prove exit.
+
+CSV/log totals: 24 submitted, **23 sent**, one `scroll_unsupported`, zero report/barrier errors,
+zero abandoned/in-flight sends, max queue depth 2, and 8863 received media frames with zero reported
+media errors. TOUCH, typed-button and BOTTOM_EDGE paths were exercised. Host sender timings are
+not device-completion measurements; the visible states above are the effect evidence.
+
+**Remaining limit:** the computer-use scroll operation emitted one precise AppKit event with
+phase=0, momentum=0, delta=(0,-872). Mirror rejected it explicitly and the list did not move. This
+is a reproducible synthetic-event limitation, not calibration or disproof of physical trackpad
+scrolling. Volume, Lock/Wake and forced transport loss were not rerun. The macOS 27 release matrix
+still lacks its previously recorded Xcode/device prerequisites.
+
+Local artifacts: `~/.local/state/ipb/20260921-alignment/mirror-unlocked/` contains `run.json`,
+`summary.json`, `mirror.log`, `events.csv` and the key device screenshots. The screenshot-shortcut
+output path is recorded in `run.json`. Raw artifacts remain outside version control.
+
+
+## 2026-09-21 — Deeper Device Hub keyboard, display and rotation research
+
+Source revision `c14eed6`; macOS **26.5.1 (25F80)**, Xcode **27 Beta 6**, Device Hub
+**27.0 (255.2.3.5)**, DeviceKit **255.2.3**, CoreDevice **642.15**, wired **iPhone 13 Pro /
+iOS 27.0 (24A437)**. `lock-state` explicitly returned `passcodeRequired: false`.
+This was a research pass with no product code changes, build or smoke rerun.
+
+Two native Device Hub captures resolved all ten HID taps, shed none and detached with lldb exit 0:
+`text-input` recorded **35 calls** (24 Keyboard, eight Digitizer, three AbsolutePointer, including
+setup/cleanup); `rotation` recorded **three calls** (one AbsolutePointer, two Digitizer).
+Action markers fall after the respective `.bound` readiness file and before the final trace
+summary. The decoder's first-call-based window is narrower and is not the actual readiness window.
+
+- **Key delivery is not literal text.** Shift/Command chords contain simultaneous held usage bits.
+  Injected `aA1!` appeared as `啊A1!` with the phone's Pinyin keyboard visible; Command+A/Backspace
+  visibly cleared it. Synthetic `中文🙂` produced no captured HID call or insertion. Host paste
+  timed out waiting for the application to read the clipboard; only Command+V was captured and
+  the field stayed empty. These observations do not characterize every physical keyboard/IME path.
+- **Clipboard policy is independent.** Device Hub exposes Use Shared Clipboard, Get Clipboard and
+  Send Clipboard; their synchronization state was not established. `pasteboard info` returned
+  26006 for `com.apple.is-remote-clipboard`. No contents were read or overwritten, and this error
+  is not a proven explanation for the earlier host paste timeout. Existing UTF-8 clipboard
+  copy/get evidence remains valid; focused arbitrary-text insertion is still unverified.
+- **The earlier presentation-only rotation inference is superseded.** Rotate Left changed queried
+  device orientation to landscapeLeft, while primary display orientation stayed rot0 and native
+  Settings remained portrait. No HID report accompanied the rotation itself. A rotated-preview
+  click opened General; its Pointer and Digitizer coordinates differed consistently with a
+  quarter-turn transform. Only this orientation was measured; see `docs/protocol.md` for values.
+- **Display/capability metadata is available now.** `device info displays` returned primary
+  1170x2532 bounds, scale 3, orientation and backlight. A non-primary Wireless entry present during
+  viewing disappeared after quitting Device Hub. `device info details` advertised `startaudiooutput`
+  but not `audiooutput`; `device info audio` returned missing-capability error 1001. Presence of an
+  audio-stream feature is not proof of audio-device selection or recording support.
+
+Local artifacts: `~/.local/state/ipb/20260921-deep/` contains `session-manifest.json`, both trace
+sets and action markers, decoded reports, display/capability JSON, screenshots and targeted shipped
+binary symbol/disassembly extracts. Proposed additions and their acceptance criteria are in
+`docs/devicehub-alignment.md`. Raw artifacts remain outside version control.
+
+Cleanup restored and queried portrait, cleared test search text, returned the phone Home, disabled
+keyboard capture and quit Device Hub. Tracers detached cleanly. This local macOS 26 run does not
+close the macOS 27 release gate. Full orientation mapping, physical trackpad calibration, real
+host IME input, UI-tree transport, multi-touch, remote unlock, recording and audio streaming remain
+unverified by this pass.

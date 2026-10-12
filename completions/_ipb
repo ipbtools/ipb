@@ -46,13 +46,13 @@ _ipb_commands() {
     'key-down:hold a key'
     'key-up:release a key, or all keys'
     'button:a hardware button by HID usage'
-    'pointer:relative mouse movement (iOS 27)'
-    'abs-pointer:place the cursor (iOS 27)'
+    'pointer:relative pointer probe (effect unverified)'
+    'abs-pointer:absolute pointer probe (iOS 27)'
 
     'screenshot:save a PNG'
     'screenrecord:record the screen'
     'stream:live JPEG frames'
-    'mirror:live screen plus mouse and keyboard'
+    'mirror:live screen, mouse and shortcuts'
 
     'apps:installed apps'
     'ps:running processes'

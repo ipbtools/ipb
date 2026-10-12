@@ -55,7 +55,7 @@ readings of clobbered registers. Every tap in the manifest binds with
 
 ## The design
 
-`Experiments/devicehub-trace/` is four pieces:
+`Experiments/devicehub-trace/` contains these components:
 
 | File | Role |
 | --- | --- |
@@ -169,14 +169,17 @@ harness's purpose is not misread.**
   over the view. `ipb` sends a single bare movement report, which is why it is accepted and
   ignored. See `docs/protocol.md`, "Scroll: the full sequence Device Hub sends".
 
-### The question this harness has not answered
+### Earlier tap gap — closed by the 2026-09-21 capture
 
-**Device Hub's tap has never been captured.** `taps.tsv` only taps `UniversalHIDService.send` and
-never the Indigo button/digitizer sockets, and no action script in this repo has ever contained a
-click — so every digitizer byte here is ipb's own output. The recorded conclusion that Device Hub
-locks "through a non-UniversalHID channel" is therefore partly an artefact of not tapping the right
-thing. The universal choke point is `xpc_remote_connection_send_message*` under lldb, which also
-yields the `HIDServiceID` argument that the existing captures dropped.
+The earlier harness had not captured Device Hub taps: its universal-only manifest could not see
+Indigo buttons, its operator scripts did not exercise clicks, and its captures omitted service-ID
+dereferencing. This was a measurement gap, not proof of a different device protocol.
+
+The current ten-entry manifest plus direct Device Hub operation captured actual taps/drag and safe
+system-confirmation Cancel on `0x101`, keyboard on `0x200`, and pointer/scroll-start on `0x501`.
+The suggested `xpc_remote_connection_send_message*` choke point did not resolve by name on this seed;
+the verified CoreDevice entrypoints are the reference. See the current contract below and the
+runtime table in `docs/protocol.md`.
 
 
 ## Driving Device Hub with an agent operator (2026-09-21)
@@ -221,3 +224,25 @@ should have been the first hypothesis, not the fourth.
 typographic apostrophe (U+2019) in the device name. A straight `'` in an
 AppleScript `menu item` lookup fails with `-1728`, which reads as "the menu item
 does not exist" rather than "your string is wrong".
+
+
+## Current agent-operated capture contract (2026-09-21)
+
+`dhattach.sh` is the noninteractive driver. Use `taps-full.tsv`: ten CoreDevice HID send entrypoints,
+including the typed Indigo button overload; the original universal-only manifest cannot observe
+button traffic. The two service-ID UniversalHID overloads now also capture eight bytes at `x2`.
+The decoder prints raw service identity and digitizer contact fields alongside optional raw bytes.
+
+Readiness requires all breakpoints to have resolved locations **and** `DHRUN running` after a
+successful Continue. The `.bound` sidecar is written only then. An unresolved symbol is a failed
+capture, not evidence of zero traffic. The driver returns failure on attach/readiness/lldb failure;
+`dhrun` owns the single detach. Repeating detach had made a successful session report lldb exit 1.
+A zero-match `grep -c` must not be combined with `print 0` (it produces two zeroes and invalid zsh
+arithmetic); the driver now preserves its one numeric result.
+
+On macOS 26.5.1 / CoreDevice 642.15 / Device Hub 27.0 (255.2.3.5), the revised driver resolved ten
+breakpoints, captured actual tap/keyboard/scroll-start traffic, detached with rc=0, and left Device
+Hub running. First establish a no-input baseline. Keep each action's timestamp separate where
+possible; broad markers that include setup clicks cannot assign every report to the named gesture.
+The native operator's wheel emitted only may-begin and no visible motion in this run. That is an
+operator/gesture evidence limit, not proof that Device Hub's physical trackpad path is ineffective.
