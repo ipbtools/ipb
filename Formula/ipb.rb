@@ -19,7 +19,7 @@ class Ipb < Formula
   def caveats
     <<~EOS
       ipb needs CoreDevice 642.x (installed by Xcode 27 beta) on the host and an
-      iOS 27 or iOS 26.6+ device paired over USB, unlocked, Developer Mode on.
+      iOS 27+ device paired over USB, unlocked, Developer Mode on.
       Start with `ipb doctor`; it checks every layer and names the next step.
 
       `ipb stream` (live screen frames) additionally needs to run in a normal GUI
@@ -30,6 +30,10 @@ class Ipb < Formula
 
       `ipb mirror` also requires a GUI login session: in-process decoding needs
       CVDisplayLink. It is unavailable over plain ssh; use the desktop session.
+
+      `ipb ui` additionally needs Python 3.11+ and the optional host dependency
+      in #{share}/ipb/requirements-ax.txt. See README for the isolated environment;
+      no Python packages or phone application are installed automatically.
 
       Update later with `ipb update`.
     EOS

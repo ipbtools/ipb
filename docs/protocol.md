@@ -2643,7 +2643,8 @@ map local controls and cleanup.
 nodes and numerical rectangles from the allocated iPhone 13 Pro, without XCTest, a Runner,
 a new phone app or a private entitlement/signing change. This is a separate DevicesApp route
 into the shipped MainOS axauditd, rather than the Inspector shim's XADAudit property dispatcher
-or the authenticated Mirroring transport. No product element-query command has been added.
+or the authenticated Mirroring transport. The subsequent `ipb ui` integration uses this
+captured route; its query/verification boundaries are described below.
 
 Measured seed: local macOS **26.5.1 / 25F80**, Xcode **27 Beta 6**, CoreDevice **642.15**;
 iPhone14,2, **iOS 27.0 / 24A437**, Developer Mode enabled. The phone was USB-connected to
@@ -2691,6 +2692,88 @@ fields beyond this scoped AX request; no universal missing-attribute or view-com
 claim follows. Query workload and caching differ. After stopping and uninstalling the
 temporary reference, fresh AX-only USB reads still return Settings main 13/13 without
 an active Runner. See the [comparison and limits](verification.md#2026-10-12--first-axxctest-same-page-comparison-on-12-mini).
+
+### Settings structure and richer attributes (2026-10-12)
+
+**Retained physical snapshot analysis:** Settings main XCTest has 176 entries:
+Application 1, Window 2, Other 104, NavigationBar 1, CollectionView 1, Cell 11,
+Toolbar 2, StaticText 20, Image 19, Button 12, Switch 2 and SearchField 1.
+Matching the 13-node AX graph leaves **121 structural entries, 19 StaticText,
+19 Image, 3 Button and 1 Switch**, a total of 163. Two residual Buttons are rows
+marked `isAccessible=1` / `isVisible=0`; the other is an additional Dictate entry
+with its twin's identifier and native frame. Thus 12/12 geometric correspondences
+do not establish 12 unique XCTest object identities. WDA flags are string `"0"`/`"1"`;
+normalized final-source counts are visible 113/63 and accessible 13/163. Nine of
+eleven Cells are visible. These differences do not demonstrate 163 missing actions.
+
+**Matched host metadata and physical reads, same seed:** a host-local
+`AXPMacPlatformElement._attributeTypeForMacAttribute:` invocation supplies the names
+below. Physical `attributeFromRequest:` at **0x24FE0E8A0** bounds IDs at 130 and
+indexes the 64-bit table at **0x24FE22D20**. Zero table entries can use special
+processing, as Label/Children/Enabled/Role do. Fresh 12 mini Settings reads prove:
+
+| ID | Host name | Physical result on this page |
+| --- | --- | --- |
+| 9 | AXChildrenInNavigationOrder | Root has the same 12 identities/order as Children 8; leaf lists are empty. |
+| 27 | AXEnabled | Integer 0/1; the disabled cellular row is 0. |
+| 28 | AXFocused | Bool; false in this capture. |
+| 30 | AXSelected | Integer 0/1; 0 in this capture. |
+| 32 | AXVisible | Bool; true for the 13 returned nodes. |
+| 33 | AXDescription | Available strings; absent values stay absent. |
+| 41 | AXParent | Requested but absent for all 13 nodes. |
+| 42 | AXPlaceholderValue | Search field returns `Search`. |
+| 45 | AXRole | Integer: root 1, matching buttons 2, switch 3, heading 6, search field 15. AX codes are not XCTest type enums. |
+| 46 | AXRoleDescription | Requested but absent on this page. |
+| 51 | AXSubrole | Integer: search field 1, switch 3, other tested nodes 0. |
+| 77 | AXTraits | 64-bit integer, exported as a decimal string. |
+
+Label 3, Frame 21, Identifier 25 and Value 53 remain available when returned. With
+the richer batch, the tested Search field supplies placeholder/value but no Label 3;
+do not silently copy the placeholder into label. Traversal still gives **13 nodes /
+depth 1 / 13 frames**, with unchanged observed root/children before and after. The
+client has not discarded a deeper returned hierarchy. This does not establish all
+UIKit views or rule out other requests/targets yielding more structure.
+
+**Bounded snapshot discriminator:** AXP attribute **52** maps to native **95006**,
+the parameterized snapshot attribute used by XCTest. Request type **2** dispatches
+to `processAttributeRequest:` (**0x24FE15344**), which extracts the original
+`parameter` CFString at **0x275E88460**. Its direct handler (**0x24FE0FEBC**) calls
+`objectWithAXAttribute:parameter:` when a parameter is supplied. On a valid Settings
+application token, nil parameters, `parameter={}`, and a source-informed bounded
+dictionary (`maxChildren=512`, `maxArrayCount=512`, `maxDepth=32`,
+`traverseFromParentsToChildren=true`, `snapshotKeyHonorModalViews=false`) each return
+**nil/error 0**, not a deep snapshot. These option names come from retained WDA
+`XCAXClient_iOS+FBSnapshotReqParams.m`'s documented defaults and real
+`FBXCAXClientProxy.snapshotForElement…` forwarding. This is not a captured native
+XCTest options dictionary or proof of sufficient parameters at the AXP boundary;
+The cause remains open.
+Two child-token controls (heading and first row) with those bounded option keys also
+return nil/error 0, so the observed nil is not confined to the application root.
+The minimum native options/admission semantics remain unproven. Apple's shipped
+99-entry full attribute array succeeds on the root, but a later child read times out.
+The product queries only the scoped fields.
+
+**Confirmed wire/selection fixes:** objectID is a boxed UID reference to a number;
+PID and Bool flags are inline scalars. Encoding objectID inline produced a degenerate
+root (Role 5, CGRectNull, absent Children); the boxed encoding restores 13/13.
+CGRectNull `{{inf, inf}, {0, 0}}` means unavailable geometry, not a zero rectangle.
+Children must explicitly return an array; absence is not a confirmed leaf. A semantic
+timeout aborts the connection, retaining the single-outstanding-request constraint.
+
+`ipb ui` uses optional pinned host pymobiledevice3 11.10.2, an existing-paired USB
+CoreDeviceProxy userspace RSD and this raw DTX exchange. That owned RSD's current
+`getdisplayinfo` supplies primary effective `bounds` / `pointScale`: 12 mini's
+1125×2436 / 3 agrees with AX's 375×812 logical root, while physical nativeSize is
+1080×2340. Portrait hit tests use effective bounds; `--pid` bypasses selection.
+The status-bar corner can return error 8 and a background system-app frame can be
+CGRectNull; neither is a reliable size oracle. Root/PID/display stability checks
+remain non-atomic. Child edges and absent properties are preserved, not synthesized.
+
+The final AX helper also returns 13/13 on macOS 27.2 / 26B5091g over SSH-forwarded
+USB to the same phone. That host still has Xcode 26.4 and its native CoreDevice
+inventory lacks this local 12 mini; this validates the AX host runtime, not the
+full supported Xcode 27 CLI/HID/media matrix. See the
+[integration record](verification.md#2026-10-12--settings-node-delta-richer-ax-fields-and-ipb-ui-integration).
 
 ### Shipped caller and device receiver
 

@@ -5,6 +5,8 @@ build/
 *.log
 *.png
 work/
+__pycache__/
+*.pyc
 
 # Experiment build outputs
 Experiments/**/build/
