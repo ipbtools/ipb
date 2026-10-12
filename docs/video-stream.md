@@ -235,14 +235,15 @@ axis) before it is accepted:
 
 | order | source | what it is |
 | --- | --- | --- |
+| 0 | `live-primary-display` | explicit primary display nativeSize from bounded `devicectl device info displays` JSON; orientation and scale are separate fields |
 | 1 | `builtin-table` | 44 productType entries (iPhone 6s .. 17 Pro Max / Air / 17e) compiled into `Sources/mirror.m` |
 | 2 | `xcode-lookup` | at runtime: `device_traits.db` maps productType to a product description, then that description's CoreSimulator profile gives `capabilities/displays[0]` |
 | 3 | `detected` | union of the non-black extent over the first frames, with a sanity floor |
 | 4 | `full-frame` | give up and use the whole frame |
 
 `bin/ipb` passes `hardwareProperties.productType` from the devicectl JSON it already fetches, so the
-helper never shells out. The chosen source is printed at startup, e.g.
-`content: frame=1184x2576 rect=(0,0 1170x2532) source=builtin-table productType=iPhone14,2`.
+product-type fallback needs no extra lookup process. The helper also runs one bounded display query at startup and at most one background query per second. The chosen source is printed at startup, e.g.
+`content: frame=1184x2576 rect=(0,0 1170x2532) source=live-primary-display productType=iPhone14,2`.
 
 Both tables come from Xcode, so a device newer than the built-in table still resolves correctly as
 long as the host's Xcode knows it. **`DeviceTraits.ArtworkDeviceSubtype` is not a pixel height** —
@@ -252,6 +253,29 @@ trustworthy. Landscape is handled by transposing the candidate before the range 
 The content rect drives all three consumers: the display layer is scaled and offset so the content
 fills the view and the padding is clipped, touch coordinates normalise over the content, and
 `Cmd-Shift-S` saves the cropped image (1170x2532, edge pixels are image data, not padding).
+
+### Live orientation geometry (2026-09-22)
+
+`display_geometry.h` separates primary native size, device direction and display content direction.
+The native crop is clipped before rotating its layer. Device quarter turns rotate the preview;
+ordinary touches apply the inverse transform, while AbsolutePointer remains in presentation space.
+An orientation update ends any old gesture, drains the input group, then publishes new geometry.
+Cmd-Left/Right submits an absolute device orientation after that drain. Unsent relative requests
+are coalesced while a query is busy; an uncertain sent operation is never retried.
+
+The display query uses a serial queue, Apple timeout 5 s and host deadline 6 s; close kills the
+active child. The existing notification-observer tunnel keepalive is unchanged. This is polling,
+not frame-synchronous metadata: an external rotation may be observed one refresh later. The
+`devicectl --stream` probe emitted human updates but no structured JSON snapshots before timeout,
+so parsing that console stream was rejected. Unsupported/malformed primary geometry fails
+explicitly instead of silently assuming portrait. Native axes other than `rot0` are unverified.
+
+Bottom-edge membership is evaluated in content coordinates at Down and frozen for the gesture.
+Portrait content retains its verified Indigo path. Rotated content uses captured 58 B UHID
+native-space touch reports with locked + directional flags through UP; see `protocol.md`.
+300 ms landscape edge gestures returned Home on the device; approximately 6 ms CUA synthetic
+sequences did not. The sender preserves real event timing and does not invent intermediate events.
+Saved screenshots remain native cropped pixels, independent of the host's preview rotation.
 
 ## Acceptance
 

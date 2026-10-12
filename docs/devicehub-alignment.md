@@ -2,131 +2,83 @@
 
 ## Scope and decisions
 
-User request (2026-09-21): “开始修复剩余的问题，并且你实机操控下 devicehub，分析下我们还有什么功能和协议没有对齐”.
-Start revision `f2e85a6`; branch `codex/devicehub-alignment`.
-Follow-up research request: “再深入研究下 devicehub，看看我们还有什么可以从中学习补齐的”.
-The deeper comparison below records observations and proposed work; it adds no product implementation.
+Branch `codex/devicehub-alignment`; current implementation starts from `cc43495`.
+On 2026-09-22 the user selected live display/capability metadata, literal text input and mirror
+orientation: “135都得解决，你继续研究下devicehub的实现，和我们现在做下对比，没问题就修复了”.
+Keep the native oracle, accepted resident devicectl notification-observer keepalive, bounded
+sender ownership and no uncertain input replay. No XCTest or third-party phone server.
 
-Keep the native protocol oracle and the accepted resident devicectl tunnel keepalive. No uncertain
-input replay, no XCTest and no third-party phone server. UI-tree discovery, Unicode text input,
-frame metadata and a Python CLI/MCP session layer are subsequent work, not implemented by this patch.
+## Current implementation
 
-## Implemented corrections
-
-| Problem and reachable trigger | Change | Evidence boundary |
+| Selected function | Implementation | Verification boundary |
 | --- | --- | --- |
-| Static Settings screen ends stream/mirror early with exit 7 | Keep the initial-frame deadline; after a valid image tolerate idle silence until the finite requested duration. Handle explicit media stop/RemoteXPC error as failure. Preserve bounded writer drain and stage watchdogs. | Isolated prechange stream and mirror failed; revised sessions survived 22 seconds of inactivity and resumed after Home. Silent loss without an error callback is still ambiguous. |
-| A slow synchronous HID call outlives its caller deadline; a later call overlaps it | One owner per connection through actual completion. Admission and completion share one deadline; shutdown drains queued UP before closing admission, then drains active owners before cancel/FD close. | Controlled host fixture reproduced max concurrency 2 before, 1 after. No forced device disconnect was used. Report timeouts intentionally remain fatal; release cannot be guaranteed after a transport failure. |
-| Smoke can accept stale frames or clock-only changes | Explicit unlock proof, material decoded-pixel checks, stated no-op allowances, controlled Settings list/search fixtures. Track this mirror's PID; unknown startup errors fail. Install assertion helpers with the gate. | First live run's rc=0 was rejected by screenshot review. Clock-only changes were 0.0343% / 0.0487%; gate now requires >=1% pixels with an RGB-channel difference >=16. This remains a freshness check, not a semantic oracle. |
-| Tracer can signal readiness without all taps, emit zsh arithmetic errors, or double-detach | Require resolved breakpoints and successful Continue; single detach and truthful status. Capture service ID bytes and decode digitizer fields. | Live revised capture: ten taps ready, 21 calls, no shed taps, clean rc=0 detach, target alive. Missing-symbol host fixture: exit 4, no readiness file, target safely detached. |
-| Current docs conflict with implementation/records | Refresh protocol gaps, 39 B keyboard/count fix status, current matrix, resident keepalive, media contract and system-dialog evidence. Label pointer probes and mirror shortcut-only keyboard support in help/completion. | Old dated verification records remain intact. No raw logs/screenshots are committed. |
+| Display/capability snapshot | `displays --json` and `capabilities --json` expose schemaVersion 1 + deviceIdentifier and Apple's live values. Capabilities are advertised operations, not guessed support. Mirror selects the unique primary nativeSize before table/Xcode/detection fallback. | Real primary LCD 1170x2532 / scale 3 vs padded 1184x2576; Wireless entry is not selected. Host fixtures cover missing/duplicate primary, invalid values and query errors. |
+| Literal text | `text <text>` resolves keyboard, copies exact UTF-8 once, then sends `{Cmd}`, `{Cmd,V}`, `{V}`, `{}` on the existing keyboard service. Copy failure prevents paste; uncertain paste is not replayed. | Exact `ipb-中文🙂 A1!` appeared in Settings with Pinyin active. Clipboard policy can present Allow Paste; rc0 is submission, not semantic insertion. Clipboard is replaced. No implicit permission approval or clipboard synchronization in the command. |
+| Orientation | Native crop, device direction, content direction and presentation coordinates are separate. Cmd-Left/Right changes actual device orientation; ordinary touch maps back to native axes, pointer uses presentation coordinates. A geometry change releases/drains old input before publishing. | Final native mirror opened/returned from General at all four device orientations. Rotated content was separately exercised in Calculator. No claim of calibrated physical trackpad behavior. |
 
-## Device Hub comparison
+`device_control.h` runs one background metadata query at most per second, never overlapping.
+Apple timeout is 5 s with a 6 s host kill bound. Read queries do not wait on HID; explicit rotation
+waits at most 2 s for old input releases. Close cancels the current query and prevents new launches.
+Unsent rotation requests are coalesced while the query is busy. Query/schema failures end the session
+explicitly. Polling is not frame-synchronous: external orientation may lag by a refresh interval.
+`devicectl displays --stream` did not yield structured JSON updates, so its human console output is
+not parsed. Saved screenshots stay cropped native pixels, independent of host preview rotation.
 
-Measured seed: local macOS **26.5.1 (25F80)**, Xcode **27 Beta 6**, Device Hub **27.0 (255.2.3.5)**,
-CoreDevice **642.15**, wired **iPhone 13 Pro / iOS 27.0 (24A437)**, explicitly unlocked.
-The initial capture had a zero-input baseline, 14 digitizer reports and four button calls.
-Protocol bytes and source classification are in `docs/protocol.md`.
+## Confirmed problems found while aligning
 
-| Function | Actual Device Hub observation | ipb status / remaining gap |
-| --- | --- | --- |
-| Tap and drag | Settings opened and scrolled; 58 B Digitizer on `0x101` | Same target/size/count. Device Hub max=5, contact identifier/identity=2, nonzero timestamp; ipb max=1, identifier=0, identity/timestamp unset. No proven causal defect from these differences. |
-| System confirmation | “Remove App” -> Cancel dismissed the alert | Current ipb also dismissed the same alert. Original TCC/privacy prompt remains untested; blanket failure claim withdrawn. |
-| Keyboard capture | `ipb` visibly entered Settings search; six 39 B reports on `0x200`. Later Shift/Command chords were captured and Command+A/Backspace cleared the field. | CLI single keys work; mirror lacks ordinary capture and a held-usage set. Arbitrary focused text insertion is a separate contract; UTF-8 clipboard copy/get already exists. |
-| Pointer / wheel | AbsolutePointer 19 B and Scroll 21 B target `0x501` | Target confirmed. Synthetic wheel only emitted zero-motion may-begin; no calibration of physical trackpad movement, acceleration or momentum. |
-| Home / App Switcher | Native Home and existing button captures use typed Indigo calls | ipb functions are implemented; direct App Switcher usage differs from Device Hub's Home double press, so compare behavior rather than demand byte identity. |
-| Rotate | Later measured Rotate Left changes device orientation to landscapeLeft while Settings display stays rot0; rotated preview clicks still work. No HID send for the rotation itself. | Mirror needs device/display/presentation orientation separation and service-specific input transforms. The earlier presentation-only inference is superseded. |
-| Siri | Typed button code `0xcf`, states 0/1, ~0.509 s interval; no visible UI | Not implemented; full typed page decoding and a working-device comparison still needed. No settings were enabled to force success. |
-| Recording / Action Button | Both disabled in Controls on this 13 Pro | Not validated capability gaps. Camera Control requires other hardware; `screenrecord` still has its recorded devicectl limitation. |
-| Remote unlock | Not tested in this run | Static keypair/entitlement evidence remains a candidate mechanism; no new permanent-impossibility claim. |
+- The first rotated-content edge implementation incorrectly sent native coordinates through
+  portrait Indigo edge handling. Device Hub's actual landscape Calculator capture instead uses
+  58 B UHID touch on 0x101, locked + left; portrait capture uses locked + up. Static setters confirm
+  all seven flag offsets. Rotated-content edges now use those native-space direction flags, frozen
+  at Down through UP. Portrait content keeps the existing verified Indigo path.
+- The HIDReport-returning ordinary-touch builder still used count 0 on UP, unlike the previously
+  fixed Data-returning builder. They now share one byte builder with count 1 on release. Ordinary
+  identity/max/timestamp conventions remain unchanged; the edge report follows its captured shape.
+- A first rotation shortcut was dropped while metadata refreshed. Unsent relative intent is now
+  queued and applied after the snapshot; no uncertain sent request is retried.
+- A fixture with JSON `info: []` raised an Objective-C exception. The response shape is checked before
+  subscripting; successful, failed, malformed, timed-out and cancelled queries have host regression tests.
+- The initial new smoke text step accepted a paste-permission modal as a pixel change. It now uses
+  Vision OCR within the focused Settings search field, excludes the clipboard suggestion row,
+  and stops before clear/close when expected text is absent. Exact punctuation/emoji still require
+  screenshot inspection. The CLI deliberately does not claim to inspect the focused application.
 
-## Verification and remaining acceptance
+## Measured seed and acceptance
 
-Local build uses `make XCODE_PATH=/Applications/Xcode-27.0.0-Beta.6.app`; installation is staged
-under a local evidence directory, never into the user's global prefix. Host fixtures are
-`scripts/test_bounded_sender.sh` and `scripts/test_smoke_matrix.sh`.
+macOS 26.5.1 (25F80), Xcode 27 Beta 6, DeviceHub 27.0 (255.2.3.5), DeviceKit 255.2.3,
+CoreDevice 642.15, UniversalHID 90.1, DDI 27A5252f, wired iPhone 13 Pro / iOS 27.0 (24A437).
+Raw captures and success-only artifacts remain outside Git under the local state directory;
+`docs/verification.md` records the condensed run and limits.
 
-The smoke fixture requires an unlocked iOS 27 phone and a GUI login session. It opens Settings,
-scrolls the list, types and clears `a` in Settings search, and returns Home. `TAP_XY`/`LONG_XY`
-select safe home-screen icons; `KEY_XY`/`KEY_CLOSE_XY` accommodate the target search layout.
-Screenshots must show the expected transitions, not merely exceed the pixel threshold.
-The final installed-layout run passed on the local macOS 26.5.1 host, and its key screenshots
-confirmed Settings launch, App Switcher, list down/back up, context menu, search input/clear and
-final Home. The sender and smoke host fixtures also passed. These results validate this local
-configuration; they do not close the supported release-matrix gate below.
+Build: `make XCODE_PATH=/Applications/Xcode-27.0.0-Beta.6.app`, followed by staged `make install`.
+Host checks cover report bytes/held keys, all four transforms, metadata/clipboard failure contracts,
+child timeouts/cancellation, sender ownership and smoke assertion failures. Device checks use the
+installed layout and inspect actual screenshots, not return codes alone.
+The final installed-layout interactive smoke passed, with all 20 screenshots inspected. Its text
+step required the operator to allow one synthetic paste; the gate itself never answers the prompt.
+Two unanswered-prompt runs correctly failed, and an earlier pixel-only false pass was rejected.
 
-The macOS 27 host (26A5425a, CoreDevice 642.15) built the helpers and passed the bounded sender
-fixture in an isolated directory. Its selected Xcode is **26.4**, and its paired iOS 27 device is
-**unavailable**. This is host build evidence only. The declared macOS 27 + Xcode 27 + iOS 27 release
-gate remains pending; historical passes do not validate this patch.
+A 300 ms edge sequence using the same wire builder returned Home from Calculator
+at both landscape directions. Approximately 6 ms CUA synthetic drags with correct flags did not;
+no production delay or interpolation was added to hide that boundary. A physical mouse's timing
+and physical trackpad calibration remain distinct from synthetic input tests.
 
-After the user manually unlocked the Mac, native mirror regression on revision `1ed76f7` passed:
-Settings tap, list drag down/back, Home/App Switcher shortcuts, bottom-edge Home, screenshot,
-fit/actual-size fallback, a correctly mapped tap after resize, and normal window close. All 23
-dispatched events completed with zero report/barrier codes; no abandoned/in-flight sends or child
-processes remained. The one synthetic precise scroll event lacked a phase and was explicitly
-rejected without moving the list. This closes the local mouse/button/digitizer regression, not
-physical trackpad parity. Volume and Lock/Wake were not rerun. See `docs/verification.md`.
+The supported macOS 27 + Xcode 27 + iOS 27 release gate is still pending. A current SSH attempt to the
+prior macOS 27 host closed at port 22; its older Xcode 26.4/unavailable-device observation is historical,
+not a current prerequisite check. This local macOS 26 run is supplementary validation only.
 
-## Next work
+## Remaining work
 
-1. Finish the supported-matrix gate when the host/device prerequisites are available.
-2. Prioritize live display/capability metadata, held-key/chord input, and orientation transforms
-   as detailed below. Preserve no-replay and sender ownership.
-3. Capture a reproducible original permission prompt and locked-device Device Hub A/B before
-   changing touch fields or asserting entitlement causality.
-4. Give agents frame identity/PTS/orientation and verify the actual AccessibilityAudit service.
-   Static framework strings alone do not prove a remotely readable UI tree.
-
-## Deeper Device Hub lessons (2026-09-21, revision c14eed6)
-
-The same local host/device seed was used. DeviceKit is build **255.2.3** at
-`/Applications/Xcode-27.0.0-Beta.6.app/Contents/SharedFrameworks/DeviceKit.framework/Versions/A/DeviceKit`.
-Two actual Device Hub captures resolved all ten taps, shed none and detached cleanly: 35 calls
-for keyboard experiments and three for the rotation/click experiment. Runtime details and raw
-report interpretation are in the new sections of `docs/protocol.md`; local artifacts are under
-`~/.local/state/ipb/20260921-deep/`. No product code was changed in this research pass.
-
-### Recommended additions, ordered by practical value
-
-| Addition | New evidence / existing code gap | Smallest useful implementation and acceptance | Effort / risk |
-| --- | --- | --- | --- |
-| **Live display and capability snapshot** | `devicectl device info displays` returns primary bounds 1170x2532, pointScale=3, display/native orientation, backlight and display ID. `info details` provides capability feature IDs. Mirror currently begins with the product-type table (`Sources/mirror.m`, `selectTableContentRect`). | Query at session startup; select `primary` explicitly, range-check against the decoded frame, and retain explicit fallbacks. Expose structured supported/unsupported/error states. Test an unknown model, padding, multiple display entries and unsupported operations. | S–M / medium: extra query failure must not silently become a guessed size or unsupported capability. |
-| **Held-key state and chords** | Shift+A and Command+A contain two simultaneous usage bits. Current `makeKeyboardReport` sets at most one bit; mirror only implements selected shortcuts. | Maintain a pressed-usage set and modifier transitions on the existing serial sender; expose chords for CLI and focused capture for mirror. Verify selection/deletion, overlapping keys, repeat policy, focus loss and healthy-session release. Preserve uncertain-send failure semantics. | M / medium: stuck modifiers or host shortcuts consumed by the wrong target. |
-| **Separate text insertion from key injection** | Injecting `aA1!` produced correct key usages but the phone input method yielded `啊A1!`. Synthetic `中文🙂` produced no HID report or text. Paste emitted only Command+V. Existing UTF-8 clipboard round-trip is already documented. | Define distinct `key/chord` and focused `text` behavior. First validate clipboard copy + paste as one end-to-end operation; report clipboard policy rejection and verify focused output. Do not promise arbitrary text from a loop of physical keys, or enable continuous clipboard sync as a hidden fallback. | M spike / medium: input method, focus and clipboard policy can alter or block output. |
-| **Three orientation states and per-service coordinates** | Rotate Left changed device orientation, while display orientation stayed rot0 and preview rotated. A rotated General click succeeded; Pointer and Digitizer coordinates differed by a quarter-turn relation. DeviceKit exposes `HIDEventGeometry` with window/view/unit transforms, ROI and orientationCorrection. | Bind geometry to selected display and current frame; implement forward presentation and inverse input transforms, with separate pointer/digitizer mappings where required. Verify 0/90/180/270 degrees, padding, corners and bottom-edge gestures. | M / medium-high: a single rotation applied to every service can silently mis-tap. |
-| **Observation metadata for agents** | `Sources/video_stream.m` already receives and orders actual CMSampleBuffer PTS but emits JPEGs without that metadata. Display inventory changes across the live-view session. | Add a versioned optional frame envelope/sidecar with sequence, stream epoch, PTS/timebase, host receive time, display ID, content rect and orientations; correlate submissions to later observations without calling a barrier an action-success acknowledgement. | M / medium: preserve existing stdout framing and distinguish static content from stale transport. |
-
-Effort is a coarse estimate including targeted validation: S is hours, M is roughly one to a few
-days; it is not a promise that unknown private protocol paths are already solved.
-
-### Boundaries learned from Device Hub
-
-- **Capabilities are per operation.** This phone advertises `startaudiooutput`, but lacks
-  `audiooutput` (device selection); `device info audio` returns error 1001. Screen Recording is
-  absent from the current capability list, consistent with the disabled menu and earlier failed
-  command. Feature presence still does not guarantee successful session setup.
-- **Display inventory is live.** A non-primary Wireless display appeared alongside LCD while
-  Device Hub viewed the screen and disappeared after quitting it. That is not evidence of a
-  permanently attached second physical screen; never select the first/largest entry blindly.
-- **Clipboard has its own policy and UI.** Device Hub exposes Use Shared Clipboard, Get Clipboard
-  and Send Clipboard separately from ordinary Paste. `devicectl ... pasteboard info` returned
-  26006 for `com.apple.is-remote-clipboard`; contents were not read or overwritten. This does not
-  prove why the earlier CUA paste timed out, nor that every clipboard state is unsupported.
-- **Do not infer multi-touch from method names.** On this binary, `magnifyWithEvent:` and
-  `rotateWithEvent:` enter the shared capture/menu handler. Separate SwiftUI gesture metadata and
-  UniversalHID types are leads, not proof of remote pinch/rotate emission.
-- **Scroll remains an explicit research item.** The inspected ScrollCaptureNSView entry forwards
-  AppKit deltas to its closure without a gain conversion; the full downstream remote report
-  mapping is not established by that entry. Current mirror already has phase/momentum mapping
-  and raw/accelerated fields. Do not replace it based on this partial static path.
-
-The next focused spike should be display/capability JSON plus chord state, followed by the focused
-text test. UI-tree transport, physical trackpad calibration, remote unlock, multi-touch, audio
-streaming and recording were not validated by this pass.
+1. Complete the supported release-matrix gate with an available host/device pair.
+2. Full mirror keyboard capture/chord API, frame identity/PTS correlation and UI-tree transport
+   remain separate work. The minimal paste chord does not claim general held-key capture.
+3. Physical trackpad calibration, original privacy-prompt A/B and locked-device protocol behavior
+   need their corresponding actual inputs/states. No permanent impossibility claim.
+4. Siri has a captured code but no verified effect; recording and newer hardware buttons remain
+   gated by capability/hardware evidence. Standalone CLI/MCP transport remains a separate spike.
 
 ## Rejected alternatives
 
-- Copy Device Hub timestamp/identity values without a demonstrated failing effect.
-- Treat timeout as cancellation, replay uncertain input, or force an unordered UP.
-- Grade a command by rc=0 or image hash alone; arbitrary animations can satisfy either.
+- Treat a capability listing, rc0, pixel change or an HID barrier as proof of UI action success.
+- Copy ordinary-touch identity/timestamp values without a demonstrated need; silently guess geometry.
+- Replay uncertain input, add synthetic gesture delays, or replace the accepted tunnel keepalive.

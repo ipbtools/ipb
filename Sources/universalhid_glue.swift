@@ -226,28 +226,7 @@ let dockSwipeFluidWitness = universalHIDSymbol("$s12UniversalHID15DockSwipeRepor
 let navigationSwipeFluidWitness = universalHIDSymbol("$s12UniversalHID21NavigationSwipeReportVAA017FluidTouchGestureE8ProtocolAAWP")
 
 func makeDigitizerReportData(x: Double, y: Double, touching: Bool, inRange: Bool) -> Data {
-    let digitizerReportID: UInt8 = 0x09
-
-    let hidReport = uhidHIDReportInit(digitizerReportBitCount, digitizerReportID)
-    var report = uhidDigitizerReportInitUnderscore(hidReport)
-    var contact = uhidDigitizerContactInit()
-
-    uhidDigitizerContactSetIndexABI(&contact, 0)
-    uhidDigitizerContactSetTouchABI(&contact, touching ? 1 : 0)
-    uhidDigitizerContactSetRangeABI(&contact, inRange ? 1 : 0)
-    uhidDigitizerContactSetRestingABI(&contact, 0)
-    uhidDigitizerContactSetXABI(&contact, x)
-    uhidDigitizerContactSetYABI(&contact, y)
-
-    uhidDigitizerReportSetContactABI(&report, &contact, 0)
-    // Contact Count is "how many contacts this report describes", not "how many are still down"
-    // (HID spec, and the report descriptor: bits 8-16, logical max 5). A lift still describes
-    // contact 0, with Touch cleared, so it must be 1. Sending 0 meant a decoder iterating
-    // 0..<contactCount never saw contact 0 lift: the finger was announced down and never up.
-    uhidDigitizerReportSetContactCountABI(&report, 1)
-    uhidDigitizerReportSetContactCountMaximumABI(&report, 1)
-
-    return uhidHIDReportData(uhidDigitizerReportGetReport(report))
+    Data(makeDigitizerWireBytes(x: x, y: y, touching: touching, inRange: inRange))
 }
 
 func clampUnit(_ value: Double) -> Double {
@@ -438,8 +417,8 @@ func makeDockSwipeReportData(
     return uhidHIDReportData(uhidDockSwipeReportGetReport(report))
 }
 
-func makeKeyboardHIDReport(usage: UInt32, pressed: Bool) -> UHIDHIDReport? {
-    guard usage <= 0xe7 else {
+func makeKeyboardHIDReport(usages: [UInt32]) -> UHIDHIDReport? {
+    guard usages.allSatisfy({ $0 <= 0xe7 }) else {
         return nil
     }
 
@@ -462,7 +441,7 @@ func makeKeyboardHIDReport(usage: UInt32, pressed: Bool) -> UHIDHIDReport? {
     // silently done nothing. The keyboard usage offset is unaffected: the
     // descriptor puts usages at bit usage+8, which is what is written below.
     var report = uhidHIDReportInit(0x138, 0x01)
-    if usage > 0 && pressed {
+    for usage in usages where usage > 0 {
         uhidHIDReportSetBitABI(&report, Int(usage) + 8, 1)
     }
     return report
@@ -550,27 +529,42 @@ public func uhidMakeDigitizerHIDReport(
     _ inRange: Int32,
     _ output: UnsafeMutableRawPointer?
 ) -> Int32 {
-    let hidReport = uhidHIDReportInit(digitizerReportBitCount, 0x09)
-    var report = uhidDigitizerReportInitUnderscore(hidReport)
-    var contact = uhidDigitizerContactInit()
+    return uhidMakeEdgeTouchHIDReport(x, y, touching, inRange, -1, output)
+}
 
-    uhidDigitizerContactSetIndexABI(&contact, 0)
-    uhidDigitizerContactSetTouchABI(&contact, touching != 0 ? 1 : 0)
-    uhidDigitizerContactSetRangeABI(&contact, inRange != 0 ? 1 : 0)
-    uhidDigitizerContactSetRestingABI(&contact, 0)
-    uhidDigitizerContactSetXABI(&contact, x)
-    uhidDigitizerContactSetYABI(&contact, y)
-
-    uhidDigitizerReportSetContactABI(&report, &contact, 0)
-    uhidDigitizerReportSetContactCountABI(&report, touching != 0 ? 1 : 0)
-    uhidDigitizerReportSetContactCountMaximumABI(&report, 1)
-
-    var finalReport = uhidDigitizerReportGetReport(report)
-    retainedHIDReports.append(finalReport)
-    if let output {
-        withUnsafeBytes(of: &finalReport) { bytes in
-            output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
+// Report shape and edge flags captured from Device Hub on 2026-09-22.
+// edgeQuarter is the primary display's rot0/90/180/270, frozen at touch-down;
+// -1 denotes ordinary touch. A lift describes one contact with Touch/Range off.
+func makeDigitizerWireBytes(x: Double, y: Double, touching: Bool, inRange: Bool,
+                            edgeQuarter: Int = -1) -> [UInt8] {
+    var bytes = [UInt8](repeating: 0, count: digitizerReportBitCount / 8)
+    bytes[0] = 9; bytes[1] = 1; bytes[2] = 1
+    bytes[3] = (touching ? 0x40 : 0) | (inRange ? 0x80 : 0)
+    putLE(scaledUInt16(x), &bytes, 4); putLE(scaledUInt16(y), &bytes, 6)
+    if (0..<4).contains(edgeQuarter) {
+        // Preserve ordinary touch's established identity/time convention.
+        // The edge report follows the complete captured Device Hub shape.
+        bytes[2] = 5; bytes[3] |= 2; bytes[40] = 2
+        putLE(reportTimestamp(), &bytes, 45)
+        // locked, then up/left/down/right in native axes. Keep them on UP,
+        // exactly as the captured complete gestures do; pending stays clear.
+        for bit in [429, [434, 444, 439, 449][edgeQuarter]] {
+            bytes[bit / 8] |= 1 << (bit % 8)
         }
+    }
+    return bytes
+}
+
+@_cdecl("uhid_make_edge_touch_hid_report")
+public func uhidMakeEdgeTouchHIDReport(_ x: Double, _ y: Double, _ touching: Int32,
+    _ inRange: Int32, _ edgeQuarter: Int32, _ output: UnsafeMutableRawPointer?) -> Int32 {
+    guard (-1...3).contains(edgeQuarter) else { return -1 }
+    let bytes = makeDigitizerWireBytes(x: x, y: y, touching: touching != 0,
+        inRange: inRange != 0, edgeQuarter: Int(edgeQuarter))
+    var report = reportFromBytes(bytes, bitCount: digitizerReportBitCount, reportID: 9)
+    retainedHIDReports.append(report)
+    if let output {
+        withUnsafeBytes(of: &report) { output.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
     }
     return Int32(MemoryLayout<UHIDHIDReport>.size)
 }
@@ -689,7 +683,8 @@ public func uhidMakeKeyboardHIDReport(
     _ pressed: Int32,
     _ output: UnsafeMutableRawPointer?
 ) -> Int32 {
-    guard var report = makeKeyboardHIDReport(usage: usage, pressed: pressed != 0) else {
+    guard usage <= 0xe7 else { return -1 }
+    guard var report = makeKeyboardHIDReport(usages: pressed != 0 ? [usage] : []) else {
         return -1
     }
     retainedHIDReports.append(report)
@@ -697,6 +692,20 @@ public func uhidMakeKeyboardHIDReport(
         withUnsafeBytes(of: &report) { bytes in
             output.copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
         }
+    }
+    return Int32(MemoryLayout<UHIDHIDReport>.size)
+}
+
+// A report is the complete held-usage set. Captured Device Hub paste sequence:
+// {Command}, {Command,V}, {V}, {} (docs/protocol.md, 2026-09-21).
+@_cdecl("uhid_make_keyboard_pair_hid_report")
+public func uhidMakeKeyboardPairHIDReport(
+    _ first: UInt32, _ second: UInt32, _ output: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard var report = makeKeyboardHIDReport(usages: [first, second]) else { return -1 }
+    retainedHIDReports.append(report)
+    if let output {
+        withUnsafeBytes(of: &report) { output.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
     }
     return Int32(MemoryLayout<UHIDHIDReport>.size)
 }

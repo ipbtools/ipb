@@ -124,6 +124,7 @@ extern int uhid_make_digitizer_swipe_hid_report(double x, double y, int touching
 extern int uhid_make_navigation_swipe_hid_report(uint32_t phase, uint32_t swipe_mask, uint32_t gesture_motion, uint32_t flavor, double progress, double x, double y, void *output) __attribute__((weak_import));
 extern int uhid_make_dock_swipe_hid_report(uint32_t phase, uint32_t swipe_mask, uint32_t gesture_motion, uint32_t flavor, double progress, double x, double y, void *output) __attribute__((weak_import));
 extern int uhid_make_keyboard_hid_report(uint32_t usage, int pressed, void *output) __attribute__((weak_import));
+extern int uhid_make_keyboard_pair_hid_report(uint32_t first, uint32_t second, void *output) __attribute__((weak_import));
 extern int uhid_make_pointer_hid_report(int64_t x, int64_t y, uint32_t button_mask, double accel_x, double accel_y, uint32_t flags, void *output) __attribute__((weak_import));
 extern int uhid_make_absolute_pointer_hid_report(double x, double y, uint32_t buttons, void *output) __attribute__((weak_import));
 extern int uhid_make_scroll_wire_hid_report(int32_t x, int32_t y, uint32_t flags, uint32_t momentum, double accel_x, double accel_y, void *output) __attribute__((weak_import));
@@ -857,6 +858,27 @@ static void send_coredevice_keyboard_key(xpc_remote_connection_t remote, uint64_
     send_coredevice_hid_barrier(remote, 100000);
 }
 
+static void send_coredevice_paste(xpc_remote_connection_t remote, uint64_t service_id) {
+    // Device Hub's captured held sets, not sequential independent key clicks.
+    const uint32_t states[][2]={{0xe3,0},{0xe3,0x19},{0x19,0},{0,0}};
+    if (!uhid_make_keyboard_pair_hid_report || !coredevice_send_universalhid_hid_report) {
+        fprintf(stderr,"CoreDevice keyboard pair builder is not linked\n"); exit(2);
+    }
+    for (unsigned i=0;i<4;i++) {
+        uint64_t words[2]={0,0};
+        if (uhid_make_keyboard_pair_hid_report(states[i][0],states[i][1],words)!=(int)sizeof words) {
+            fprintf(stderr,"Unable to build paste keyboard report\n"); g_failures++; return;
+        }
+        int result=coredevice_send_universalhid_hid_report(remote,words,service_id);
+        if (result || g_remote_error) {
+            fprintf(stderr,"Paste keyboard report %u failed: %d; not replayed, release not guaranteed\n",i,result);
+            g_failures++; return;
+        }
+        usleep(20000);
+    }
+    send_coredevice_hid_barrier(remote,100000);
+}
+
 static void send_coredevice_hid_reset_gesture(xpc_remote_connection_t remote, uint64_t service_id, useconds_t delay_after) {
     if (!coredevice_reset_universalhid_gesture) {
         fprintf(stderr, "CoreDevice UniversalHID reset sender is not linked\n");
@@ -1493,6 +1515,9 @@ int main(int argc, const char *argv[]) {
                         double accel_y = argc > 13 ? strtod(argv[13], NULL) : 0.0;
                         send_coredevice_scroll_report(remote, service_id, x, y, phase, momentum, flags, accel_x, accel_y, 120000);
                         send_coredevice_hid_barrier(remote, 100000);
+                    } else if (strcmp(kind, "cd_paste") == 0) {
+                        if (argc != 7) { fprintf(stderr,"cd_paste requires a keyboard service id\n"); exit(2); }
+                        send_coredevice_paste(remote,strtoull(argv[6],NULL,0));
                     } else if (strcmp(kind, "cd_key_report") == 0) {
                         uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x200;
                         uint32_t usage = argc > 7 ? (uint32_t)strtoul(argv[7], NULL, 0) : 0;
