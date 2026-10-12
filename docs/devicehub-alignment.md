@@ -91,17 +91,25 @@ and lockState queries time out; `displays --json` fails RSD device allocation wi
 0xE8000003. Cause remains open. Mac UI control reports a locked Mac. No source fix,
 secure-page keyboard acceptance or supported-host gate is claimed by this control.
 
-**Current comparison attempt (2026-10-12):** the user resumes 13 Pro testing, then reports
-its 15-minute password retry restriction and selects 12 mini. Current USB/DVT inventory
-finds no competing Runner on 12 mini. The shared installed reference does not satisfy
-standard TestConfig's PlugIns/.xctest path and fails bootstrap 104. A separately identified
-standard WDA reference, signed using the existing profile, resolves that stage without
-replacing the shared app. It then times out enabling UI Automation after 60 seconds.
-No WDA source or comparative query timing is obtained. Native 12 mini info/display queries
-also time out and Device Hub stays at Connecting display. Confirm the human password
-input path before another authentication attempt; preserve startup/query separation and
-same-page stability checks in the prepared three-round benchmark. The reference is a
-temporary investigation tool, not a product phone-server dependency.
+**Current comparison result (2026-10-12):** after the user's 12 mini password entry,
+real WDA/XCTest source collection succeeds on the same USB RSD as the raw AX client.
+Calculator is AX 24 nodes/depth 1 versus XCTest 45/depth 16; Settings main is 13/1
+versus 176/21. All 23 and 12 nonroot elements have identical native rectangles over
+three stable interleaved samples. WDA's ordinary rect is integer-rounded; nativeFrame
+is the correct geometry comparator. A suggestion-page AX node combines text that
+XCTest splits across a Cell and descendants. The trees have different structure and
+field scopes, so node totals do not directly count missing actions/views.
+
+Query medians are 343/869 ms for Calculator and 186/2710 ms for Settings main;
+startup is separate, samples are serial and workload differs. After the temporary
+independent reference is stopped/uninstalled, fresh AX alone still returns the 13/13
+main-list graph with no active Runner. The shared app is preserved. The measurement
+client's EOF wait on HTTP keep-alive caused an intermediate false not-ready result;
+Content-Length/chunked framing resolves it. Preliminary LA -1004 did
+not mean final authorization failed. No product code is changed by this benchmark.
+13 Pro's comparison remains pending its successful unlock after the reported retry
+restriction. Supported-host validation, arbitrary-app coverage, richer attributes and
+snapshot-generation semantics remain required before CLI/MCP integration.
 
 Automatic bulk/frontmost selection can return unrelated PDUIApp. A native system hit-test
 request instead selects the displayed application's PID on the tested pages; the pure-Python

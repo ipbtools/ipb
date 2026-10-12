@@ -2666,6 +2666,32 @@ USB transport, not password acceptance, attribution of its authentication reques
 all underlying views or macOS 27 validation. See the
 [12 mini record](verification.md#2026-10-11--12-mini-usb-ax-authorization-tree-and-test-ownership).
 
+### Same-page XCTest geometry and graph control (2026-10-12)
+
+**Runtime source:** same supplementary host seed, local USB iPhone13,1 / iOS 27.0 /
+24A437, raw AX host API 7 / device API 26 and an independently identified WDA 16.14.2
+reference built with Xcode 27 B6. Three AX-before / WDA-JSON / AX-after rounds on each
+page have matching app roots and unchanged observed AX semantic signatures.
+Calculator gives AX 24 nodes/depth 1 versus XCTest 45/depth 16; Settings main is
+13/1 versus 176/21. All 23 and 12 nonroot AX elements correspond to snapshot elements,
+and attribute 21's x/y/width/height equals their **nativeFrame** exactly in every round.
+This validates the tested portrait logical-point geometry, not arbitrary transforms.
+
+WDA's regular rect/frame is integral-rounded: the retained reference's
+`XCUIElement+FBWebDriverAttributes.m` uses CGRectIntegral in wdFrame and returns the
+original snapshot frame in wdNativeFrame; `FBXPath.m` serializes that native rectangle.
+For Calculator 7, AX/native y=407.6667 and h=79.6667 become WDA rect y=407 and h=81.
+The apparent rectangle discrepancy is a representation difference on these elements.
+On the Settings suggestion page, AX combines a title/body into one node while XCTest
+returns an unlabeled Cell with the identical native frame and separate text descendants.
+Exact-label matching alone therefore understates shared semantic coverage.
+
+The graphs are structurally different. The reference supplies type/state/traits/action
+fields beyond this scoped AX request; no universal missing-attribute or view-completeness
+claim follows. Query workload and caching differ. After stopping and uninstalling the
+temporary reference, fresh AX-only USB reads still return Settings main 13/13 without
+an active Runner. See the [comparison and limits](verification.md#2026-10-12--first-axxctest-same-page-comparison-on-12-mini).
+
 ### Shipped caller and device receiver
 
 | Source | Identity | Decisive calls |
