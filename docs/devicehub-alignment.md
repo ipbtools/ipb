@@ -358,6 +358,60 @@ and geometry together. AXAudit issue batches cover reported problems, not every 
    Trace these providers' constructors, normal listener authorization and session acceptance;
    a conformance or object installation is not a working independent session. See the
    [resolved provider path](protocol.md#mirroring-ax-consumer-installation-and-transport-providers-2026-10-11).
+   The normal entry controls now separate two outcomes: own-process Rapport discovery is
+   denied for missing com.apple.RemoteDisplay on both macOS 26.5.1 and 27.2; native macOS 27
+   MCK parameter/endpoint factories and both public and unchanged native-options application
+   service browsers reach ready. The service is com.apple.MediaContinuityKit.iPhoneMirroring,
+   with native personal scope, iPhone filtering and RSSI -70. Neither bounded observation
+   discovers an endpoint, so authentication and 13 Pro visibility remain unproven.
+   Original iOS control-listener name construction is now resolved separately from the
+   media-prerequisite provider's zero-port UDP listener. The latter is not an AX control
+   acceptance edge, and its useLLW0Interface must not be treated as shouldAdvertise.
+   Own-process Mac-M2 class metadata resolves actual session activation and makeControlStream
+   implementations. Later normal own-server activation (iPhoneMirroring, shouldAdvertise=false,
+   framework UUID service) fails with native missingDeviceID, and normal invalidate completes.
+   The actual macOS 27 control stack is PropertyList3<SessionMessage> over ApplicationServiceQUIC/IP;
+   it differs from the isolated UDP factories. The missing ID is the host's
+   IDSCopyLocalDeviceUniqueID, not the phone UUID. Normal CLI and GUI controls retain nil ID
+   and isConnecting=true/isConnected=false after five seconds, with isNonUIInstall=false;
+   the same ordinary CLI on local macOS 26 connects and gets a non-nil ID. A subsequent
+   instrumented own-process control sees prompt dictionary replies from desktop.auth on both
+   hosts, but granted=false on macOS 27 versus true on macOS 26. It reads no setupInfo contents
+   or ID values and agrees with the normal state controls. The service-side cause is now
+   confirmed for a fresh uninterposed own client: its PID-specific daemon log selects the
+   no-entitlement third-party rejection. Native code gates that branch with
+   IDS/EnforceFirstPartyListeners, measured true on Mac-M2 and false on local macOS 26,
+   then checks audit-token code-sign status; both saved daemon slices agree. This bounds
+   the normal host-IDS-dependent Server bootstrap. A separate normal outgoing Session
+   constructor succeeds with NetworkBackedControlConnectionVendor; activation against a
+   synthetic endpoint ID reaches a native timeout after 10.253 seconds, and invalidate
+   completes. Main static rechecking closes ApplicationService Browser2 → endpoint-ID
+   match → PropertyList3/ApplicationServiceQUIC/IP → Connection3 construction. The optional
+   constructor UUID is clientSessionID, not clientDeviceID. These results do not establish
+   actual phone visibility or admission, or exclude lower-layer policy. Later exact Mac-M2
+   SSK imports establish that native MCK client activation uses the same iPhoneMirroring
+   endpoint, nil clientSessionID and nil incoming media configurations. Its vendor selection
+   requires both RavenStreamContinuityKit and ContinuityDevice.supportsMediaContinuityKit.
+   The normal own-process native flag getter returns true on Mac-M2 without an override;
+   the 13 Pro capability value and native selected branch remain unmeasured. Corrected
+   original-phone branch-island decoding recovers 26 SSK-to-MCK code edges, rather than the
+   prior parser's empty result. Native phone MCK activation constructs Server with
+   shouldAdvertise=true, selecting the canonical iPhoneMirroring service name. Static default
+   Angel startup first awaits MediaTransport server activation; only its success branch
+   projects the optional MCK vendor, constructs and activates its wrapped server, then stores
+   secondContinuityServer. This closes static roles/name choice and supplies concrete capture
+   points, not live publication. A new parameters-only/browser PID control finds no matching
+   IDS first-party-enforcement event for either own process, although the browser again reaches
+   ready with zero endpoints for five seconds. Other admission checks are not excluded.
+   Next resolve the legitimate external Angel startup trigger, observe first-server success
+   and MCK publication in an eligible 13 Pro session, and measure the actual Mac capability/
+   provider choice. Follow with endpoint exchange, legitimate broker/alternate provider
+   access and control-stream acceptance. Do not assume an always-visible MCK listener.
+   No authentication success or phone session follows. Keep empty discovery
+   causes unseparated until a target-specific control distinguishes them. A native AX bench
+   dylib is rejected by platform library validation before its subscription can execute;
+   this loader result is not an AX protocol refusal. See the
+   [normal-entry findings](protocol.md#normal-mirroring-transport-entry-and-mck-discovery-2026-10-11).
    Mark unresolved Swift/ObjC indirect calls explicitly; the single-image conformance scan
    does not exclude external implementations or USB reuse. These offline tasks do not require
    a Mac-M2 account change. Only after a concrete normal initialization or transport entry
