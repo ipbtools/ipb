@@ -2818,12 +2818,31 @@ on the same live child discriminate `[8,21]`, `[8,21,25]` and `[8,21,53]` succes
 Thus this captured failure is specifically the Label3 read path, not PID selection,
 rectangle decoding, a dropped child or only the newer richer field set.
 
-**Static boundary, same physical framework UUID AA0429D2-50DA-3B83-9C2A-A8D9E752581D:**
-special-case dispatch at0x24FE14284 passes AXP ID3 to
-`_processLabelAttributeRequest:error:axpAttribute:`; at0x24FE14340 it passes33 to the
-same named helper. This does not identify a UIKit getter or explain the missing reply.
-Do not conflate Label3 with AXTitle, Description33 or XCTest type codes; the internal
-service/application cause remains open.
+**Root cause resolved by disassembly + paired device logs, same physical framework
+UUID AA0429D2-50DA-3B83-9C2A-A8D9E752581D:** the actual
+`-[AXPTranslator_iOS _processLabelAttributeRequest:error:axpAttribute:]` IMP is
+0x24FE123C8. Both IDs3/33 read native AX attribute2001. ID3 passes the
+NSAttributedString class (class reference0x2680DF2C8), whereas33 passes nil to
+`__AXPConvertOutgoingValueWithDesiredType` at0x24FE102B8. Its AXAttributedString
+path retains rich output for that requested class when attributes remain;
+otherwise it uses the plain string. This separates outgoing representation from
+the common native text read; no AXTitle or XCTest-role mapping is assumed.
+
+`-[AXPRemoteCacheManager _attemptToSendResponse:]` at0x24FE1AD80 hardcodes
+`archivedDataWithRootObject:requiringSecureCoding:YES:error:`. An archive NSError
+takes its log/return branch and bypasses the transport send, without a fallback
+AX error reply. On fresh matching title handles, a Description-only control gets
+`[8,21,33]` in9.6ms with zero archive errors. The Label control first gets that
+same plain Description/frame in9.2ms, sends `[8,21,3]`, then records a device
+archive error9.5ms later and no semantic reply before its3s deadline.
+
+The live axauditd78621 log names NSCocoaErrorDomain4866, underlying4864: class
+`__NSCFType` does not adopt NSSecureCoding. Sender UUID matches the physical image;
+its image offset65308 /0xFF1C resolves to0x24FE1AF1C in the archive-error branch.
+The captured Label-dependent response therefore fails **device-side secure
+encoding and is discarded before transport**. The specific CF-backed object or
+rich-text attribute key is still unidentified; CGColor/CTFont are not confirmed.
+Description-first avoids transporting the problematic rich representation.
 
 After the title scrolls out, the original client returns17 nodes/17 frames; restoring
 the title restores the old timeout. The client now requests the existing fields except

@@ -193,8 +193,13 @@ geometry, Identifier, Value and Description reads work. The old command fails wi
 visible and succeeds after it leaves the AX graph. Description-first reads retain the actual
 title and rectangle without issuing the redundant failing Label request; three visible-title
 reads pass, and Calculator/Settings-search old/new graphs and all non-Label node fields agree.
-The internal reason for the device's missing Label reply remains open. Other request failures
-still fail explicitly, now with timeout request/node/attribute context.
+The device's missing Label reply is now traced to secure archive failure: rich output contains
+an unsupported `__NSCFType`, yielding NSCocoa4866/4864 and a log/return without transport send.
+Both Label3 and Description33 share native text getter2001; the outgoing representation differs.
+Paired controls correlate the archive error with Label, while plain Description succeeds.
+The exact CF-backed rich-text attribute remains unidentified. Other request failures still fail
+explicitly, now with timeout request/node/attribute context; increasing timeout cannot produce
+the reply already discarded by this error branch.
 
 Other confirmed fixes: box objectID as an archive UID, preserve CGRectNull as unavailable, and use
 effective display bounds/pointScale instead of a status-bar hit, background-app frame or

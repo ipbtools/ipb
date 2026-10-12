@@ -123,6 +123,7 @@ made. This avoids a reproduced iOS AX Label timeout on Bilibili's video title. J
 `description` and `label` separately and omits fields not queried/returned. The text tree shows
 Label, then Description, then Identifier. Trees and rectangles are still fully validated;
 an actual request timeout fails with its request type, node identity and attribute IDs.
+The captured rich Label reply fails device-side secure encoding; its plain Description succeeds.
 
 Collection is serial and bounded (512 nodes, depth 32, 30 s plus bounded cleanup).
 `atomic=false` is intentional: pre/post checks confirm root text (Description, or Label when
