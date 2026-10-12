@@ -13,6 +13,7 @@ ipb (iOS Physical-device Bridge; GitHub home `ipbtools/ipb`, Homebrew tap `ipbto
 | Document | Purpose | Update when |
 | --- | --- | --- |
 | `README.md` | Project purpose, requirements, build, usage, exit codes, smoke gate, pointers to everything below | Any user-facing behaviour or requirement changes |
+| `docs/README.md`, `docs/ui.md`, `docs/mirror.md` | Documentation navigation and detailed user guides; README retains installation/command overview | Guide behavior, document locations or user-facing limitations change |
 | `docs/protocol.md` | Protocol map: transport, features, Swift symbol evidence, service IDs, **captured wire format** (the `Wire Format` section is the authoritative reference for message shapes) | Any new message, field, feature, or evidence |
 | `docs/verification.md` | Two parts. The head is **"Open items — current state"**, a living list of every open problem with its root-cause status and whether it is agent-fixable or user-decided; it is overwritten in place. Everything below it is dated, host+device-specific verification records: what was proven, how, with what artefacts | Overwrite the head whenever an item opens, closes or changes status; append a record for every verification run and never edit an older one |
 | `bin/ipb` | The CLI surface: command names, `-s`/`--device` selection, and the grouped help text that `ipb help` and `ipb help hid` print. The help text is user documentation, not a comment | Any command, argument, or selection behaviour changes |

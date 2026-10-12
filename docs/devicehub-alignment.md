@@ -2,7 +2,8 @@
 
 ## Scope and decisions
 
-Branch `codex/devicehub-alignment`; current implementation starts from `cc43495`.
+Branch `codex/devicehub-alignment` originally started from `cc43495`. The table below
+describes its current implementation; dated verification records retain earlier baselines.
 On 2026-09-22 the user selected live display/capability metadata, literal text input and mirror
 orientation: “135都得解决，你继续研究下devicehub的实现，和我们现在做下对比，没问题就修复了”.
 Keep the native oracle, accepted resident devicectl notification-observer keepalive, bounded
@@ -15,6 +16,9 @@ sender ownership and no uncertain input replay. No XCTest or third-party phone s
 | Display/capability snapshot | `displays --json` and `capabilities --json` expose schemaVersion 1 + deviceIdentifier and Apple's live values. Capabilities are advertised operations, not guessed support. Mirror selects the unique primary nativeSize before table/Xcode/detection fallback. | Real primary LCD 1170x2532 / scale 3 vs padded 1184x2576; Wireless entry is not selected. Host fixtures cover missing/duplicate primary, invalid values and query errors. |
 | Literal text | `text <text>` resolves keyboard, copies exact UTF-8 once, then sends `{Cmd}`, `{Cmd,V}`, `{V}`, `{}` on the existing keyboard service. Copy failure prevents paste; uncertain paste is not replayed. | Exact `ipb-中文🙂 A1!` appeared in Settings with Pinyin active. Clipboard policy can present Allow Paste; rc0 is submission, not semantic insertion. Clipboard is replaced. No implicit permission approval or clipboard synchronization in the command. |
 | Orientation | Native crop, device direction, content direction and presentation coordinates are separate. Cmd-Left/Right changes actual device orientation; ordinary touch maps back to native axes, pointer uses presentation coordinates. A geometry change releases/drains old input before publishing. | Final native mirror opened/returned from General at all four device orientations. Rotated content was separately exercised in Calculator. No claim of calibrated physical trackpad behavior. |
+| UI observation | `ipb ui` reads DevicesApp raw DTX through an existing-paired USB userspace RSD. It exports actual AX child edges, text, frames and scoped attributes with Description-first reads. | Settings 13/13 and Bilibili title-visible 25/25; AX-only gates pass. General hierarchy completeness, snapshot95006 and the full supported matrix remain open. |
+| Mirror keyboard/clipboard | One held-key/FIFO path covers physical keys, repeat, Mac input-method commits and text Copy/Cut/Paste. | 13 Pro ordinary Settings input passes; secure fields, other layouts/apps and the full macOS27 gate remain open. |
+
 
 `device_control.h` runs one background metadata query at most per second, never overlapping.
 Apple timeout is 5 s with a 6 s host kill bound. Read queries do not wait on HID; explicit rotation
@@ -502,11 +506,27 @@ It remains a bounded single-target fallback. The working attribute traversal rea
 properties per node without rendering an overlay; measured child walks are approximately
 0.22–1.42 seconds on the sampled pages. No uncertain input is replayed.
 
+## User documentation and install ownership
+
+README is the install/command entry point. `docs/ui.md` and `docs/mirror.md` hold detailed
+usage; `docs/README.md` routes readers to current plans, protocol and dated evidence. The
+verification head remains the current problem ledger; dated records and the captured Wire
+Format stay intact. Correct stale “no CLI yet” / “future AX backend” statements in current
+summaries rather than rewriting earlier findings.
+
+`update` is host-only and bypasses device selection. A source checkout pulls/builds its
+configured branch; a Homebrew wrapper updates only when its canonical root matches
+`brew --prefix ipb`. A manual-prefix wrapper returns an explicit reinstall command for that
+prefix. This prevents an installed Homebrew copy from being updated in place of the user's
+running manual copy. No new persistent install-origin metadata or release automation is added.
+Homebrew HEAD still tracks `main`; source-branch availability does not mean a tag/release.
+
 ## Remaining work
 
 1. Complete the supported release-matrix gate with an available host/device pair.
-2. Full mirror keyboard capture/chord API, frame identity/PTS correlation and UI-tree transport
-   remain separate work. The minimal paste chord does not claim general held-key capture.
+2. Frame identity/PTS correlation, persistent AX/MCP sessions and semantic actions remain
+   separate work. `ipb ui` and ordinary mirror keyboard/clipboard are implemented; their
+   secure-field/general-app limits are recorded above.
 3. Physical trackpad calibration, original privacy-prompt A/B and locked-device protocol behavior
    need their corresponding actual inputs/states. No permanent impossibility claim.
 4. Siri has a captured code but no verified effect; recording and newer hardware buttons remain
