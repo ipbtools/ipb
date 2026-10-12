@@ -56,6 +56,8 @@ See [wire/source evidence](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11),
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
 | **UI element / semantic context research** | DevicesApp raw DTX returns real AX trees/frames on the 13 Pro: Calculator 24/24, History 4/4, Settings main 13/13, Battery 32/32, Home 29/29, ordinary Bilibili modal/keyboard 40/40. Native/Python bulk codecs agree; node-centre HID transitions have screenshot and tree confirmation. Automatic bulk/frontmost can select unrelated PDUIApp; explicit PID reads and system hit-test-derived PID reads work on tested pages. Pure Python fresh-session capture takes 740 ms for Calculator, 941 ms for Battery and 1744 ms for Bilibili. A launch-splash hit test returns nil/error 8 before visible-page success. This is AX graph coverage, not every UIKit view. One concurrent screenshot timeout and stop-ack closure races remain undiagnosed. Earlier Inspector/Mirroring restrictions are separate entry paths. | Agent-fixable: target/overlay coverage, token/page generation contract, persistent-session latency, supported macOS 27 gate, then CLI/MCP integration. Keep one outstanding semantic read and preserve unsolicited packets. Do not use arbitrary first foreground event, replay uncertain input or claim all apps complete. The user chose **“用 13 pro 吧”** and rejected page-wide serial preview. See [current protocol](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11). |
 | **Keyboard and focused text** | `ipb text` clipboard + captured Cmd-V chord inserts exact Unicode in Settings with Pinyin. An iOS paste-permission prompt was also reproduced and allowed once for synthetic test text. rc0 reports submission only; clipboard is replaced. | Implemented scoped text path. Full mirror keyboard capture/general chords remain agent-fixable; secure fields and other applications need their own validation. No automatic permission approval. |
+| **Mirror numeric controls / hidden system input** | The user cannot locate buttons in Device Hub's streamed password page. Mirror now has a manual title-bar 123 / Cmd-K panel using the discovered keyboard service on its existing UHID queue. All ten digits, Backspace, physical numeric input, Return and local click/scroll isolation pass on the 13 Pro Calculator; local noninteractive smoke passes. This is supplementary macOS 26.5.1 testing. | Code implemented. User-only: personally enter a password for secure-page/lockscreen acceptance; availability was requested before a fresh timed authorization, with no new auth run stacked. Agent: complete the supported host gate. No reconstructed touch geometry or secure-page acceptance claim. |
+| **Mirror periodic display refresh timeout** | Bench mirror runs intermittently exit 1 when the existing one-second `device info displays` refresh exceeds devicectl's five-second bound (exit 2). Reproduced with Device Hub closed and zero keyboard events; other input sessions close normally, and a later standalone display query succeeds. | Agent-fixable investigation; cause open. Keyboard-event causality is not established. Preserve the explicit failure rather than hiding stale orientation or replaying input. |
 | **AX vs XCTest baseline and additional DTX functions** | Local native/Python Apple-tunnel startup fails before its reverse Driver channel; the cause remains open. USB CoreDeviceProxy userspace RSD establishes Driver/configuration/start36 both on Mac-M2 and with the Python client on the local macOS 26 host. Device logs reach AutomationMode writer authentication, coreauthd and SpringBoard overlay presentation. The user reports no physical-panel prompt but confirms input works in Device Hub, with a mistyped attempt. Runner waits 60 seconds, then reports XCTest.XCTFuture code 1000; the visible authorization sheet can remain after Runner termination. A subsequent pre-launch capability handshake still times out. No WDA HTTP/snapshot or completed authentication is established. Foreground-Device-Hub AX returns 24 nodes/24 frames in 892 ms. Request 9 supplies action subsets; request 10 contradicts readable fields; Instruments advertises 111 capability/version keys. | Agent-fixable: diagnose the outstanding authentication/session lifetime and remaining native-path/USB paired-host differences, then obtain a same-page comparison. The external probe now stops on actual UI-testing initialization failure. User-only: any password authorization, once the session state is verified; no further ordinary-unlock request. The attempted no-Device-Hub startup was not a valid closed-app control. The owned reference remains temporarily installed for the pending comparison; remove it when the comparison ends. No speed/parity claim. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
@@ -6033,3 +6035,63 @@ passive collector ends; temporary SSH forwards, sockets and pairing caches are r
 HTTP or snapshot has been obtained. The owned reference remains installed for the deferred
 baseline; Maestro is untouched. Raw scripts/logs/disassembly stay outside git, with exact run
 references in the local handoff. No product build or supported-matrix gate is claimed here.
+
+
+## 2026-10-11 — Mirror numeric keypad, local Calculator and smoke verification
+
+**Scope:** implements the user's requested input control after the streamed authorization
+keypad could not be located. Local host macOS 26.5.1 / 25F80, Xcode 27 B6 / CoreDevice
+642.15; target only iPhone 13 Pro (iPhone14,2), CoreDevice
+`7F2FE6E9-5423-552A-A2A2-C499F1D8672F`, iOS 27.0 / 24A437. This is a supplementary
+host run. Mac-M2 was refreshed and reports macOS 27.2 / 26B5091g but Xcode 26.4 /
+17E192; it does not close the supported macOS 27 + Xcode 27 gate.
+
+**Implemented:** title-bar **123 / Cmd-K** toggles a manual numeric panel, providing
+0–9, Backspace and Return. Physical numeric keys are forwarded only while the panel is
+open. Reports use the discovered `CoreDevice keyboard` descriptor and existing UHID
+sender/serial queue. An already pressed key continues its release across generation
+changes; pending stale events are discarded. Event CSV/diagnostics omit keyboard usages.
+The video lives in a background view to keep AppKit controls visible; the panel consumes
+local clicks/scrolls, and the existing phone touch geometry is retained.
+
+**Observed:** the final interface enters `1234567890` into Calculator, Backspace removes
+a digit, physical Mac numeric input is received, and Return evaluates `7 + 2` to `9`.
+Title-bar and Cmd-K toggles, panel close and phone C/7 taps after closing it work.
+Clicks/scrolls in panel whitespace leave the phone unchanged. The final session closes
+normally, exit 0: **25 submitted / 25 sent**, comprising **17 KEY_KEYBOARD** and four
+phone down/up pairs, with no rejection, overload, abandoned send or residual in-flight
+event. CSV has no usage/digit column and keyboard x/y remain zero. These are UI observations
+plus result records, not rc0-only acceptance. Temporary app packaging is bench-only and
+is kept outside git.
+
+**Checks:** `make XCODE_PATH=/Applications/Xcode-27.0.0-Beta.6.app`, report-size checks,
+`zsh -n bin/ipb`, `git diff --check` and the noninteractive
+`scripts/smoke_matrix.sh` pass with the explicit 13 Pro selection and Xcode 27 B6
+`DEVELOPER_DIR`. The gate confirms contracts, descriptor selection, screenshots and
+mirror signal/child cleanup. The whole interactive Settings fixture was not repeated;
+the feature's interactive Calculator flow above was exercised separately.
+
+**Local development installation:** backed up the existing `~/.local` ipb layout outside
+git, then ran `make install PREFIX=/Users/borealin/.local` with the same Xcode path.
+Installed wrapper/mirror bytes match the source/build and signature verification succeeds;
+`ipb help` includes numeric keypad. This updates the local test build, without a release
+or Homebrew Cellar change. All owned probe/mirror processes ended. Device Hub is restored
+to this 13 Pro's Calculator with value `7`; a fresh native mirror screenshot confirms it.
+
+**Confirmed bench issue:** other runs, including a planned rotation check, fail during
+periodic display refresh: `devicectl device info displays` exceeds 5 seconds, exits 2,
+and mirror exits 1. Zero keyboard events were submitted in those failing controls; the
+failure also occurs with Device Hub closed. A later standalone display query succeeds.
+Root cause is open. The rotation check is incomplete and no new rotation pass is claimed.
+
+**Remaining:** a human must validate acceptance in the XCTest password sheet and on
+lockscreen. No fresh authorization was triggered while waiting for the user's availability.
+No password was entered by the agent. Calculator acceptance does not prove secure-page
+acceptance or complete the separate AX/XCTest comparison. No new XCTest or phone server
+is introduced by this product feature.
+
+Minimal local references (outside git):
+`~/.local/state/ipb/20261011-provider/keypad-build.log`,
+`keypad-mirror-titlebar.log/.csv`, `keypad-all-digits.png`, `keypad-return-nine.png`,
+`keypad-smoke/smoke.log`, and the failed `keypad-mirror-final.log` /
+`keypad-mirror-rotation.log`. Historical verification content was kept byte-identical.

@@ -598,6 +598,18 @@ bin/ipb key-up
 bin/ipb keyboard-report 0x200 0x29 1
 ```
 
+**Mirror numeric input (runtime control, 2026-10-11):** supplementary host macOS 26.5.1 /
+25F80, Xcode 27 B6 / CoreDevice 642.15; iPhone14,2 / iOS 27.0 / 24A437. The live
+descriptor named `CoreDevice keyboard` resolves to `0x200`. Mirror reuses the builder
+above and its existing UniversalHID socket: digits `1`–`9` map to usages `0x1e`–`0x26`,
+`0` to `0x27`, Backspace to `0x2a`, Return to `0x28`. A click sends down, an empty
+keyboard release, and a UHID barrier on the serial input queue, with the existing CLI
+hold/settle timing. Calculator visibly receives `1234567890`, deletion, physical numeric
+keys and Return (`7 + 2 = 9`). CSV contains only generic `KEY_KEYBOARD` events, with no
+usage/digit field. No new wire shape is introduced. Password-sheet/lockscreen acceptance
+and the supported macOS 27 host gate remain unverified; a successful barrier proves no
+particular page accepted input. See the dated numeric-panel record in `verification.md`.
+
 ## CoreDevice Keyboard / Pointer Capability Adapters
 
 CoreDevice still exposes typed protocols for keyboard and pointer capability use:
