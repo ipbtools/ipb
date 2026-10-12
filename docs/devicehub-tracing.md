@@ -246,3 +246,31 @@ Hub running. First establish a no-input baseline. Keep each action's timestamp s
 possible; broad markers that include setup clicks cannot assign every report to the named gesture.
 The native operator's wheel emitted only may-begin and no visible motion in this run. That is an
 operator/gesture evidence limit, not proof that Device Hub's physical trackpad path is ineffective.
+
+## AXAudit reference capture boundary
+
+The October 9 Inspector investigation uses a Git-external native DTX byte recorder,
+not the HID report harness above. On Xcode 27 B6 the loaded DTXConnectionServices
+slice is **arm64e**, UUID `0A40CC82-91EB-38CB-99E5-189906A75231`; arm64 offsets differ.
+Verify the loaded UUID and bind exact entry addresses before reading registers.
+The transmitter method at file address `0x148c8` receives message x2, routing x3/x4,
+fragment w5 and output block x6. Its block receives byte pointer x1 and length x2.
+Capturing those callback chunks preserves outgoing serialized headers and bodies.
+The parser method at `0x13e1c` receives a 32-byte header pointer x2, assembled body x3
+and length x4. Read memory without live expression evaluation; keep run bounds,
+budget/error records, footer and detach results. See the [protocol seed and results](protocol.md#axaudit-physical-selection-action-and-issue-handoff-2026-10-09).
+
+A native Foundation fixture compared all 647 outgoing bytes against the fixture's
+own transmitter sink, and the incoming header/body against the same message; offline
+decoding preserved selector, nested token and routing. The initial fixture exposed a
+Python callback bookkeeping error and is marked invalid; the corrected fixture passed
+before attaching to Inspector. This does not measure complete stop/resume overhead.
+
+**Incoming coverage is assembled parser data, not original fragment bytes.** The live
+screenshot reply had a retained last-fragment header (index 6/count 7, size 53925) but
+a complete 381445-byte body. Validate its internal payload-header size, preserve the
+original header unchanged, and label any decoder size normalization as derived
+post-assembly metadata. Do not concatenate these into a purported incoming wire stream.
+Offline decoding succeeded after applying that explicit boundary. Retain connection/
+parser identity: Mac and phone channels can reuse the same message identifiers, and
+Mac Frame replies are not iOS geometry. Raw scripts and captures remain local.
