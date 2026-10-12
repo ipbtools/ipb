@@ -1390,3 +1390,397 @@ builder was already fixed. Both now share the byte construction with count 1 on 
 max 1 / identifier 0 / identity 0 / timestamp 0 remains unchanged. Host tests inspect actual framework-backed
 reports, and the installed real-device gate exercises tap/swipe/key/text again. Raw swipe probes
 are not promoted to verified high-level commands by this change.
+
+## Accessibility Inspector and AXAudit (2026-09-22)
+
+**Evidence boundary.** macOS 26.5.1 (25F80), Xcode 27 Beta 6, Accessibility Inspector 5.0
+(192.6), production iPhone 13 Pro / iOS 27.0 (24A437), Developer Mode and DDI services enabled.
+This is a research path, not an ipb command or the supported macOS 27 release gate.
+Apple's DTX message-construction arguments and property-reply objects were captured with LLDB;
+independent pymobiledevice3 11.10.2 requests then reproduced the reads. No XCTest runner,
+jailbreak, injected code or additional phone-side server was installed for these tests.
+
+### Transport and service discovery
+
+Host disassembly of Xcode's bundled `AccessibilityAuditDeviceManager.framework` shows
+`XDMDeviceMonitorEmbedded._connectToDevice:` calling `AMDeviceSecureStartService`, then
+`AMDServiceConnectionGetSocket` and `initWithConnectedSocket:disconnectAction:`. Its query path
+constructs `DTXMessage` and calls `sendControlAsync:replyHandler:`. These are **static** host facts;
+the AMDevice service-start argument was not captured in this run.
+
+The iPhone's **live RSD advertisement** contains:
+
+| Service | UsesRemoteXPC | Advertised entitlement | This run |
+| --- | --- | --- | --- |
+| `com.apple.accessibility.axAuditDaemon.remoteserver.shim.remote` | false | `com.apple.mobile.lockdown.remote.trusted` | Connected through `PreferredRsdTunnel` and exercised DTX control-channel reads |
+| `com.apple.accessibility.axAuditDaemon.remoteAXService` | true | `AppleInternal` | Advertisement only; not opened and no access outcome established |
+
+The working path is RSD tunnel → AXAudit remoteserver shim → DTX → Apple's AXAudit service.
+It is distinct from the HID feature/Mercury dictionaries above. The absence of an AX daemon in a
+DDI inventory or of CoreDevice linkage in one host framework cannot establish that AX is absent
+from RSD; the older lockdown-only architectural inference is superseded. `deviceApiVersion`
+returned **26** on this iOS 27 device; this number is not the OS version.
+
+### Focus, property descriptors and partial hierarchy
+
+`deviceCapabilities` advertised property reads, parameterized reads, focus navigation, preview,
+normalized-coordinate lookup and screenshot selectors. Advertisement does not establish effects.
+The independent probe used the existing pmd3 focus setup (`deviceSetAppMonitoringEnabled:`,
+`deviceInspectorSetMonitoredEventType:`, `deviceInspectorMoveWithOptions:`). The resulting
+`hostInspectorCurrentElementChanged:` event carries `AXAuditInspectorFocus_v1`, including:
+
+- `ElementValue_v1`: an `AXAuditElement_v1` whose `PlatformElementValue_v1` was 20 bytes here.
+  Treat the token as opaque; no lifetime or cross-session stability is established.
+- `CaptionTextValue_v1`, `SpokenDescriptionValue_v1`.
+- `InspectorSectionsValue_v1`: `AXAuditInspectorSection_v1` objects containing
+  `ElementAttributesValue_v1` descriptors. The caption-only CLI omits these descriptors.
+
+Inspector's captured read is `deviceElement:valueForAttribute:` with **two object arguments**:
+the transported element and the transported descriptor supplied by the device. Using `P(x)` below
+solely as shorthand for `{"ObjectType":"passthrough","Value":x}`, the captured hierarchy request is:
+
+```text
+element = {ObjectType: "AXAuditElement_v1", Value: P({
+  PlatformElementValue_v1: P(<opaque bytes>)
+})}
+attribute = {ObjectType: "AXAuditElementAttribute_v1", Value: P({
+  AttributeNameValue_v1: P("_AXHierarchyElementsAttribute"),
+  HumanReadableNameValue_v1: P("Hierarchy"),
+  DisplayAsTree_v1: P(true), DisplayInlineValue_v1: P(false),
+  IsInternal_v1: P(false), PerformsActionValue_v1: P(false),
+  SettableValue_v1: P(false), ValueTypeValue_v1: P(2)
+})}
+```
+
+Other captured/read descriptor names include `Label`, `Value`, `TraitsHumanReadable`, `Identifier`,
+`Hint`, `UserInputLabels`, `ElementClassName`, `ElementMemoryAddress` and
+`ElementViewControllerClassName`. Their type/flag values vary: reuse the received descriptor.
+Do not accidentally execute descriptors marked `PerformsActionValue_v1` while enumerating values.
+
+The hierarchy reply is recursively transported `AXAuditNode_v1`, containing
+`AuditElementValue_v1`, optional `ChildrenValue_v1`, `HumanReadableDescriptionValue_v1`,
+`HumanReadableRoleDescriptionValue_v1`, and `IsIgnoredValue_v1`.
+The Looktech Lab heading query returned 15 nodes, a `UILabel` class and its address; screenshot
+inspection confirmed the visible heading. This is a focus-related AX hierarchy, **not proof of a
+complete UIView dump or enumeration of all visible/offscreen nodes**. In Settings, two different
+focus entries returned labels/traits but only one hierarchy node and nil class/address. The cause
+of this difference is not established; do not infer a signing/entitlement rule from two apps.
+
+### Geometry and remaining unknowns
+
+**Page-dump follow-up on the same seed.** Moving focus with `Direction.Next` until an opaque
+element token repeated produced 36 distinct focus tokens. Querying each focus element's supplied
+read-only descriptors and merging hierarchy replies by token yielded 131 nodes / 130 observed
+edges under one Looktech Lab root. The 252 property reads took about 14.4 seconds including
+traversal. The result includes window/container structure, buttons, text, images and tab controls;
+the JSON and readable tree remain local research outputs, not a product command.
+
+This is a **temporal union**, not an atomic or completeness-verified tree. Before/after screenshots
+show that focus traversal automatically scrolled from the top to the lower part of the page.
+Two distinct UILabel tokens both described the home heading; equal labels must not be used to
+merge identities. A repeated focus token proves a traversal cycle, not coverage of ignored,
+unmaterialized or otherwise inaccessible views. Element bounds remain unresolved.
+
+A separate attempt to recursively query discovered hierarchy handles, without advancing focus
+after its seed, reached 99 nodes before a property timeout. Its before/after screenshots showed
+Settings while the returned root still named Looktech Lab: foreground pixels and the AX target
+can disagree in this probe. After relaunching and visually confirming Lab, a fresh session received
+app-state events but no focus seed within the three-second budget. Neither attempt validates a
+static full-tree algorithm. Target synchronization and query liveness require investigation;
+their causes are unknown, and app monitoring was disabled during cleanup.
+
+- `Frame` and `AXFrame` were **candidate names**, based on host-side strings; they were not advertised
+  descriptors in these iOS focus events. Both returned nil in the tested Lab and Settings queries.
+- `deviceFetchElementAtNormalizedDeviceCoordinate:` exists in the host implementation and device
+  capabilities. Host disassembly packages a `CGPoint` in `NSValue`. A local Foundation archive
+  established `NS.pointval` + `NS.special=1` encoding. Constructed requests at three normalized
+  points returned nil, both before and after explicit inspector setup. No successful Apple
+  reference request was captured, so these negatives do not establish an unsupported API.
+- `deviceInspectorPreviewOnElement:` followed by `deviceCaptureScreenshot` returned a PNG plus
+  `displayBounds={{0,0},{390,844}}`, `displayNativeScale=3`, `rotationRadians=0`, and
+  `shouldFlipOutline=true`. The PNG was 1170×2532 and visibly outlined the selected text in green.
+  This reply had no `borderFrame` or structured element rectangle. Display geometry is not element
+  geometry. Preview was cleared and cleanup was checked with a fresh screenshot.
+- The `ElementRectValue_v1` seen in pmd3 belongs to **audit issues**, not to ordinary focus/node
+  values. It is not a substitute for a verified element-frame query.
+
+Host sources are under
+`Xcode-27.0.0-Beta.6.app/Contents/Applications/Accessibility Inspector.app/Contents/Frameworks/AccessibilityAuditDeviceManager.framework`
+and `Contents/SharedFrameworks/AccessibilityAudit.framework`.
+The upstream comparison is
+[pymobiledevice3 at 10194d12](https://github.com/doronz88/pymobiledevice3/blob/10194d12e7cf17453887b7ac3d46e1b85b5a057a/pymobiledevice3/services/accessibilityaudit.py),
+which lacks wrappers for these property/point queries and an `AXAuditNode_v1` decoder.
+
+### AXAudit root handles and hierarchy limits (2026-09-22)
+
+This follow-up separates **reanalysis of the recorded physical-device replies** from **offline
+binary evidence**. No device connection was made while the iPhone was loaned to LookInside.
+
+The 36 recorded Lab hierarchy replies contain **14–46 nodes per reply**; 131 is their temporal
+union. In the separate expansion run, querying the captured application root returned **two
+nodes**, UIWindow returned four, and deeper queries added local context and ancestors. Thus a
+root query has already been tried; these recordings do not show a single full-page reply.
+The 96 completed expansion queries include 13 nil replies. The next queued handle at the timeout
+was the tab bar, inferred from the probe's iteration order; this does not establish the timeout's
+cause. DTX replies are matched by message ID, so queued app events alone do not prove starvation
+or explain the previously observed target mismatch.
+
+**Physical iOS 27 static source:** the arm64e AXRuntime in Xcode's cached
+`iPhone14,2 27.0 (24A437)/Symbols/System/Library/PrivateFrameworks/AXRuntime.framework/AXRuntime`.
+`_AXUIElementCreateData` at `0x18f83384c` serializes 4 + 8 + 8 bytes from fields at offsets
+`0x10`, `0x14`, `0x1c`; `_AXUIElementCreateWithData` at `0x18f83377c` reverses that layout.
+`_AXUIElementCreateWithPIDAndID` at `0x18f833680` identifies the first field as PID.
+`_AXUIElementCreateAppElementWithPid` at `0x18f82a0d8` sets the two remaining fields to zero and
+the global at `0x1e45262e8`, whose stored initializer is one. For a remote application's PID,
+the resulting candidate is `struct.pack("<IQQ", pid, 0, 1)` on this seed. The captured Lab root
+matches `(7513, 0, 1)` exactly. Every handle in the recorded 131-node and 99-node unions carries
+PID 7513; a later Lab app-state event reports PID 7534. Old handles cannot be assumed to identify
+that later process instance. At this offline stage a directly constructed root remained untested;
+the dated live result follows below. Product
+handles remain opaque, and this layout is not a cross-version contract.
+
+**Concrete implementation comparison, simulator only:** the local iOS 26.5 runtime `iOS_23F77`
+contains arm64 `System/Library/PrivateFrameworks/AccessibilityAudit.framework/Support/axauditd`.
+Its Objective-C method metadata and selector stubs establish the following executable paths:
+
+| Path | Static behavior on the simulator seed |
+| --- | --- |
+| `XADInspectorManager.fetchSpecialElement:` at `0x1000056d4` | Value 0 obtains `firstElementInHierarchy:` from `frontmostAppForTargetPid`; value 1 obtains `lastElementInHierarchy:`; other values produce nil. This is not an arbitrary application-root enum. |
+| `XADAuditServer.deviceSetAuditTargetPid:` at `0x10000b9a8` | Calls the superclass and manager's `setTargetPid:`. The manager at `0x10000551c` matches `AXAuditPidForElement` against current applications. `frontmostAppForTargetPid` at `0x100005660` falls back to the first current application when no match exists. With visuals enabled the server can also change focus; target selection is not necessarily observational. |
+| Normal property handler at `0x100004f1c` | Returns nil for a previously focused element that differs from the current element. It checks `AuditDoesAllowDeveloperAttributes(PID)` for restricted attributes; an arbitrary attribute name does not imply a generic AX read. |
+| `_AXHierarchyElementsAttribute` branch at `0x1000054d0` | Calls helper `0x100004cdc`, which combines the queried node's children, its siblings and an ancestor chain. It does not recursively enumerate every descendant. Walking parents also checks the developer-attribute predicate. |
+| Direct-child helper at `0x100004b88` | Adds children through index 50, then stops (`0x100004c10`, `0x100004c60`–`0x100004c64`): at most 51 children. Closure over returned handles cannot prove that unreturned siblings do not exist. |
+| Parameterized RPC at `0x10000a038` | Decodes typed `AXAuditElement` and `AXAuditElementAttribute` objects, then forwards `withObject:`. The concrete manager at `0x10000550c` immediately calls completion with nil; it never reaches `AXUIElementCopyParameterizedAttributeValue`. Supplying numeric 95006 is not an established forwarding mechanism. |
+
+These paths explain why the simulator interface must not be treated as a generic AX proxy. They
+do **not** prove the physical iOS 27 daemon has the same filters, cap, fallback or nil handler.
+The cached iOS 27 AccessibilityAudit image contains base stubs rather than this concrete daemon.
+Its `AuditDoesAllowDeveloperAttributes` at `0x24fdcd750` also differs from the simulator predicate:
+it calls an unresolved shared-cache target at `0x2500f90b0` with process/task-like arguments and
+accepts a zero return. The image imports `task_for_pid` and `mach_task_self_`, but the call target
+has not been conclusively resolved; do not equate this with a verified entitlement rule.
+
+Physical probes use a fresh observed PID, validate every reply's process identity, stop on
+timeout, retain partial/nil results and avoid declaring an observed graph complete.
+Root construction, target binding, service access and tree coverage are separate experiments.
+
+### Physical root query and separate Mirroring AX channel (2026-09-23)
+
+On the wired iPhone 13 Pro, iOS 27.0 **24A437**, an RSD/AXAudit session accepted an application
+root handle constructed from the **freshly observed** Looktech Lab PID 7720 using the seed-specific
+`<IQQ` layout above. The read-only `_AXHierarchyElementsAttribute` descriptor was copied from the
+earlier captured Inspector reply. A one-call root probe returned exactly two nodes, as before.
+Two independent bounded expansions then queried **129 handles each**, with **zero nil replies**
+and **zero timeouts**, taking 6.35 and 7.42 seconds. Both runs produced identical token-labelled
+node content. The screenshots before and after showed the same Lab home page; no focus move,
+scroll, install, Runner or UI activation was sent.
+
+Hierarchy replies repeat ancestors and context. Merging all returned child edges created two
+false double-parent edges. Selecting the queried node's children **from that node's own reply**
+produced a connected **129-node, 128-edge tree**, one root, one parent per other node, and all
+discovered handles queried. The tree included the visible Home heading, Settings button,
+connection card, reminder/translation/notes controls and tab bar, as well as reachable elements
+below the viewport. This proves an executable runner-free element-tree read on this page/seed.
+It does not prove a single atomic device snapshot, a complete UIKit `subviews` tree, a lack of
+AX child caps, cross-app coverage, or usable element rectangles. The local research probe retains
+`complete_ui_snapshot=false`, `atomic=false`, and labels graph closure separately.
+
+The same device advertised these RSD entries: `remoteAXService` (`UsesRemoteXPC=true`,
+`AppleInternal`), `testmanagerd.remote.automation` (`UsesRemoteXPC=false`, `AppleInternal`), and
+ordinary `testmanagerd.remote` (`UsesRemoteXPC=false`, private client entitlement). Advertisement
+did not establish access. `remoteAXService` terminated its RemoteXPC handshake. The automation
+port accepted TCP, but a five-second generic DTX capability exchange timed out; a second bounded
+attempt with no capability exchange and proxy identifier
+`dtxproxy:XCTDRemoteAutomationClient:XCTDRemoteAutomationServer` also timed out. Ordinary
+`testmanagerd.remote` completed the generic DTX exchange immediately on this same device/host.
+All sockets were closed. These results establish the tested host exchanges' limits, not the
+internal-policy predicate's value or the exact reason automation failed. No snapshot RPC was sent.
+
+On a **different device state**, the wired iPhone 12 mini / iOS 27.0 24A437 exposed a paired RSD
+tunnel while Developer Mode was disabled. Its 62 advertised services included only the ordinary
+AXAudit `remoteserver.shim.remote` entry among the services tested here; no `testmanagerd` entry
+was present. The AXAudit DTX connection opened, then `deviceCapabilities` ended with
+`ConnectionTerminatedError: Channel is closed`. CoreDevice separately refused DDI installation
+with Cryptex error 20, explicitly citing disabled Developer Mode. This is an observed correlation,
+not proof that the AXAudit channel closed because of that setting; repeat after a Developer Mode
+state change before claiming causality. A subsequent bounded test obtained Settings PID 1843
+from the already advertised `com.apple.os_trace_relay.shim.remote` `PidList` service without DDI.
+It sent a read-only `_AXHierarchyElementsAttribute` request on a fresh AXAudit DTX connection
+**without** capability preflight; the connection closed without an AX reply. Thus preflight alone
+does not explain the failure. A bounded on-device `os_trace_relay` capture around a repeat request
+shows `lockdownd` activating the Mach name
+`com.apple.accessibility.axAuditDaemon.deviceservice.lockdown`, then reporting
+`failed to do a bootstrap look-up: xpc_error=[3: No such process]`; its socket closes without an
+AX reply. This directly places the immediate failure at service lookup on this physical device.
+Separately, the **iOS 26.5 simulator** runtime `iOS_23F77` contains
+`System/Library/LaunchDaemons/com.apple.accessibility.axAuditDaemon.deviceservice.plist` with the
+same Mach name and `LimitLoadToDeveloperMode=true`. That simulator metadata is consistent with
+the 12 mini's disabled Developer Mode, but the physical iOS 27 launchd plist has not been read and
+no enabled/disabled A/B was performed. Do not promote the inferred setting-to-service causality
+to a physical-device fact yet. No successful tree query was obtained on this device in that state.
+
+### 12 mini enabled-state AXAudit cross-target check (2026-09-23)
+
+After the user enabled Developer Mode and restarted the **same iPhone 12 mini** (iOS 27.0
+24A437), `ipb ps` succeeded and CoreDevice reported `ddiServicesAvailable=true`. RSD advertised
+85 services, including both `testmanagerd.remote` entries, versus 62 in the disabled/no-DDI
+state. `axauditd` was present in the process list, and `deviceCapabilities` now replied with
+`deviceElement:valueForAttribute:`. The physical before/after comparison establishes that the
+combined Developer Mode, reboot and DDI state change restores this AXAudit path. It does not
+isolate the precise launchd gate; the iOS 27 device plist remains unread.
+
+A screenshot showed the SpringBoard Home page. Its fresh PID 204 was obtained through the
+existing `os_trace_relay` `PidList` service. The seed-specific `<IQQ>(204,0,1)` app root plus the
+captured read-only `_AXHierarchyElementsAttribute` descriptor returned ten nodes in one request.
+A 300-query budget discovered 373 handles and stopped at its budget, so that result is partial.
+Two larger independent sessions each queried **444 discovered handles**, with zero nil or timeout
+replies and an observed closure. Each queried node's direct children were taken from its **own**
+reply, not from repeated ancestor context. Two parent replies each repeated one identical child
+token; deduplicating these exact duplicates yielded one connected **444-node/443-edge** tree per
+session. The sessions had the same token set, descriptions except the changing clock, and child
+sets; Utilities-folder child order differed. They were not byte-identical snapshots. Before/after
+screenshots showed the same Home icons and dock, with the expected clock change.
+
+For an ordinary foreground app, `ipb launch com.apple.calculator` opened the preinstalled
+Calculator without installing anything. A fresh PID 2450 root produced a **45-node/44-edge**
+single-root observed tree twice, with zero nil/timeout replies and identical normalized
+tree content. The keys `7`, `8`, `9`, operators, History and Change Mode matched the screenshot; the
+read-only queries did not move focus or press a key. Candidate `Frame` and `AXFrame` descriptors
+sent against the `7 Keyboard Key` both returned nil. A separate `AXAction-2010` press submitted
+through installed pymobiledevice3 11.10.2's `AccessibilityAudit.perform_press` did not change
+the calculator's displayed zero; submission was not a verified activation. The phone was
+returned to Home afterward. These two targets establish
+runner-free element-tree reads across SpringBoard and a system app on this device/seed, not an
+atomic/all-views snapshot, a usable element rectangle, or element-activation support.
+On the final Home page, the advertised read-only `deviceRunningApplications` returned `[]` and
+`deviceCurrentState` returned `0`; neither supplied a foreground PID in this check. The working
+root queries therefore used a separately observed process list plus screenshots for target
+selection. A production foreground-binding contract remains unresolved.
+
+A separate **offline** host path exists in macOS 26.5.1 (25F80), iPhone Mirroring 1.6,
+`ScreenSharingKit` dyld-cache image UUID `C6D042A9-EE7E-3F13-9599-69DD1CB1A572`.
+`ScreenContinuityUI` uses `ScreenSharingSession.accessibilityDataPublisher`,
+`AccessibilityClientPrimitives.startAccessibility` and `processAccessibilityDataFromClient`.
+The concrete `AXPBackedAccessibilityClientPrimitives` uses
+`AccessibilityPlatformTranslation.AXPHostCacheManager`'s translation transport. Its
+`AXPHostCacheOverlayView.accessibilityChildren` (`0x1D99F878C`–`0x1D99F8874`) obtains a translated
+application element, converts it to `AXPMacPlatformElement`, and returns its accessibility
+children. This is executable host code for an NSAccessibility tree backed by remote data;
+Mirroring session authentication, AX payload schema and access by an independent host client were
+not tested. No Mirroring session was started.
+
+## XCTest snapshot service boundary (2026-09-22)
+
+**Static evidence only.** Inspected the arm64 slices in the Mac-local image
+`/Library/Developer/DeveloperDiskImages/iOS_DDI/Restore/022-22070-094.dmg`, mounted read-only.
+Its `version.plist` records DDI **27A5252f**, variant **Public**, build **1335**, XCTest **25227**
+and CoreDevice **642.15**; host is macOS 26.5.1 with Xcode 27 Beta 6. This is not a new device
+DDI inspection or live service test. The iPhone was exclusively loaned to another task throughout.
+
+Sources below are image-relative paths; addresses are unslid arm64 virtual addresses from
+`nm -arch arm64 -nm`, `otool -arch arm64 -tvV` and `dyld_info -arch arm64 -fixups`:
+
+- **T:** `usr/libexec/testmanagerd` (installed program path `/System/Developer/usr/libexec/testmanagerd`).
+- **U:** `Library/Frameworks/XCUIAutomation.framework/XCUIAutomation`.
+- **A:** `Library/PrivateFrameworks/XCTAutomationSupport.framework/XCTAutomationSupport`.
+- **P:** `Library/LaunchDaemons/com.apple.dt.testmanagerd.plist`.
+
+### Snapshot processing is in the device daemon
+
+The traced classic runner path is:
+
+```text
+XCAXClient_iOS / XCTRunnerDaemonSession (XCUIAutomation in the caller)
+  → _XCT_requestSnapshotForElement:attributes:parameters:reply:
+  → XCTestSession in device testmanagerd
+  → XCAXManager_iOS.snapshotForElement:attributes:parameters:timeoutControls:error:
+  → XCTElementSnapshotRequest (XCTAutomationSupport)
+  → XCTAccessibilityFramework.userTestingSnapshotForElement:options:error:
+  → AXUIElementCopyParameterizedAttributeValue(element, 95006, options)
+```
+
+| Evidence | Address and observed call |
+| --- | --- |
+| Client RPC | U `XCTRunnerDaemonSession` snapshot delegate at `0x6fa70` calls `daemonProxy` and `_XCT_requestSnapshotForElement:attributes:parameters:reply:` at `0x6fbb8`. Its newer `fetchSnapshot…` variant starts at `0x6fbf4`. |
+| Device receiver | T `XCTestSession._XCT_requestSnapshot…` at `0x10002f41c` first checks UI-testing readiness, then calls its `axManager` snapshot method at `0x10002f4b4`. `_XCT_fetchSnapshot…` starts at `0x10002f538`. |
+| Snapshot construction | T `XCAXManager_iOS.snapshotForElement…` at `0x10000c080` creates `XCTElementSnapshotRequest` and calls `loadSnapshotAndReturnError:`. A implements that method at `0x1073c`, then `accessibilitySnapshotOrError:` at `0x12d04`. |
+| AX request | A `XCTAccessibilityFramework.userTestingSnapshotForElement…` at `0x9a38` calls `AXUIElementCopyParameterizedAttributeValue` at `0x9b94`; the preceding instructions construct parameterized attribute `0x1731e` / **95006** and pass the element and options. |
+
+This identifies the device-side XCTest RPC processor and its AX query boundary. It does not trace
+all downstream AX IPC, establish a live snapshot's completeness, or imply a raw `UIView.subviews`
+dump. The daemon's code signature includes `com.apple.accessibility.api` and
+`com.apple.springboard.testautomation`; the host does not acquire those privileges by linking U/A.
+
+### Three distinct connection paths
+
+| Entry | Session/transport | Established boundary |
+| --- | --- | --- |
+| `com.apple.dt.testmanagerd.runner` | Device-local NSXPC → `XCTestSession` | P declares a Mach service; T startup calls `startAcceptingTestConnectionsFromListener:` at `0x1000049d0`. This is the runner-side RPC path, not an advertised host stream in P. |
+| `com.apple.dt.testmanagerd.remote` | Remote stream → DTX → `XCTDPendingHarnessSession` → `XCTDHarnessSession` | P declares `UsesRemoteXPC=false`, `RequireEntitlement=com.apple.private.dt.testmanagerd.client`. Startup registers service type **0** at `0x100004954`. This is the host test-control path. |
+| `com.apple.dt.testmanagerd.remote.automation` | Remote stream → DTX → `XCTDRemoteAutomationSession` | P declares `UsesRemoteXPC=false`, `RequireEntitlement=AppleInternal`. Startup registers service type **1** at `0x1000049a4`, conditionally as described below. This object directly implements snapshot/attribute requests. |
+
+`UsesRemoteXPC=false` does not mean no RSD tunnel; it describes the service payload transport.
+Remote-service entitlement metadata is not, by itself, proof that a host executable must carry the
+same signing entitlement. P also lists `com.apple.dt.testmanagerd.remote.runner` under
+**MachServices**, not RemoteServices; its name alone does not establish another host entry.
+
+T's service dispatch at `0x100034f74` distinguishes types 0 and 1. The type-0 branch constructs
+`XCTDPendingHarnessSession` at `0x100035018`; its proxy handler constructs `XCTDHarnessSession`
+at `0x10007c530`. Type 1 constructs `XCTDRemoteAutomationSession` at `0x1000350e4`.
+The latter's initializer at `0x10001f438` uses `DTXSocketTransport` and `DTXConnection` and
+registers the protocol pair `XCTDRemoteAutomationServer` / `XCTDRemoteAutomationClient` at
+`0x10001f6d0`. Class/protocol identities were resolved using fixups and symbol addresses, not
+otool's unresolved `bad class ref` annotations.
+
+The direct protocol has `_XCTD_requestSnapshotForElement:attributes:parameters:` and
+`_XCTD_fetchSnapshotForElement:attributes:parameters:`. The fetch implementation begins at
+`0x100021f3c`; its block calls `automationServices.axManager.snapshotForElement…` at
+`0x100022248`. `_XCTD_fetchAttributes:forElement:` begins at `0x10002240c`.
+Thus the direct snapshot implementation is real code, not just an unused selector string.
+Its on-wire object encoding and a valid live capability/session exchange remain unverified.
+
+### Authorization gates and what they prove
+
+1. **Listener registration gate.** T startup calls `hasAppleInternalSecurityPolicies` at
+   `0x100004964`; a false result skips the automation listener. That class method at
+   `0x100034304` directly calls
+   `os_variant_allows_internal_security_policies("com.apple.testmanagerd")`.
+   This is a device OS-policy gate in addition to P's `AppleInternal` declaration.
+2. **Automation Mode gate.** After constructing a remote automation session, T calls
+   `enableAutomationModeForClient:error:` at `0x100035114`. Failure reaches socket closure,
+   with the log “Rejecting connection for remote automation because Automation Mode is not
+   enabled”. A listener/socket alone is not a usable snapshot session.
+3. **Runner-local gate.** `XCTestSession` initialization at `0x10002bb6c` reads its NSXPC
+   peer's `com.apple.private.dt.xctest.internal-client` and `get-task-allow` entitlements.
+   `canSkipAutomationMode` at `0x10002c4f0` returns the internal-client flag;
+   `allowsUITestControl` at `0x10002c52c` otherwise checks `isAutomationModeEnabled`.
+   `ensureUITestingIsReadyWithTimeout:error:` at `0x10002e800` rejects a failed check with
+   code **41**, “Not authorized for performing UI testing actions.” These are actual gate
+   conditions, not a claim that `get-task-allow` alone authorizes every snapshot.
+
+Automation Mode here is the daemon's named state; it must not be equated with the Settings
+Developer Mode switch without additional evidence. The actual value of the internal-policy
+predicate on the loaned production phone was **not measured**.
+
+The installed pymobiledevice3 **11.10.2** source independently distinguishes transport/session
+setup from running tests. `services/dvt/testmanaged/xcuitest.py:54-68,136-202` selects ordinary
+`.remote`, initializes control/main proxy sessions, then launches a runner, authorizes its PID,
+waits for its reverse driver channel and starts the test plan. Its
+`dtx_services.py:551-581` declares the control/session/PID interfaces. This proves what that
+implementation does; it does not prove a live runner-free snapshot path or that every control
+RPC needs a runner PID.
+
+**Current conclusion:** the inspected seed contains a direct remote snapshot implementation,
+but behind explicit internal-policy and Automation Mode gates. Connecting the ordinary host
+control service is insufficient evidence that it exports the runner/automation snapshot object.
+This does not prove all runner-free AX approaches impossible; the separately exercised AXAudit
+shim above remains relevant. No ipb feature or support promise follows from this static result.
+
+**Next device experiment, only after exclusive ownership returns:** inventory the actual RSD
+services, then use bounded connection attempts to distinguish advertisement, service-start
+permission and DTX/session success. Record exact errors. Ordinary control-session negotiation
+can be measured separately, without launching a runner or fabricating a PID; it is not a snapshot
+success criterion. If the automation service is accessible, establish its protocol/capabilities
+and valid element handles before attempting one snapshot. Connection establishment can itself
+request Automation Mode, so account for that state change and clean up the session. If this
+entry is unavailable, keep that seed-specific result and continue AXAudit target/liveness work.

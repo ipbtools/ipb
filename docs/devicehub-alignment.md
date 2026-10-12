@@ -67,6 +67,111 @@ The supported macOS 27 + Xcode 27 + iOS 27 release gate is still pending. A curr
 prior macOS 27 host closed at port 22; its older Xcode 26.4/unavailable-device observation is historical,
 not a current prerequisite check. This local macOS 26 run is supplementary validation only.
 
+## UI context research
+
+SDK/source review and subsequent real-device AXAudit research on 2026-09-22. The current product
+still has no element-query command. No jailbreak, injection or phone-side helper installation was
+performed. A caption-only AX CLI result is not proof that the system lacks geometry.
+
+- Apple exposes structured onscreen context through `appEntityIdentifier`,
+  `appEntityUIElementProvider` and `AppEntityUIElement` (identifier, local bounds, selection state,
+  subelements). These are app-provided semantic annotations, not a reader for arbitrary UIKit views.
+  The local Xcode 27 Beta 6 iPhoneOS SDK declares `AppEntityUIElement` from iOS 18.4.
+  [Apple contextual-cues documentation](https://developer.apple.com/documentation/appintents/providing-contextual-cues-to-apple-intelligence-and-siri)
+  and [WWDC26 session 343](https://developer.apple.com/videos/play/wwdc2026/343/) explain the
+  relationship between pixel understanding, entities and actions; they do not disclose Siri's full
+  internal retrieval pipeline.
+- iOS 27 `AppIntentsTesting.AppEntityDefinition.viewAnnotations()` is a public consumer for those
+  annotations. The shipped interface returns entity + isSelected, without a frame property.
+  Apple requires an XCUITest bundle signed by the same development team as the target app;
+  this does not meet ipb's current no-XCTest/arbitrary-app goal.
+  [Apple test-framework session](https://developer.apple.com/videos/play/wwdc2026/295/).
+- The jailbreak project ios-mcp injects into SpringBoard and dynamically binds private AXRuntime
+  functions to query another PID's AX handles, attributes and hit tests. Its source requests
+  label/value/role/frame/children; source existence is not proof every fallback works, and its
+  README's claimed iOS 13–18 range does not establish iOS 27 support.
+  [Injection filter](https://github.com/witchan/ios-mcp/blob/38cafd5fbda7a4dcb3821b94cbb3523fc905c0b2/ios-mcp.plist),
+  [runtime bridge](https://github.com/witchan/ios-mcp/blob/38cafd5fbda7a4dcb3821b94cbb3523fc905c0b2/MCPAXAttributeBridge.m),
+  [node attributes](https://github.com/witchan/ios-mcp/blob/38cafd5fbda7a4dcb3821b94cbb3523fc905c0b2/MCPAXNodeSource.m#L2843).
+  This remains AX. FLEX instead recursively reads real `UIView.subviews` inside the target process;
+  it requires app integration or injection, not a remote UIKit-object API.
+  [FLEX hierarchy implementation](https://github.com/FLEXTool/FLEX/blob/63a6f588841e94e4c3adaa045ff16eb8163f0bb4/Classes/ViewHierarchy/TreeExplorer/FLEXHierarchyTableViewController.m#L122).
+- Accessibility Inspector's attribute-query path is now captured, and an independent pymobiledevice3
+  probe has read labels, traits, class/address and a 15-node partial hierarchy in Looktech Lab through
+  the advertised RSD `remoteserver.shim.remote` service. The
+  [pymobiledevice3 implementation](https://github.com/doronz88/pymobiledevice3/blob/10194d12e7cf17453887b7ac3d46e1b85b5a057a/pymobiledevice3/services/accessibilityaudit.py)
+  exposes focus traversal but omits the property-query wrapper and `AXAuditNode_v1` decoding used
+  in this probe. On two Settings elements the same queries returned labels/traits but only a single
+  hierarchy node and no class/address; the target-dependent restriction has no established cause.
+  `Frame`/`AXFrame` probes returned nil. Preview + screenshot drew the selected element's green
+  outline, but returned display geometry without a structured element rectangle. Normalized-point
+  hit-test probes returned nil; their arguments were constructed from host disassembly, not captured
+  from a successful Inspector hit test. See [captured protocol](protocol.md#accessibility-inspector-and-axaudit-2026-09-22).
+  A follow-up focus cycle in Lab exported 36 focus elements and a 131-node merged hierarchy, but
+  automatically scrolled the page and accumulated two distinct heading tokens. It is a temporal
+  union, not a complete snapshot. Recursive expansion stopped on a timeout; that run also returned
+  Lab's root while screenshots showed Settings. After restoring Lab, a fresh session had app-state
+  events but no focus seed within three seconds. These failures have no established root cause.
+  Rechecking individual replies shows 14–46 nodes per focus query; the app-root query already
+  occurred and returned only two nodes. The missing step is not simply querying the root once.
+  Cached iOS 27 AXRuntime serialization identifies an application-root handle from a real PID,
+  avoiding dependence on a focus event. On the returned 13 Pro, a bounded read of Lab PID 7720
+  twice reached the same 129-node/128-edge element tree, with every handle queried and no nil or
+  timeout. The tool used each node's own reply for its children; two extra edges in ancestor-context
+  replies would otherwise create false double parents. Before/after screenshots showed the same
+  Lab home page. This proves a usable tree for that page and build without a phone-side helper or
+  focus motion, not atomic capture or completeness across apps.
+  Offline iOS 26.5 simulator `axauditd` provides a concrete comparison: hierarchy replies contain
+  local children/siblings and an ancestor chain, child enumeration is capped, and attributes have
+  target-policy and focus-history filters. Its parameterized handler immediately returns nil.
+  These are simulator-specific constraints, not an established cause of the physical iOS 27
+  failures. See [root and hierarchy evidence](protocol.md#axaudit-root-handles-and-hierarchy-limits-2026-09-22).
+- Offline inspection of DDI 27A5252f / XCTest 25227 now traces XCTest snapshots to device
+  `testmanagerd`: `XCTestSession` → `XCAXManager_iOS` → `XCTAutomationSupport` → AXRuntime's
+  parameterized snapshot query. A separate `com.apple.dt.testmanagerd.remote.automation` service
+  directly implements snapshot and attribute RPCs over DTX. Its launchd declaration requires
+  `AppleInternal`, and startup only registers its listener when
+  `os_variant_allows_internal_security_policies("com.apple.testmanagerd")` succeeds. The ordinary
+  `.remote` service instead creates a harness/control session; a successful control handshake is
+  not proof of snapshot access. See [service and authorization evidence](protocol.md#xctest-snapshot-service-boundary-2026-09-22).
+  This establishes a specific restricted implementation, not universal impossibility of a
+  runner-free AX reader. On the 13 Pro, RSD advertised the direct automation endpoint, but its
+  TCP connection did not answer a generic DTX capability handshake or a bounded proxy-channel
+  request; ordinary testmanagerd `.remote` completed the same DTX handshake. This does not prove
+  the direct endpoint's exact rejection reason or exclude a different Apple client exchange.
+  `remoteAXService` was also advertised but closed during RemoteXPC handshake. See the dated
+  verification record. AXAudit remains the demonstrated element-tree path.
+
+Element trees have now been obtained without installing a phone-side app on two devices: the
+13 Pro's existing Lab page and, after Developer Mode/DDI became available, the 12 mini's
+SpringBoard and Calculator pages. The 12 mini yielded bounded, zero-nil graph closure twice per
+target; Calculator's 45-node tree was identical in both runs. This closes the initial
+feasibility question for those seeds. Arbitrary-app coverage, geometry and snapshot atomicity
+remain open. Requested Opus 5, Grok 4.7 and DeepSeek Flash
+consultations returned candidates; their suggestions were treated as hypotheses, not protocol
+evidence. A successful hierarchy RPC or a closed graph alone does not establish completeness.
+
+Pending experiments, in order of current evidence:
+
+1. Convert the research-only PID-root and own-query-child traversal into a product command only
+   after defining foreground/target synchronization, partial-result reporting, node lifetime and
+   supported-device gates. On the 12 mini, the disabled-state `lockdownd` could not find the AXAudit
+   Mach service; enabling Developer Mode, rebooting and mounting DDI restored capabilities and
+   hierarchy reads. Those simultaneous changes do not isolate the exact launchd gate. Two
+   SpringBoard replies repeated a child within the same parent; deduplicate identical child
+   tokens before testing single-parent structure. A Calculator node press submitted without a
+   visible effect and candidate `Frame`/`AXFrame` reads returned nil, so geometry and node actions
+   remain research rather than a product contract.
+2. Decode the full XCTest automation client exchange only if further evidence shows its session
+   can be authorized; the generic DTX handshake and proxy-channel tests did not reach that state.
+3. Determine the physical iOS 27 parameterized AXAudit handler before proposing attribute 95006
+   forwarding. The existing typed descriptor is not a generic numeric-attribute tunnel.
+4. Investigate iPhone Mirroring's separate accessibility channel if the AXAudit path is too
+   restricted. macOS 26.5.1 `ScreenSharingKit` uses `AXPHostCacheManager` and an
+   `AXPHostCacheOverlayView` whose `accessibilityChildren` returns translated remote AX children.
+   Host session authorization, payload bytes and external tree retrieval remain untested. No
+   Mirroring session was started in this investigation.
+
 ## Remaining work
 
 1. Complete the supported release-matrix gate with an available host/device pair.
