@@ -80,11 +80,12 @@ def package(output, release_tag=None):
         # Hash only after install has finished its ad-hoc signing.
         hashes = {p: hashlib.sha256((prefix / p).read_bytes()).hexdigest() for p in sorted(INSTALL_FILES | {"LICENSE"})}
         info = {
-            "kind": kind, "version": version, "releaseTag": release_tag, "commit": revision,
+            "schemaVersion": 1, "kind": kind, "version": version, "releaseTag": release_tag, "commit": revision,
             "pullRequestHead": os.environ.get("IPB_PR_HEAD") or None,
             "runUrl": (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
                        if os.environ.get("GITHUB_RUN_ID") else None),
-            "os": run("sw_vers"), "architecture": run("uname", "-m"),
+            "os": {key.strip(): value.strip() for key, value in (line.split(":", 1) for line in run("sw_vers").splitlines())},
+            "architecture": run("uname", "-m"),
             "xcode": run("xcodebuild", "-version"),
             "coreDevice": plistlib.loads(Path("/Library/Developer/PrivateFrameworks/CoreDevice.framework/Resources/Info.plist").read_bytes()).get("CFBundleVersion"),
             "files": hashes,

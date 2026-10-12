@@ -23,7 +23,7 @@ fixtures. These tests use host mocks; no physical device or real clipboard is ac
 `scripts/package_test_build.py` stages the existing `make install` layout and adds the MIT
 license, build metadata and trial instructions. Only ipb-owned files are included. The
 package records the actual checkout commit (a PR merge commit on pull_request), PR head,
-OS/Xcode/CoreDevice versions and file hashes. Install-time signing finishes before hashing.
+OS/Xcode/CoreDevice versions and file hashes (`schemaVersion: 1`; OS fields are structured). Install-time signing finishes before hashing.
 CI checks ARM64 slices, signatures, the exact file list, extraction and host startup of
 all three helpers. It then uploads the tarball, SHA256, BUILD_INFO.json and TEST_PACKAGE.md
 as an Actions artifact retained for 14 days.
@@ -85,7 +85,7 @@ while that remains open; a release must not be described as validated until it p
    inspect downloaded-copy behavior, and review the draft notes/requirements. Publish
    manually only after these results are satisfactory. A green candidate job alone is
    not approval to publish. No Developer ID credential or Apple component is bundled.
-4. In `ipbtools/homebrew-ipb`, dispatch **Prepare stable formula** with the published tag.
+4. In `ipbtools/homebrew-ipb`, dispatch **Prepare stable Homebrew formula** with the published tag.
    That tap-owned workflow checks the public release/assets and Homebrew installation,
    then pushes a candidate branch and supplies a compare link. Create/review/merge the
    formula PR from that link. The tap's default token cannot create PRs under its current
