@@ -17,15 +17,17 @@ and installed explicitly; the full supported matrix remains open.
 
 **PR submission decision:** the user now requests compressing the accumulated50 commits
 and opening a PR. A separate segmented `codex/devicehub-alignment-pr` branch preserves
-`codex/devicehub-alignment` and its original history. Product code matches09bc118; the full
+`codex/devicehub-alignment` and its original history. The initial 14-segment product tree matches09bc118; follow-up CI/release work adds
+host packaging and stable-update support without changing the AX/HID/media protocol. The full
 supported matrix remains open, so [PR #1](https://github.com/ipbtools/ipb/pull/1) is Draft.
 The default-branch inventory found zero workflows in source/tap. The user has since authorized
 PR CI builds/test packages first and Release/Homebrew automation only after an actual passing
 build and downloaded-package verification. The PR workflow and package verifier are implemented;
-the first cloud build and downloaded-package host startup pass on macOS27. The follow-up
+native build, host tests, package checks and actual precompiled Homebrew install/test pass
+on macOS27 in [run 38244949806](https://github.com/ipbtools/ipb/actions/runs/38244949806). The follow-up
 release/tap automation prepares drafts and candidate branches, with physical acceptance and
-publication still separate. [Releasing](releasing.md) defines the current sequence. No
-Release or tap publication has occurred.
+publication still separate. [Releasing](releasing.md) defines the current sequence. The paired [tap PR #1](https://github.com/ipbtools/homebrew-ipb/pull/1) passes its
+offline contract/syntax CI. No Release, main merge or stable tap-target update has occurred.
 
 Current user guides are [README installation](../README.md#installation-channels),
 [UI](ui.md), [mirror](mirror.md) and [the document map](README.md). Protocol facts and dated
@@ -6851,3 +6853,43 @@ remains open. Earlier supplementary real-device and installed results retain the
 Local build/host checks for the copied product tree are retained outside Git; no new phone
 interaction, runner installation, signing credential, tag/release, main merge or tap update is
 performed. Raw squash/tree comparisons and submission checks stay in local ipb state.
+
+## 2026-10-12 — PR CI test packages and release preparation
+
+User decision: first connect PR build/test packages and run them; after that succeeds,
+connect Release/Homebrew preparation. The original research branch remains unchanged.
+
+**Confirmed initial packaging check failure:** native build and host tests passed, but
+archive verification invoked unsupported `ipb help ui`/`help mirror` topics and returned2.
+The reachable trigger is packaging any staged install. The verifier now uses actual
+`help`/`help hid`, version and no-device-argument startup checks; rc2 is expected only
+for each native helper's specific missing-argument diagnostic. No phone command is sent.
+
+**Cloud/package scope:** source run38244949806 passes at head93cdf7f and PR merge202d40b,
+with macOS27.0.1/26A434, Xcode27.0/27A266a, CoreDevice651.19 and ARM64. It builds all native
+targets, runs existing host regressions plus six release safeguards, verifies the staged
+archive/signatures/hashes, and installs/tests the actual precompiled archive via Homebrew
+on its disposable VM. Installed product hashes match. `schemaVersion:1` records structured
+OS fields and the exact built/PR commits. Raw logs/packages remain outside Git.
+
+The first successful archive from run38242939599 was downloaded, its archive and every
+file hash checked, then extracted on Mac-M2 macOS27.2/26B5091g/CoreDevice642.15. CLI
+version/help and all three native helpers start with expected no-argument results; no phone
+input/socket, GUI mirror window, app installation or credentials are involved. This proves
+host startup, not device functionality or browser-download quarantine handling.
+
+**Publishing scope:** tag/manual source automation requires an existing VERSION-matching
+mainline tag, repeats host/package/Homebrew checks and prepares only a Draft Release.
+It refuses to overwrite published assets. The generated stable formula installs the
+archive; `ipb update` distinguishes stable `brew upgrade` from existing HEAD reinstall.
+The tap's independent manual workflow requires a published standard release, checks exact
+assets/build metadata/checksums/main ancestry, tests installation and pushes a formula-only
+review branch. It does not require a cross-repo PAT or alter the tap's PR-creation policy.
+Tap run38245081156 passes six offline asset fixtures and Ruby syntax. A cross-repository
+parser control uses the real final CI payload with only tag/release/ancestry replies mocked;
+it passes, but no actual release publication or tap preparation dispatch is claimed.
+
+Both changes are Draft PRs. Existing supported physical HID/media/AX acceptance remains
+open; no main merge, real tag, GitHub Release or stable tap-target update occurs in this run.
+Local references: `~/.local/state/ipb/20261012-ci-release/`; procedures are in
+[releasing.md](releasing.md). Earlier dated records retain their bytes.

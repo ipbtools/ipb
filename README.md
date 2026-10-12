@@ -40,8 +40,8 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 ## Installation channels
 
-This README describes the `codex/devicehub-alignment` source branch. As checked on
-2026-10-12, `ipb ui`, the Bilibili text fix and the new mirror keyboard/clipboard work are
+This README describes the alignment work submitted in [PR #1](https://github.com/ipbtools/ipb/pull/1),
+with the research history retained on `codex/devicehub-alignment`. As checked on 2026-10-12, `ipb ui`, the Bilibili text fix and the new mirror keyboard/clipboard work are
 on that branch; they are not on `main`. There is no tagged GitHub release or downloadable
 release binary. PR CI produces temporary test packages; see [download and verification instructions](docs/releasing.md#pr-test-packages). `VERSION=0.2.0` alone does not identify these branch changes.
 

@@ -5,9 +5,9 @@
 PR CI is implemented in [.github/workflows/ci.yml](../.github/workflows/ci.yml).
 It runs on pull requests to main, pushes to main and manual dispatch. Native build and
 host tests use GitHub's ARM64 `xcode-27` runner with Xcode 27.0 selected explicitly.
-The first cloud build and downloaded-package host startup passed:
-[run 38242939599](https://github.com/ipbtools/ipb/actions/runs/38242939599), macOS 27.0.1 /
-Xcode 27.0 / CoreDevice 651.19. The same archive starts on Mac-M2 macOS 27.2 / CoreDevice
+Native build, host/package checks and actual precompiled Homebrew install/test passed:
+[run 38244949806](https://github.com/ipbtools/ipb/actions/runs/38244949806), macOS 27.0.1 /
+Xcode 27.0 / CoreDevice 651.19. The first verified archive from run38242939599 starts on Mac-M2 macOS 27.2 / CoreDevice
 642.15. These are host/package results, not physical device acceptance.
 
 No tag or GitHub Release has been published. VERSION remains `0.2.0`; Homebrew HEAD
@@ -85,7 +85,7 @@ while that remains open; a release must not be described as validated until it p
    inspect downloaded-copy behavior, and review the draft notes/requirements. Publish
    manually only after these results are satisfactory. A green candidate job alone is
    not approval to publish. No Developer ID credential or Apple component is bundled.
-4. In `ipbtools/homebrew-ipb`, dispatch **Prepare stable Homebrew formula** with the published tag.
+4. In [ipbtools/homebrew-ipb](https://github.com/ipbtools/homebrew-ipb/pull/1), dispatch **Prepare stable Homebrew formula** with the published tag.
    That tap-owned workflow checks the public release/assets and Homebrew installation,
    then pushes a candidate branch and supplies a compare link. Create/review/merge the
    formula PR from that link. The tap's default token cannot create PRs under its current

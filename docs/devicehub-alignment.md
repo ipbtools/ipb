@@ -526,8 +526,8 @@ Homebrew HEAD still tracks `main`; source-branch availability does not mean a ta
 The user requested compressing the accumulated50 commits and opening a PR. Keep
 `codex/devicehub-alignment` as the research history; submit the tested product tree through
 `codex/devicehub-alignment-pr` as14 topic commits plus a submission/release-document commit,
-based on main f2e85a6. The human explicitly rejected an all-in-one squash: “不是 1 个”. Product source is unchanged
-from09bc118; the initial submission changes document the history/release boundary and trim
+based on main f2e85a6. The human explicitly rejected an all-in-one squash: “不是 1 个”. The initial 14-segment product tree matches
+09bc118; the initial submission changes document the history/release boundary and trim
 guide EOF whitespace. Follow-up CI changes add build/test/package automation without altering
 the device protocol or input implementation. Retain all dated verification records and protocol sources.
 
