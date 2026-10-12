@@ -9,6 +9,10 @@ live JPEG screen stream (`ipb stream`) and an interactive mirror window (`ipb mi
 `xcrun devicectl` for everything Apple already exposes: install, launch, files, clipboard,
 location, screenshots.
 
+`ipb ui` reads an application's accessibility graph, numerical element frames and state over
+the DevicesApp raw DTX service. It uses an optional host Python backend; it installs nothing
+on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
+
 The interaction path is verified, and the CLI uses DeviceHub's own async descriptor-discovery path
 to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
 
@@ -74,7 +78,66 @@ compares the installed `HEAD-<sha>` against the remote HEAD and reinstalls only 
 refresh and answers "already installed" when the remote has moved. An install predating this fix
 runs the old wrapper and will report a false success once; `brew reinstall ipb` lands the new one.
 
-`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`, `libexec/ipb-helper`, `libexec/ipb-video`, `libexec/ipb-mirror`, `share/ipb/VERSION`, `share/ipb/smoke_matrix.sh`, `share/zsh/site-functions/_ipb`.
+`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`,
+the helpers in `libexec/` (including the optional AX backend), `share/ipb/VERSION`,
+`share/ipb/requirements-ax.txt`, `share/ipb/smoke_matrix.sh`, and `share/zsh/site-functions/_ipb`.
+
+### Application elements (`ipb ui`)
+
+The host backend needs Python 3.11+ and the verified `pymobiledevice3==11.10.2`.
+It uses an existing USB pairing, Developer Mode and the advertised iOS 27 AX service.
+It does not pair automatically or fall back to another phone/transport. Other ipb commands
+do not depend on this optional Python package.
+
+Create an optional environment once (from a source checkout; an installed copy puts the
+requirements file in `<prefix>/share/ipb/requirements-ax.txt`):
+
+```sh
+python3.12 -m venv "$HOME/.local/share/ipb/ax-venv"
+"$HOME/.local/share/ipb/ax-venv/bin/python" -m pip install -r requirements-ax.txt
+ipb -s '12 mini' ui
+ipb -s '12 mini' ui --json > page.json
+```
+
+ipb prefers that environment (or `$XDG_DATA_HOME/ipb/ax-venv` when set), then `python3`.
+`IPB_AX_PYTHON=/path/to/python` selects another existing environment. Installation/update
+does not install Python packages automatically.
+
+By default, a read-only hit test at the screen centre selects the displayed application's
+PID. `--point 0.3 0.4` chooses another normalized point; `--pid 1234` selects a known app
+explicitly, including a background app. A keyboard/overlay can select a different process.
+Hit-test selection currently requires portrait `rot0`; explicit PID reads retain the raw
+AX coordinate space. Failed or nil hit tests fail the command, with no automatic replay.
+
+JSON schema 1 contains `snapshotId`, application PID/selection, a `nodes` array with
+snapshot-local `id`, `parentId`, ordered `children`, depth and available attributes:
+label, identifier, value, description, placeholder, frame, role/subrole codes, traits and
+enabled/focused/selected/visible flags. Frames are **device logical points**. Traits are a
+decimal string to preserve all 64 bits. Unavailable properties are omitted; `CGRectNull`
+is reported as `frameUnavailable`. Parent edges come from actual AX children, and navigation
+order is separate. IDs are valid only within that output; they are not reusable action tokens.
+
+Collection is serial and bounded (512 nodes, depth 32, 30 s plus bounded cleanup).
+`atomic=false` is intentional: pre/post checks confirm root/frame/children and selected PID
+stability, not an atomic page snapshot. Missing children, changed roots, exhausted budgets
+or cleanup failures return nonzero without a partial tree. The cleanup field records the
+known phone-close-before-stop-ack case separately from acknowledged teardown.
+
+For `ui`, exit 2 means usage/Python/dependency failure, 3 means device selection or
+UUID-to-USB resolution failure, 5 means timeout/cancellation, and 1 means tunnel,
+protocol, changed/incomplete graph or cleanup failure. `SMOKE_AX=1` adds the read gate
+to the normal smoke matrix; `SMOKE_AX_ONLY=1` runs only that gate.
+
+On the tested 12 mini Settings page, AX returns 13 nodes while XCTest returns 176. The
+additional nodes include structural containers, icon/text descendants, hidden rows and a
+duplicate Dictate node. Richer attributes do not restore that backing hierarchy: Parent was
+absent and navigation children matched ordinary children. The integration exposes the real
+AX graph without inventing containers. See [protocol findings](docs/protocol.md#settings-structure-and-richer-attributes-2026-10-12).
+
+Real-device development verification covers macOS 26.5.1 locally and the AX helper on macOS
+27.2 through an SSH-forwarded USB connection. The latter host still has Xcode 26.4; this does
+**not** close the full supported macOS 27 + Xcode 27 smoke gate. MCP integration and direct
+semantic AX actions are not implemented by this command.
 
 ## Build
 

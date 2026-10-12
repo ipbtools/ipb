@@ -1,0 +1,2 @@
+# Optional host dependency for ipb ui; this version is the protocol/API oracle.
+pymobiledevice3==11.10.2

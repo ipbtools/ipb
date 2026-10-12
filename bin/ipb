@@ -73,6 +73,7 @@ screen
   stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout
                                                live JPEG frames, no DeviceHub
   mirror [--seconds S] [--csv PATH]            live screen, mouse, shortcuts and numeric keypad (GUI)
+  ui [--json] [--pid PID | --point X Y]        read the application's AX tree, frames and state (USB)
 
 apps and processes (devicectl)
   apps                                         installed apps
@@ -431,6 +432,45 @@ PY
   return $rc
 }
 
+query_ui() {
+  local script="$ROOT/Sources/ipb_ax.py" interpreter="${IPB_AX_PYTHON:-}"
+  if [[ -z "$interpreter" ]]; then
+    interpreter="${XDG_DATA_HOME:-$HOME/.local/share}/ipb/ax-venv/bin/python"
+    [[ -x "$interpreter" ]] || interpreter=python3
+  fi
+  command -v "$interpreter" >/dev/null 2>&1 || { print -u2 "ipb: IPB_AX_PYTHON must name a Python executable"; return 2; }
+  [[ -r "$ROOT/libexec/ipb-ax.py" ]] && script="$ROOT/libexec/ipb-ax.py"
+  [[ -r "$script" ]] || { print -u2 "ipb: AX helper is missing; rebuild/install ipb"; return 2; }
+  if [[ "$*" == *--help* || "$*" == '-h' ]]; then
+    "$interpreter" "$script" "$@"
+    return $?
+  fi
+  DEVICE="$(resolve_device)" || return 3
+  local json udid rc=0
+  json="$(mktemp -t ipb-ui-device)"
+  devicectl list devices --timeout 10 --json-output "$json" --quiet >/dev/null || rc=$?
+  if (( rc )); then rm -f "$json"; return 3; fi
+  udid="$(python3 - "$json" "$DEVICE" <<'PY'
+import json, sys
+try:
+    devices = json.load(open(sys.argv[1]))['result']['devices']
+    matches = [d for d in devices if d.get('identifier') == sys.argv[2]]
+    if len(matches) != 1:
+        raise ValueError('selected device is absent or ambiguous')
+    udid = matches[0]['hardwareProperties']['udid']
+    if not isinstance(udid, str) or not udid:
+        raise ValueError('selected device has no USB identifier')
+    print(udid)
+except (KeyError, ValueError, TypeError, OSError) as error:
+    print('ipb: cannot resolve AX device: ' + str(error), file=sys.stderr)
+    sys.exit(3)
+PY
+  )" || rc=$?
+  rm -f "$json"
+  (( rc == 0 )) || return $rc
+  PYTHONDONTWRITEBYTECODE=1 IPB_AX_DEVICE_ID="$DEVICE" IPB_AX_UDID="$udid" "$interpreter" "$script" "$@"
+}
+
 descriptor_output() {
   run_uhid cd_connected_descriptors_async_raw
 }
@@ -781,11 +821,14 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror) DEVICE="" ;;
+  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror|ui) DEVICE="" ;;
   *) DEVICE="$(resolve_device)" || exit 3 ;;
 esac
 
 case "$cmd" in
+  ui)
+    query_ui "$@"
+    ;;
   tap|click)
     [[ $# -eq 2 ]] || { usage; exit 2; }
     service_id="$(resolve_uhid_service_id)"

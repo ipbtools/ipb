@@ -76,7 +76,8 @@ Calculator's initial bulk graph has 24 nodes/24 rectangles; explicit application
 Settings main (13/13), Battery (32/32), Home (29/29) and ordinary 哔哩哔哩 (40/40, including
 its login modal/numeric keyboard). Fresh node-centre HID taps open the
 Calculator History sheet and Settings Battery page, with updated AX trees and screenshot
-confirmation. This is a working research probe, not an implemented product/MCP command.
+confirmation. That protocol probe established this route; `ipb ui` now integrates the
+scoped AX graph and attributes described below. MCP integration remains separate.
 
 The user now selects **“那你看看能不能用12mini做测试”**. On the local USB-connected
 iPhone13,1 / iOS 27.0 / 24A437, existing pairing and a CoreDeviceProxy userspace RSD
@@ -110,7 +111,43 @@ not mean final authorization failed. No product code is changed by this benchmar
 The user subsequently chose **“先看 12 mini 结果”**. Keep this completed comparison as
 the current baseline and defer the 13 Pro repeat; resume it only after renewed user
 readiness and successful unlock. Supported-host validation, arbitrary-app coverage,
-richer attributes and snapshot-generation semantics remain required before CLI/MCP integration.
+richer coverage and snapshot-generation semantics remain open; the CLI integration below
+exports these limits instead of claiming an atomic/full backing view tree.
+
+### AX CLI integration
+
+The user requests investigation of Settings AX 13 versus XCTest 176, richer hierarchy/fields,
+then integration when sound. The residual ledger is 121 structural entries, 19 text,
+19 images, 3 buttons (two invisible rows plus one duplicate Dictate entry), and 1 Switch.
+Parent is absent and navigation children equal ordinary children; the graph stays depth 1.
+AXP 52 maps to native snapshot attribute 95006, but nil, empty and source-informed bounded
+options return nil/error 0. Cause remains open; no guessed container hierarchy is generated.
+
+`Sources/ipb_ax.py` and `Sources/ax_archive.py` implement one-shot `ipb ui [--json]` on the
+captured raw DTX route. `bin/ipb` resolves the selected UUID to its exact USB identifier and
+passes it through internal environment values. Optional pinned pymobiledevice3 11.10.2 owns
+one USB userspace RSD: existing pairing only, no fallback or Runner. This host dependency
+is separate from native HID/media helpers; install copies the backend/requirements without
+silently installing Python packages. README and completion describe it.
+
+Output retains actual Children edges and separate navigation order, available label/value/
+placeholder, role/subrole codes, traits, enabled/focused/selected/visible flags and logical
+frames. IDs are snapshot-local. Missing properties stay absent; missing Children fails the
+capture. Queries are serial, with node/depth/time/byte bounds and no partial JSON on failure.
+Root/PID/effective-display checks detect observed changes; `atomic=false` remains explicit.
+Direct AX actions and MCP are not implemented. Android/iOS apps, firmware, schema/rpc and
+audio repositories are unaffected: this is a host ipb observation command only.
+
+Confirmed fixes: box objectID as an archive UID, preserve CGRectNull as unavailable, and use
+effective display bounds/pointScale instead of a status-bar hit, background-app frame or
+physical nativeSize. Regression tests cover wire/state distinctions, changed roots, missing/
+duplicate children and cleanup failure. Source and installed AX smoke pass; fresh Calculator
+and Settings reads give 24/24 and 13/13 with screenshots inspected. The final AX helper gives
+13/13 on macOS 27.2 over forwarded USB. Native inventory/toolchain prerequisites there still
+prevent the full supported Xcode 27 CLI/HID/media gate; no release-matrix pass is claimed.
+
+Rejected alternatives: synthesize XCTest containers without returned edges; read all 99
+fields despite the child timeout; infer display dimensions from a nil/CGRectNull element.
 
 Automatic bulk/frontmost selection can return unrelated PDUIApp. A native system hit-test
 request instead selects the displayed application's PID on the tested pages; the pure-Python

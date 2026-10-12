@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 # Smoke gate for ipb. Exits non-zero if any step fails.
-# usage: [DEVICE_ID=<uuid>] [SMOKE_INTERACTIVE=1] [TAP_XY="x y"] [LONG_XY="x y"] smoke_matrix.sh <repo_root> <out_dir>
+# usage: [DEVICE_ID=<uuid>] [SMOKE_INTERACTIVE=1] [SMOKE_AX=1] smoke_matrix.sh <repo_root> <out_dir>
+# SMOKE_AX_ONLY=1 runs only the new read-only AX gate; it is not the full HID/media gate.
 # Interactive iOS 27 fixture: Settings list/search; KEY_XY and KEY_CLOSE_XY override search coordinates.
 # Inspect screenshots: a material pixel change is still not semantic proof.
 set -uo pipefail
@@ -72,6 +73,35 @@ verify_literal_text() {
 }
 
 echo "host: $(sw_vers -productVersion) $(sw_vers -buildVersion)  DEVICE_ID=${DEVICE_ID:-auto}" | tee -a "$log"
+if [[ "${SMOKE_AX:-0}" == 1 || "${SMOKE_AX_ONLY:-0}" == 1 ]]; then
+  run "AX JSON" -- "$CTL" ui --json
+  print -r -- "$LAST_OUT" > "$OUT/ui.json"
+  run "AX graph contract" -- python3 - "$OUT/ui.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d['schemaVersion'] == 1 and d['atomic'] is False and d['rootStable'] is True
+assert d['scope'] == 'application-accessibility' and d['coordinateSpace'] == 'device-logical-points'
+nodes = d['nodes']; by_id = {n['id']: n for n in nodes}
+assert len(nodes) == d['nodeCount'] == len(by_id) and nodes
+roots = [n for n in nodes if n['parentId'] is None]; assert len(roots) == 1
+assert roots[0]['depth'] == 0 and any('frame' in n for n in nodes)
+visited = set(); pending = [roots[0]['id']]
+while pending:
+    ident = pending.pop(); assert ident not in visited; visited.add(ident)
+    node = by_id[ident]
+    for child in node['children']:
+        assert child in by_id and by_id[child]['parentId'] == ident
+        assert by_id[child]['depth'] == node['depth'] + 1
+    pending.extend(node['children'])
+assert len(visited) == len(nodes)
+assert d['cleanup']['connectionClosed'] and d['cleanup']['tunnelClosed']
+assert d['cleanup']['subscriptionStop'] in ('acknowledged', 'connection-closed-before-ack')
+PY
+  if [[ "${SMOKE_AX_ONLY:-0}" == 1 ]]; then
+    (( failures == 0 )) || { echo "AX SMOKE FAILED"; exit 1; }
+    echo "AX SMOKE PASSED (HID/media gate not run)"; exit 0
+  fi
+fi
 # The completion is user documentation the shell executes; a syntax error in it is silent
 # until someone presses Tab. Loading it here is host-only and costs nothing.
 run "zsh completion loads" -- zsh -c 'fpath=("$1" $fpath); autoload -Uz _ipb; autoload +X _ipb' -- "$COMPLETION_DIR"
