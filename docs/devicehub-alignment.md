@@ -181,11 +181,22 @@ Output retains actual Children edges and separate navigation order, available la
 placeholder, role/subrole codes, traits, enabled/focused/selected/visible flags and logical
 frames. IDs are snapshot-local. Missing properties stay absent; missing Children fails the
 capture. Queries are serial, with node/depth/time/byte bounds and no partial JSON on failure.
-Root/PID/effective-display checks detect observed changes; `atomic=false` remains explicit.
+The description-first policy reads raw Description 33 and queries optional Label 3 only when
+Description has no nonblank text. JSON keeps both fields distinct; the text renderer can use
+Description. Root checks use the same initial text field (33 or 3), plus frame/children;
+PID/effective-display checks detect observed changes and `atomic=false` remains explicit.
 Direct AX actions and MCP are not implemented. Android/iOS apps, firmware, schema/rpc and
 audio repositories are unaffected: this is a host ipb observation command only.
 
-Confirmed fixes: box objectID as an archive UID, preserve CGRectNull as unavailable, and use
+Confirmed fixes: a 13 Pro Bilibili title's direct Label 3 request receives no reply, while its
+geometry, Identifier, Value and Description reads work. The old command fails with the title
+visible and succeeds after it leaves the AX graph. Description-first reads retain the actual
+title and rectangle without issuing the redundant failing Label request; three visible-title
+reads pass, and Calculator/Settings-search old/new graphs and all non-Label node fields agree.
+The internal reason for the device's missing Label reply remains open. Other request failures
+still fail explicitly, now with timeout request/node/attribute context.
+
+Other confirmed fixes: box objectID as an archive UID, preserve CGRectNull as unavailable, and use
 effective display bounds/pointScale instead of a status-bar hit, background-app frame or
 physical nativeSize. Regression tests cover wire/state distinctions, changed roots, missing/
 duplicate children and cleanup failure. Source and installed AX smoke pass; fresh Calculator

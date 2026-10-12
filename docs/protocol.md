@@ -2804,6 +2804,46 @@ inventory lacks this local 12 mini; this validates the AX host runtime, not the
 full supported Xcode 27 CLI/HID/media matrix. See the
 [integration record](verification.md#2026-10-12--settings-node-delta-richer-ax-fields-and-ipb-ui-integration).
 
+### Description-first reads after a Bilibili Label timeout (2026-10-12)
+
+**Runtime evidence, supplementary macOS26.5.1 /25F80, Xcode27 B6 /CoreDevice642.15,
+USB iPhone14,2 /iOS27.0 /24A437, Bilibili9.13.0:** default centre hit test selects
+the correct Bilibili PID52460 and application/root reads succeed. With video controls
+present the root has40 children; the first17 child batches return, but the18th node
+(role14, frame x12/y436.333/width338/height22 logical points) receives no direct type5
+reply. Type11 pushes still arrive and include that same node's Description33 title.
+The original five-field batch `[8,21,3,25,53]` also times out. Fresh-session requests
+on the same live child discriminate `[8,21]`, `[8,21,25]` and `[8,21,53]` success from
+`[8,21,3]` timeout. A type2 single-attribute3 control also receives no direct reply.
+Thus this captured failure is specifically the Label3 read path, not PID selection,
+rectangle decoding, a dropped child or only the newer richer field set.
+
+**Static boundary, same physical framework UUID AA0429D2-50DA-3B83-9C2A-A8D9E752581D:**
+special-case dispatch at0x24FE14284 passes AXP ID3 to
+`_processLabelAttributeRequest:error:axpAttribute:`; at0x24FE14340 it passes33 to the
+same named helper. This does not identify a UIKit getter or explain the missing reply.
+Do not conflate Label3 with AXTitle, Description33 or XCTest type codes; the internal
+service/application cause remains open.
+
+After the title scrolls out, the original client returns17 nodes/17 frames; restoring
+the title restores the old timeout. The client now requests the existing fields except
+3 first, then requests3 separately only when33 has no nonblank text. Raw `description`
+and `label` retain their own identities; no Label is synthesized, and unqueried fields
+stay absent. JSON adds `attributePolicy="description-first"`; the text renderer may show
+Description. Root stability rechecks whichever text field was initially selected (33,
+otherwise3), frame and children. This uses the existing type5 encoding/connection,
+not bulk-cache substitution, reconnect/retry or a Bilibili-specific PID/role exception.
+
+Three restored-title reads return25 nodes/25 frames with the exact title Description
+and rectangle, taking1151–1407ms end to end. Control visibility changed between captures,
+so25 versus the initial41 is not a same-state count comparison. Calculator old/new reads
+both return24/24; Settings search with keyboard both return49/49. Their graphs and all
+non-Label node fields match. Fallback Label reads and all other request errors still
+fail if unavailable/malformed/timed out; timeout diagnostics identify type/PID/objectID/
+attributes without text payloads. These are scoped device results, not universal
+attribute safety, atomic snapshots or the macOS27 release gate. See the dated
+Bilibili record in `verification.md`; raw packets and screenshots remain local.
+
 ### Shipped caller and device receiver
 
 | Source | Identity | Decisive calls |

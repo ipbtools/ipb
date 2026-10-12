@@ -94,6 +94,7 @@ successful unlock. The October 12 native display failures remain open.
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
 | **UI element / semantic context research** | DevicesApp raw DTX returns real AX trees/frames on the 13 Pro: Calculator 24/24, History 4/4, Settings main 13/13, Battery 32/32, Home 29/29, ordinary Bilibili modal/keyboard 40/40. Native/Python bulk codecs agree; node-centre HID transitions have screenshot and tree confirmation. Automatic bulk/frontmost can select unrelated PDUIApp; explicit PID reads and system hit-test-derived PID reads work on tested pages. Pure Python fresh-session capture takes 740 ms for Calculator, 941 ms for Battery and 1744 ms for Bilibili. A launch-splash hit test returns nil/error 8 before visible-page success. This is AX graph coverage, not every UIKit view. One concurrent screenshot timeout and stop-ack closure races remain undiagnosed. Earlier Inspector/Mirroring restrictions are separate entry paths. | `ipb ui` exports the captured graph and richer fields through an optional pinned host Python backend; source/installed AX-only gates pass. Target/overlay coverage, persistent-session/MCP work and the full supported gate remain agent work. Keep one outstanding semantic read and preserve unsolicited packets. Do not use arbitrary first foreground event, replay uncertain input or claim all apps complete. The earlier target selection was **“用 13 pro 吧”**; the latest comparison decision is **“先看 12 mini 结果”**. Page-wide serial preview remains rejected. See [current protocol](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11). |
+| **Bilibili title / AX attribute timeout** | Current 13 Pro Bilibili video title is a confirmed normal-user trigger: correct PID/root and17 child reads succeed, then Label3 on the title receives no reply. Geometry/Identifier/Value reads work and Description33 has the actual title. The old helper fails with title visible, succeeds17/17 after scrolling it out, then fails again after restoring it. Internal device special-case/application cause remains open. | Description-first field selection avoids the reproduced failing Label read while retaining title/rectangle and distinct raw fields. Three visible-title reads pass25/25; Calculator24/24 and Settings-search/keyboard49/49 old/new graphs and non-Label fields match. Other Label/request failures remain fatal with request/node/field context. Not a universal attribute-safety or completeness fix; macOS27 gate remains open. |
 | **Keyboard and focused text** | Mirror now handles ordinary down/up, modifiers, repeat, host composition and text Copy/Cut/Paste on its existing FIFO. Live 13 Pro Settings search verifies Shift punctuation, exact `ipb-中文🙂 A1!`, local Mac IME composition followed by committed/copied `测试`, repeat and caret insertion. The product leaves paste prompts visible; the user explicitly authorizes this bench to allow ordinary synthetic-text paste. Final installed noninteractive smoke and host regressions pass on supplementary macOS 26.5.1 / Xcode27B6 / iOS27.0. rc0 alone remains submission only. | Scoped text/keyboard implementation is complete and installed locally. Secure fields, other apps/layouts and the supported macOS27 gate remain open. Text only, 2 MiB bound; no continuous clipboard sync or product-level automatic permission approval. |
 | **Mirror numeric controls / hidden system input** | Code implemented. The user completes 12 mini's password entry on the phone and real XCTest sources are obtained; this does not validate our mirror keypad on the secure sheet. Native Device Hub still had Connecting display during the earlier control. Agent: resolve native display path and verify the numeric panel on a secure page; the 13 Pro repeat is deferred by the latest user decision. No supported-host pass is claimed. | The latest user decision is **“先看 12 mini 结果”**. On 12 mini, human password entry and the corrected reference HTTP client yield actual XCTest sources; the temporary reference is now removed. Native Device Hub display startup and our keypad on the secure page remain unverified. Any future secure-page test needs a working input/display path and fresh human readiness. No supported-host pass is claimed. |
 | **Mirror periodic display refresh timeout** | Bench mirror runs intermittently exit 1 when the existing one-second `device info displays` refresh exceeds devicectl's five-second bound (exit 2). Reproduced with Device Hub closed and zero keyboard events; other input sessions close normally, and a later standalone display query succeeds. | Agent-fixable investigation; cause open. Keyboard-event causality is not established. Preserve the explicit failure rather than hiding stale orientation or replaying input. |
@@ -105,6 +106,11 @@ successful unlock. The October 12 native display failures remain open.
 
 ### Confirmed fixes in the current alignment work
 
+- **Bilibili title read:** unconditional Label3 requests stalled a real title node and
+  discarded the whole page. Description33 already supplies its text; the client now queries
+  Label only without nonblank Description, keeps both JSON fields distinct and preserves
+  root text/frame/child stability checks. Rectangles and the full returned child graph remain
+  required. Timeout errors identify the request/node/attributes; internal device cause is open.
 - **Mirror keyboard/text integration:** one held-usage/FIFO path now covers raw keys, repeat,
   clipboard chords and Mac IME commits. Copy → Paste reads the newly copied text; no selection
   is nonfatal and different newer Mac clipboard contents are preserved. Rotation drains input
@@ -6560,3 +6566,88 @@ final-home.png, smoke-final/, final-manifest.json and handoff.md. Raw screenshot
 snapshots and the temporary GUI bench bundle stay outside Git. The earlier dated
 verification history is checked byte-identical; only the living head and this new
 record are changed.
+
+
+## 2026-10-12 — 13 Pro Bilibili title Label timeout and description-first reads
+
+User reports that `ipb ui` fails on the current Bilibili page but succeeds after
+scrolling the title out. Same local macOS26.5.1 /25F80, Xcode27B6 /CoreDevice642.15,
+USB13Pro UUID7F2FE6E9-5423-552A-A2A2-C499F1D8672F /
+UDID00008110-0014711C3CC3801E /iPhone14,2 /iOS27.0 /24A437. Native app metadata
+confirms Bilibili9.13.0, bundle `tv.danmaku.bilianime`. Source baseline0432c82.
+The first sandboxed inventory timeout is a host execution boundary, not this app
+failure; the following captures use the actual USB/CoreDevice service access.
+
+**Reproduction and decisive discriminator:** the unmodified command times out
+around4.2s with zero JSON output. Its centre hit selects Bilibili PID52460; type1
+application and root type5 succeed. Root40 children, first17 child reads succeed;
+the18th child's type5 request gets no direct reply within3s while type11 pushes
+continue. The pushes identify that same role14 title node, frame
+x12/y436.333/width338/height22, and contain the exact video title in Description33,
+without Label3. No malformed frame/decoder/foreign-PID/graph-budget error occurs.
+The old five-field `[8,21,3,25,53]` batch also times out. Four independent fresh
+captures narrow it: `[8,21]`, `[8,21,25]` and `[8,21,53]` succeed; `[8,21,3]`
+times out. A type2 single attribute3 also receives no direct reply. Each fresh
+traversal takes its token from that session's live child list, not a saved action
+token; no timed-out connection is reused for a later semantic read.
+
+The initial screen has an ordinary ad panel over the paused video. Close its
+observed X to expose the video information; old `ipb ui` still fails with the
+title visibly present. One bounded swipe scrolls it out; old UI now returns
+17nodes/17frames in1092ms with no title. Scroll back restores the title and the
+old0432c82 backend again fails, including a later4056ms control after the new
+backend has passed. Static same-seed special-case dispatch sends3 and33 to the
+label-named helper with distinct IDs; it does not prove which internal getter/
+callback fails. Root cause is narrowed to the device's Label3 response path;
+the deeper Apple-service versus app cause remains open.
+
+**Fix rationale and contract:** query existing fields except3 first, then query
+Label3 only without nonblank Description33. Preserve both raw field identities;
+do not synthesize a label or substitute stale bulk data. JSON adds
+`attributePolicy=description-first`; text output can display Description. Root
+stability uses the same initial text attribute (33, otherwise3), frame and child
+IDs, and keeps PID/display checks. All child edges/rectangles remain validated.
+Other optional Label/request errors are still fatal, not silently dropped or
+retried. Per-request timeout now reports type/PID/objectID/attribute IDs without
+text payloads; partial JSON is still forbidden. No role/PID/app exception or
+new wire type/ABI/transport is introduced.
+
+**Regression conclusion:** three title-visible source reads pass25nodes/25frames,
+exact title Description and native rectangle x12/y435.667/width338/height22,
+with no synthesized Label. End-to-end times1407/1249/1151ms. Video-control visibility
+changes between the initial and restored captures, so41 versus25 is not a
+same-state node-count comparison. Calculator old/new both24/24; Settings search
+with keyboard old/new both49/49. All node fields excluding intentionally
+unqueried Label, including graph/frames/state/description/value, compare equal.
+Native screenshots are inspected. One first Settings activation correctly fails
+the old client's root-change guard; a fresh capture after screenshot confirmation
+of the settled page succeeds. No retry loop or guard suppression is added.
+Calculator new stop reports the known connection-close-before-ack race explicitly;
+connection/tunnel closure succeed. Other retained passing captures acknowledge stop.
+
+16host AX wire/failure tests pass, including Description without a Label query,
+actual Label fallback, contextual timeout/fatal cleanup and changed Description-
+only/Label-only roots. Make report checks and zsh/diff checks pass; native targets
+are unchanged. Back up the installed backend, update
+`~/.local/libexec/ipb-ax.py`, and verify source/installed byte equality. Source and
+installed `SMOKE_AX_ONLY=1` gates pass on the visible-title page; the installed
+default text renderer includes the title. These are AX gates, not a full supported
+HID/media/macOS27 matrix pass. CLI argument surface/completion are unchanged;
+README/schema/current plan document the field policy.
+
+Only13Pro is operated. DVT activation explicitly uses KillExisting=false for the
+existing Calculator/Settings regression and restores the original BilibiliPID52460.
+Final screenshot confirms the same video with title visible. No XCTest/Runner/app
+install/uninstall, phone setting/account/certificate/passcode change, credential
+entry or new pairing is used. Owned temporary pairing caches/connections close.
+Other nodes/apps can still fail their own requests; this does not prove universal
+AX coverage or fix the independent native display-timeout cause.
+
+Raw snapshots, packets, screenshots, ad hoc probes, installed backup and local
+handoff stay outsideGit in `~/.local/state/ipb/20261012-bilibili-label/`, initially
+captured under `/private/tmp/ipb-ui-bilibili.4HuONi/`. References: trace-before/,
+before-geometry/label/identifier/value/, single-label-before/, visible-fixed-results.json,
+hidden-old.json, app-regressions.json, settings-regression.json, smoke-source/,
+smoke-installed/, final-title-visible.png and final-manifest.json. Older dated
+verification history is checked byte-identical; only the living head and this
+new problem/fix record change.

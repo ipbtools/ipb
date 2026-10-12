@@ -117,8 +117,16 @@ decimal string to preserve all 64 bits. Unavailable properties are omitted; `CGR
 is reported as `frameUnavailable`. Parent edges come from actual AX children, and navigation
 order is separate. IDs are valid only within that output; they are not reusable action tokens.
 
+`attributePolicy="description-first"` queries Description before the optional Label field.
+When Description contains text, Label is not requested; otherwise a separate Label read is
+made. This avoids a reproduced iOS AX Label timeout on Bilibili's video title. JSON preserves
+`description` and `label` separately and omits fields not queried/returned. The text tree shows
+Label, then Description, then Identifier. Trees and rectangles are still fully validated;
+an actual request timeout fails with its request type, node identity and attribute IDs.
+
 Collection is serial and bounded (512 nodes, depth 32, 30 s plus bounded cleanup).
-`atomic=false` is intentional: pre/post checks confirm root/frame/children and selected PID
+`atomic=false` is intentional: pre/post checks confirm root text (Description, or Label when
+Description has no text), frame/children and selected PID
 stability, not an atomic page snapshot. Missing children, changed roots, exhausted budgets
 or cleanup failures return nonzero without a partial tree. The cleanup field records the
 known phone-close-before-stop-ack case separately from acknowledged teardown.
