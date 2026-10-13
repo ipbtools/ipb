@@ -3,8 +3,8 @@
 This source revision provides `ipb ui --deep` to read an application's native
 deep accessibility snapshot, numerical element frames and state over DevicesApp raw DTX.
 `ui hit-test` reads the element at a point; `ui press` activates a freshly resolved identifier.
-Default `ipb ui` retains the ordinary AXChildren graph. Released `v0.2.0` does not include
-the deep/state/action additions; use a source revision containing this feature.
+Default `ipb ui` retains the ordinary AXChildren graph. `v0.3.0` includes the
+deep/state/action additions; earlier `v0.2.0` has only ordinary AXChildren reads.
 See the [installation channels](../README.md#installation-channels) for stable and `--HEAD`
 packages.
 

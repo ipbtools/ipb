@@ -6,6 +6,21 @@
 
 ### Distribution and documentation scope (checked 2026-10-13)
 
+**v0.3.0 release preparation:** The user now explicitly requests a Release containing
+PR#2's deep AX and element operations, stable Homebrew update and local installation.
+The selected implementation is merged main6b84247; source behavior is unchanged by this
+version/documentation bump. Repeat candidate native build/host/package/Homebrew checks,
+review and publish the draft, then merge the verified stable tap formula. Existing
+13Pro source/installed/forwarded AX and Calculator action controls remain scoped evidence.
+The full supported native host/device gate stays open; this is a v0.3.0 publication
+exception, not a new supported matrix entry. Local macOS26.5.1 uses the same tag's source
+build in its existing manual prefix; the stable prebuilt formula's macOS27 guard stays.
+Current release links: [v0.3.0](https://github.com/ipbtools/ipb/releases/tag/v0.3.0),
+[release process](releasing.md). Exact final workflow/asset/install references are retained
+outside Git in `~/.local/state/ipb/20261013-v0.3.0-release/`.
+
+**Previous v0.2.0 process:**
+
 Source PR #1 is merged; the tagged release commit is `ac19b3fd4144b1b270ea1526af2cbbfcce884bfb`, and
 `v0.2.0` targets that commit. Tap PR #1 is merged. Main CI passed in [run 38338717398](https://github.com/ipbtools/ipb/actions/runs/38338717398);
 the formal native build/package workflow passed in [run 38338803091](https://github.com/ipbtools/ipb/actions/runs/38338803091)
@@ -7201,3 +7216,25 @@ segmented history with a merge commit. No Release or Homebrew publication is aut
 by this exception. Full supported native HID/media/CLI-selection/interactive acceptance,
 fresh-device Automation Mode dependence and the previously listed research limits remain
 open. Final merge/CI identifiers are retained in the local handoff outside Git.
+
+
+## 2026-10-13 — v0.3.0 publication scope and preparation
+
+The user explicitly requested “发一版包含 deep AX 和元素操作的新 release，Homebrew
+也一起更新吧，我本机装上试下” after the same-page/action findings and PR#2 adoption.
+Version0.3.0 contains that reviewed implementation; merged base6b84247 and its main
+CI38400228211 are verified. This preparation changes only VERSION and guides. The Release
+candidate must repeat native/host/package/hash/Homebrew checks before publication;
+the stable tap must validate the published assets and installation before its formula
+merges. Preserve exact final run/asset/package/install facts in the Git-external local
+handoff `~/.local/state/ipb/20261013-v0.3.0-release/`.
+
+The full supported native macOS27 device gate remains open. The explicit new publication
+request is scoped to these AX controls plus candidate/package/Homebrew verification;
+it does not reset the matrix or certify all HID/media/interactive behavior. The user's
+current shell runs a manual~/.local/bin/ipb0.2.0 while Homebrew has an older HEAD keg.
+Stable prebuilt formula deliberately refuses this macOS26.5.1 host; update its existing
+manual install from the exact release tag and configure the optional pinned AX environment.
+Do not weaken the guard or silently change the support matrix. A checksum-verified old
+v0.2.0 helper declares minOS27 and starts its host-only service-ID path on26.5.1; this
+limited observation does not prove full binary compatibility or warrant a guard change.
