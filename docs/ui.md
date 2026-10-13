@@ -2,8 +2,9 @@
 
 This source revision provides `ipb ui --deep` to read an application's native
 deep accessibility snapshot, numerical element frames and state over DevicesApp raw DTX.
+`ui hit-test` reads the element at a point; `ui press` activates a freshly resolved identifier.
 Default `ipb ui` retains the ordinary AXChildren graph. Released `v0.2.0` does not include
-`--deep`; use a source revision containing this feature.
+the deep/state/action additions; use a source revision containing this feature.
 See the [installation channels](../README.md#installation-channels) for stable and `--HEAD`
 packages.
 
@@ -48,12 +49,13 @@ records, while `uniqueElementCount` counts native handles. `ordinaryAXNodeCount`
 ordinary accessible elements whose state was supplemented. IDs are valid only within
 that output; they are not reusable action tokens.
 
-Native snapshot fields include label, identifier, value, frame and traits. Frames are
+Native snapshot fields include label, hint, identifier, value, frame, traits and native AX
+visibility (2025). `stateScope="native-visible+ordinary-state"` describes default deep output. Frames are
 **device logical points**; traits are decimal strings preserving all 64 bits. Native
 class/type strings (5003/5004) and bundle ID (3003) retain their numeric keys under
 `nativeAttributes`. They do not define XCTest element types. Unavailable properties are
 omitted; `CGRectNull` is reported as `frameUnavailable`. Structural records may have no
-text or state. The text renderer shows Label, Description, Identifier, then native class text.
+text or additional state. The text renderer shows Label, Description, Identifier, then native class text.
 
 For `--deep`, `attributePolicy="native-snapshot+description-first"` supplements ordinary
 accessible elements with description, placeholder, role/subrole and enabled/focused/selected/visible
@@ -63,6 +65,16 @@ on Bilibili. Native snapshot label 2001 is returned directly through the snapsho
 not a renamed Description. `attributeSource` distinguishes snapshot-only records from
 `native-snapshot+AXAttributes`. Native snapshot fields retain precedence. State fields
 are not invented for the extra structural records.
+
+Use `--deep --full-state` to supplement every unique snapshot-only handle with the proven
+enabled/focused/selected/visible, placeholder and role/subrole attributes. Repeated path
+records share one read. `stateScope="all-native-handles"` and
+`attributePolicy="native-snapshot+description-first+structural-state"` identify this mode;
+missing fields remain omitted and snapshot fields retain precedence. This costs one extra
+request per snapshot-only handle: the same-page Settings controls took about 3.5 s versus
+1.8 s for default deep, excluding fresh tunnel/import startup. Larger pages remain subject
+to the 30 s budget. Native AX visibility and focus are not XCTest visibility/focus; false
+values are preserved even when XCTest reports true.
 
 Parent edges come from the actual native snapshot. Navigation order and reported AX parent
 are separate handle relations. Ambiguous references to repeated handles are omitted and
@@ -90,26 +102,70 @@ reads are opt-in. They fail explicitly rather than silently returning shallow da
 
 For `ui`, exit 2 means usage/Python/dependency failure, 3 means device selection or
 UUID-to-USB resolution failure, 5 means timeout/cancellation, and 1 means tunnel,
-protocol, changed/incomplete graph or cleanup failure. `SMOKE_AX=1` adds the read gate
+protocol, changed/incomplete graph or cleanup failure. For `ui press`, any failure after
+submission returns **6**, preserving accepted/refused/unknown status and warning against
+automatic retry. Success reports `nativeAccepted=true`, `effectVerified=false`: observe
+the page again to establish the effect. `SMOKE_AX=1` adds the read gate
 for both ordinary and deep output to the normal smoke matrix; `SMOKE_AX_ONLY=1` runs only that gate.
+
+## Hit testing and pressing an element
+
+```sh
+ipb -s '13 Pro' ui hit-test --point 0.15 0.55 --json
+ipb -s '13 Pro' ui --deep --json
+ipb -s '13 Pro' ui press --identifier Seven --json
+ipb -s '13 Pro' ui --deep --json
+```
+
+`hit-test` returns the actual native element at the normalized point, its available fields,
+and checks the same hit identity/display again. It is read-only. It does not compute XCTest's
+`isHittable`. Portrait selection restrictions still apply; `hit-test` cannot use `--pid`.
+
+`press` resolves the displayed app and a fresh native snapshot. The exact accessibility
+identifier must match one native handle; repeated paths of that same handle are allowed.
+It confirms identifier/frame, known enabled/visible state, actual frame-centre hit identity,
+foreground PID and display before sending one native press. Missing/ambiguous/hidden/disabled,
+zero-frame or centre-occluded targets fail before sending. This conservative guard can reject
+some valid targets whose centre hits a child or whose AX visibility is false. It is not an
+XCTest hittability implementation. A previous dump's `n…` IDs cannot be used for actions.
+There is no label match, automatic replay or HID fallback. `--deep`/`--full-state` are dump
+options and cannot be combined with either operation. The single native reply confirms
+acceptance, not a generic UI transition; re-read or inspect a screenshot after success.
+
+Calculator digits and the History button have real-device effect checks. Press still lacks
+fresh-device authorization A/B and broader app coverage: the tested 13 Pro previously enabled
+XCTest Automation Mode for the reference comparison. Removing/stopping the task-owned Runner
+still permits the product action; whether prior Automation Mode is necessary is unresolved.
+The product itself installs no Runner and starts no XCTest session.
 
 ## AX and XCTest coverage
 
-The earlier 12 mini comparison used ordinary AXChildren: Settings 13 nodes versus
-XCTest 176, Calculator 24 versus 45. It established matching native frames for the
-corresponding accessible elements, while the extra XCTest entries included layout,
-text and image records. The new numeric snapshot options resolve the previous nil
-response and recover real deeper hierarchy on iPhone 13 Pro: Settings 138 records /
-135 unique handles / depth 20 and Calculator 45 / depth 16 in the research controls.
-The same-session ordinary 13/24 elements and their native frames match the snapshots.
-The installed visible-title Bilibili page also reads25 ordinary nodes versus94 deep
-records at depth19, with identical title text and native rectangle; its login/keyboard
-modal remains a separate failing deep case.
-See [native snapshot wire/source evidence](protocol.md#devicesapp-deep-snapshot-required-attributes-and-host-decoding-2026-10-13).
+Fresh iPhone 13 Pro / iOS 27.0 / 24A437 same-page comparisons, each with three AX/XCTest/AX
+rounds, match every ordered path: Calculator main **45/45**, History overlay **99/99**,
+Settings **171/171**. Calculator native rectangles all match. Settings has 169–170 usable
+rectangles matching exactly; the remaining AX `CGRectNull` records correspond to XCTest
+zero rectangles. They are kept unavailable rather than fabricated. `--full-state` enabled
+values match every XCTest node on both main pages. One Calculator focus value and 52 Settings
+visibility values differ; final batch-visible controls report 53 Settings differences and
+22 History-overlay differences, all AX false / XCTest true. These are separate semantics.
 
-These are different devices and page states; they do not establish a missing-node percentage
-or complete XCTest parity. XCTest element types/state fidelity, arbitrary third-party apps,
-WebViews, secure/rotated/modal pages, offscreen coverage and atomicity remain unverified.
-Product validation and exact host/device scope are recorded in
-[verification](verification.md#open-items--current-state-living-section).
-MCP integration and direct semantic AX actions are not implemented by this command.
+The 17 nonempty Settings XCTest values lacking a separate AX value field are already present
+in that node's AX label/Description. Native class strings, role codes and raw traits do not
+supply the complete XCTest element-type taxonomy; no type mapper is invented. AX hint and
+placeholder remain distinct fields.
+
+An active reference session changes the native Settings hierarchy: the same product reads
+138 records / 135 handles / depth20 after Runner stops. The precise system flag responsible
+has not been isolated. Historical 12 mini counts (13 ordinary / 176 XCTest) and inactive
+13 Pro counts cannot be used to calculate missing nodes. Current same-page controls establish
+parity on these pages only. Default deep's mean query time with the reference active was
+about **1.83 s Settings / 1.18 s History**, versus **2.00 s / 1.44 s** for WDA JSON source;
+full structural state is slower. These timings exclude some startup costs and are not a
+universal benchmark.
+
+The visible-title Bilibili controls from the preceding review remain valid; its changing
+login/keyboard background can still fail strict reconciliation. Arbitrary third-party apps,
+WebViews, secure/rotated pages, offscreen coverage, atomicity, complete XCTest type/state
+parity, persistent sessions and MCP integration remain open. See
+[native wire/source evidence](protocol.md#devicesapp-deep-snapshot-required-attributes-and-host-decoding-2026-10-13)
+and [verification](verification.md#open-items--current-state-living-section) for exact scope.

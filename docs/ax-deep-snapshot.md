@@ -17,7 +17,8 @@ numeric label/frame/traits/identifier/value and class/bundle attributes. Preserv
 its actual ordered child edges and every path occurrence of a repeated handle;
 output IDs remain snapshot-local. Supplement the ordinary accessible elements
 through the existing Description-first reads to retain state and role fields.
-Structural elements have only the fields actually returned by the snapshot.
+Structural elements have snapshot fields by default; additional states require explicit
+`--full-state` reads and are never synthesized.
 
 Retain JSON schema 1's field types and text output. For deep output, change `hierarchySource` and
 `attributePolicy` to describe the new sources; add native class/bundle metadata.
@@ -33,24 +34,19 @@ and display pre/post checks remain; `atomic=false` remains explicit.
 
 ## Element press and supplementary attributes
 
-The same-device review establishes matching ordered native paths and frames against
-XCTest. Do not synthesize XCTest element types from native classes/traits. Supplement
-only attributes whose numeric meaning is established by the matching seed and live
-controls; preserve raw values for any unmapped attributes rather than inventing state.
+Default deep includes native hint2002 and visibility2025 plus ordinary Description-first
+state. `--deep --full-state` supplements snapshot-only handles with the proven AXP
+27/28/30/32/42/45/46/51 fields once per unique handle. Native fields have precedence;
+missing values remain missing. The full-state cost is explicit and opt-in. AX focus and
+visibility do not claim XCTest semantics. Never infer XCUI types from classes/traits.
 
-Add `ipb ui press --identifier <exact-id>` using the same USB/DTX session layer. Resolve
-the currently displayed application, request a fresh native snapshot, require exactly
-one matching native handle (repeated paths of that handle are not multiple targets),
-and read back its identifier before submitting one type-7/action-5 press. Node IDs from
-a previous dump remain invalid for actions. Failure/timeout after submission must never
-retry or fall back to HID. Report the semantic native result separately from generic
-UI-effect proof, and close the subscription/connection/tunnel. Default `ui` stays read-only.
-Keep the same portrait selection/explicit PID constraints and native snapshot budgets.
-
-Native `press` is verified on the 13 Pro Calculator Seven element: error0/resultData true,
-with fresh tree and independent screenshot showing the new value7. More controls and
-installed CLI acceptance are required before merging. XCTest hittability is a computed
-hit-point plus AX hit-test check; a frame midpoint alone must not be exposed as `isHittable`.
+`ui hit-test --point` returns the actual hit element with identity/display pre/post checks.
+`ui press --identifier` resolves the displayed app and one fresh native handle, confirms
+identifier/frame, requires known enabled/visible state and an exact frame-centre hit, then
+rechecks PID/display and sends one type7/action5. Previous dump IDs are not action tokens.
+No automatic replay/HID fallback is allowed. Native acceptance is separate from observed
+UI effects; submitted/refused/accepted status survives outer timeout/cleanup and uses exit6
+for failure after submission. Default `ui` remains read-only.
 
 ## Verification and delivery
 
@@ -66,40 +62,36 @@ user guide and verification current state plus an append-only dated record.
 
 ## Status and open questions
 
-Implementation is on PR #2, reviewed at `748e2c5`. Actual returned Opus 5.5
-review and follow-up find no blocker with opt-in and strict reconciliation.
-The review adds discriminating nil/root/handle/frame diagnostics and seven
-regressions: all 35 AX tests pass locally and on Mac-M2; local `make check-host`
-passes. Source and isolated installed AX-only gates pass on the allocated 13 Pro.
-Original native build/noninteractive smoke results remain in their dated record;
-this review does not claim a new full gate.
+PR #2 incorporates the independent review and current same-page/action work. Three paired
+AX/XCTest/AX rounds on the 13 Pro match Calculator45/45, History99/99 and Settings171/171
+ordered paths. Usable native rectangles match; SettingsCGRectNull stays unavailable rather
+than becoming XCTest's zero rectangle. Full-state enabled matches every node; visibility and
+focus have documented semantic differences. Default batch-visible Settings is about1.83s
+versus WDA2.00s; full-state about3.48s. No universal benchmark or complete parity claim.
 
-Fresh iOS 27.0 / 24A437 controls on local macOS 26.5.1 give Settings 13 ordinary
-nodes versus 138 deep records / 135 handles / depth 20, Calculator 24 versus
-45 / depth 16, and Bilibili 9.14.0 visible-title video 21 versus 89 / depth 19.
-Settings and video each pass three pairs; Calculator is one pair. Video title
-text and rectangle match in all three pairs. Counts are page/version scoped.
-Mac-M2 (macOS 27.2 / Xcode 27) passes 35 tests and reads the same 138-record
-Settings tree through an owned USB forward, with connection/tunnel closed.
-Native discovery still lacks this 13 Pro: the full supported native HID/media,
-CLI selection and interactive gate remains open.
+Actual Opus5.5 follow-up finds no code blocker after action-status and occlusion guards;
+its empty-timeout diagnostic finding is also repaired. 59 AX regressions pass on local
+macOS26.5.1 and Mac-M2 macOS27.2, with verified source hashes. Local `make check-host`,
+isolated install and source/installed AX-only smoke pass. Calculator guarded press has
+independent tree/screenshots, including after owned Runner removal; Mac-M2 forwarded AX
+reads, hit-test and pressTwo succeed with closed connections. No production call uses XCTest.
 
-Known, not fixed: the empty Bilibili login/numeric-keyboard page changes
-intermittently during serial reads. Ordinary and deep root-children checks can
-fail; deep additionally reports missing handles or frame conflicts. Successful
-deep controls return 168 records / depth 18. Paired controls narrow one frame
-failure to an invisible background-carousel UILabel moving horizontally, not
-the cause of every root/handle change. Two native-only snapshots agree at 168
-records/handle set (77/73 ms); this does not prove atomicity or warrant changing
-state/output semantics. Keep ordinary AXChildren default and deep opt-in;
-a fresh read can recover, without a guarantee. Native-only output and remaining
-handle-lifetime research are follow-up work, not hidden fallbacks.
+The full supported macOS27/Xcode27/iOS27 native HID/media/CLI-selection and interactive gate
+remains open: fresh Mac-M2 native inventory lacks this13Pro. USB forwarding only validates
+the AX helper. Current PR checks supply the CI/package result; no release is published.
+Merge is conditional on the repository's required gate or an explicit user exception.
 
-Research evidence is local
-at `/private/tmp/ipb-ax-snapshot-20261013` and retained on research branch
-`codex/communication-capabilities-20261013` (`03f5ce8`). Matching iOS 27 / 24A437
-framework disassembly and live controls prove the required numeric option and
-deep trees; they do not prove universal app coverage or XCTest parity.
+Known, not fixed: Bilibili9.14.0 login/keyboard serial reconciliation intermittently detects
+changing root/handles/geometry; a moving invisible background caption explains one frame
+conflict only. Keep strict failure and opt-in, not a silent shallow fallback. The native
+Settings hierarchy changes with active reference session (171 vs inactive138), exact flag
+unlocated. Direct press on a never-automated device has not been tested; prior Automation
+Mode authorization remains a discriminator even after the Runner is removed. XCTest type
+mapping, broader action/page coverage, atomicity, token lifetime and MCP remain follow-ups.
+
+Raw evidence is outside Git at `~/.local/state/ipb/20261013-13pro-xctest/`; only condensed
+problems, root-cause boundaries and protocol conclusions are committed. Earlier deep
+research remains on `codex/communication-capabilities-20261013` (`03f5ce8`).
 
 ## Rejected alternatives
 

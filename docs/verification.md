@@ -56,7 +56,8 @@ page succeeds. This is a tested strategy, not universal overlay/foreground cover
 
 The trees are application AX graphs rather than all UIView/CALayer objects. Arbitrary-app
 coverage, overlays/keyboard, rotation, token lifetime, atomic page generations and supported
-host validation still need work. Direct AX actions are untested; verified actions use HID.
+host validation still need work. Fresh native `press` is now integrated and independently
+observed on Calculator; broader actions and fresh-device authorization remain open.
 One History capture's active-session screenshot timed out, although its tree and later
 screenshot prove the transition; a later Home active-AX screenshot succeeds. Some stop calls
 observe connection closure before acknowledgement. Retain these outcomes, rather than calling
@@ -109,6 +110,14 @@ no MCP integration or supported-host release gate is claimed. The user subsequen
 this completed baseline and defer the 13 Pro repeat until renewed user readiness and
 successful unlock. The October 12 native display failures remain open.
 
+**October13 same-page/action update:** Fresh 13 Pro AX/XCTest/AX controls match every
+ordered path on Calculator45, History99 and Settings171. Usable rectangles match; AX
+CGRectNull remains explicit. Native hint/visibility are added; optional `--full-state`
+reads actual structural state. AX visibility/focus differ from XCTest semantics. Guarded
+`ui press` and actual-element `ui hit-test` are implemented, with no automatic replay.
+Calculator effects remain proven after owned Runner removal, including a forwarded
+macOS27 helper press. Prior Automation Mode dependency on a fresh phone is unresolved.
+
 **October13 deep snapshot update:** the previous nil controls omitted required native
 numeric attributes. `ui --deep` now exposes real descendant hierarchy on13Pro; see the
 [current feature plan](ax-deep-snapshot.md) and the appended product verification record.
@@ -129,13 +138,13 @@ now pass, but the native supported-host gate remains open.
 | **Permission prompts / locked-device behavior** | Remove App Cancel succeeds in both ipb and Device Hub; the blanket system-dialog limitation is withdrawn. Original TCC prompt not recreated. Locked-path error 1016 is recorded; keypair/entitlement mechanism has static evidence, not a complete dynamic causal A/B. | Agent can investigate with the corresponding reproducible device state. User previously requested: “这个问题可能也需要 device hub 测试下才行”. No permanent-impossibility claim. |
 | **Scroll parity** | Device Hub targets `0x501` for AbsolutePointer and Scroll. Its synthetic wheel trace produced only zero-motion may-begin. The later mirror test received a precise event with phase=0, momentum=0, dy=-872 and explicitly rejected it as `scroll_unsupported`; the list did not move. Neither run calibrates a physical trackpad. | Agent-fixable after a real reference gesture. Keep synthetic-event limitations separate from physical trackpad deltas, acceleration and momentum; ordinary mouse drag-scroll passed. |
 | **Agent observation contract** | `displays --json` and `capabilities --json` are implemented; mirror uses explicit primary nativeSize with bounded refresh. Frame identity/PTS and atomic frame-orientation correlation are still absent. | Agent-fixable: frame envelope and action/observation correlation. UI-tree transport remains a separate research path. |
-| **UI element / semantic context research** | PR #2 supplies numeric native attributes and iterative decoding for real deep edges. Independent 13Pro/iOS27.0/24A437 review: Settings13→138 records/135 handles/depth20, Calculator24→45/depth16, Bilibili9.14.0 visible-title21→89/depth19 with matching title frame. Opus5.5 finds no blocker with opt-in; 35 AX regressions pass on local macOS26 and Mac-M2 macOS27. Fresh USB-forwarded helper reads Settings138/depth20; native discovery still lacks this phone. | Adopt explicit `--deep`; keep default AXChildren. Full supported native gate, broader/secure/rotated coverage and XCTest parity remain open. See [deep plan](ax-deep-snapshot.md). |
+| **UI element / semantic context research** | PR #2 adds native deep edges, hint/visibility, optional structural state, actual hit-testing and guarded one-shot press. Same-page 13Pro/iOS27.0/24A437 ordered paths match Calculator45, History99 and Settings171. Usable frames match; full-state enabled matches XCTest, while AX visibility/focus have separate semantics. Actual Opus5.5 finds no code blocker. 59 AX regressions pass on both hosts; source/installed AX-only smoke passes. Runner-removed Calculator press has tree/screenshot effects, including macOS27 through owned USB forwarding. | Keep default AXChildren, explicit deep/full-state, strict reconciliation and conservative action guard. Full native supported gate, broader action/page coverage, fresh-device authorization, type mapping and MCP remain open. See [deep plan](ax-deep-snapshot.md). |
 | **Dynamic overlay reconciliation — known, not fixed** | Bilibili9.14.0 empty login/numeric keyboard yields successful deep168/depth18 and intermittent root-children/missing-handle/frame failures; ordinary root checks also fail. One frame conflict maps in paired controls to an invisible background-carousel UILabel moving horizontally. Two native-only snapshots agree at168 records (~77/73ms), not an atomicity proof. Remaining root/handle causes are open. | Keep strict checks and clear diagnostics; a fresh read can recover without a guarantee. Do not discard invisible frames or add silent fallback. Evaluate native-only output and handle lifetime separately after broader controls. |
 | **Bilibili title / AX attribute timeout** | Current 13 Pro Bilibili video title is a confirmed normal-user trigger: correct PID/root and17 child reads succeed, then Label3 on the title receives no reply. The old helper fails with title visible and succeeds17/17 after scrolling it out. Root cause is now device-side secure archive failure: Label-dependent rich output contains a `__NSCFType` without NSSecureCoding, NSCocoa4866/4864; the matched APT log/return branch drops the reply before transport. Description33/frame succeed in paired same-node controls. Both use native getter2001; outgoing format differs. Exact CF-backed attribute key remains unknown. | Description-first avoids the problematic rich output while retaining title/rectangle and distinct fields. Three visible-title reads pass25/25; Calculator24/24 and Settings-search/keyboard49/49 old/new graphs and non-Label fields match. Installed25/25 still succeeds after the failed-Label controls. Other failures remain explicit; do not extend timeout or retry a response already dropped by encoding. Not a universal attribute-safety/completeness fix; macOS27 gate remains open. |
 | **Keyboard and focused text** | Mirror now handles ordinary down/up, modifiers, repeat, host composition and text Copy/Cut/Paste on its existing FIFO. Live 13 Pro Settings search verifies Shift punctuation, exact `ipb-中文🙂 A1!`, local Mac IME composition followed by committed/copied `测试`, repeat and caret insertion. The product leaves paste prompts visible; the user explicitly authorizes this bench to allow ordinary synthetic-text paste. Final installed noninteractive smoke and host regressions pass on supplementary macOS 26.5.1 / Xcode27B6 / iOS27.0. rc0 alone remains submission only. | Scoped text/keyboard implementation is complete and installed locally. Secure fields, other apps/layouts and the supported macOS27 gate remain open. Text only, 2 MiB bound; no continuous clipboard sync or product-level automatic permission approval. |
 | **Mirror numeric controls / hidden system input** | Code implemented. The user completes 12 mini's password entry on the phone and real XCTest sources are obtained; this does not validate our mirror keypad on the secure sheet. Native Device Hub still had Connecting display during the earlier control. Agent: resolve native display path and verify the numeric panel on a secure page; the 13 Pro repeat is deferred by the latest user decision. No supported-host pass is claimed. | The latest user decision is **“先看 12 mini 结果”**. On 12 mini, human password entry and the corrected reference HTTP client yield actual XCTest sources; the temporary reference is now removed. Native Device Hub display startup and our keypad on the secure page remain unverified. Any future secure-page test needs a working input/display path and fresh human readiness. No supported-host pass is claimed. |
 | **Mirror periodic display refresh timeout** | Bench mirror runs intermittently exit 1 when the existing one-second `device info displays` refresh exceeds devicectl's five-second bound (exit 2). Reproduced with Device Hub closed and zero keyboard events; other input sessions close normally, and a later standalone display query succeeds. | Agent-fixable investigation; cause open. Keyboard-event causality is not established. Preserve the explicit failure rather than hiding stale orientation or replaying input. |
-| **AX vs XCTest baseline and additional DTX functions** | The earlier12mini ordinary-AX/XCTest comparison remains historical: Calculator24/45 and Settings13/176, matching native frames. New13Pro52/95006 controls and product `--deep` recover native backing hierarchy (Settings138/depth20; Calculator45/depth16) without XCTest. No new same-page13Pro XCTest reference is run. | Deep snapshot nil and product archive rejection are resolved. Complete XCTest node/type/state parity, overlay reconciliation and universal completeness remain unproven. Do not compare historical12mini counts against current13Pro as a missing-node percentage. |
+| **AX vs XCTest baseline and additional DTX functions** | Fresh same-page controls establish complete ordered paths on the three tested pages. An active reference session correlates with Settings171 vs inactive138 records; responsible system flag unlocated. Native action5 press works independently of a running/installed owned Runner. Fresh-device prior Automation Mode dependence is not isolated. | No missing-node percentage from historical12mini176 vs inactive13Pro138. Keep actual AX state separate from XCTest-derived visibility/focus/types. Investigate fresh-device authorization and broader action coverage next. |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
 | **Silent media loss / cold-start budgets** | Static silence is now correctly tolerated; explicit stream/connection errors fail. Silent loss without an error callback remains indistinguishable from idle until content changes. Setup/watchdog margins are policy values without cold-start calibration. | Agent-fixable measurement work; do not treat a frame-count ceiling as an established transport lifetime. |
@@ -150,7 +159,7 @@ now pass, but the native supported-host gate remains open.
   unavailable. State reads use the existing transport/Description-first policy. Bilibili
   overlay failures keep deep opt-in while default `ui` remains the existing AXChildren graph.
   Review adds nil/root identity, changed-root component, missing-handle count and both-frame
-  diagnostics with seven regressions; 35 AX tests pass on both hosts.
+  diagnostics, structural state and guarded actions; 59 AX tests pass on both hosts.
 
 
 - **Host-only update and install ownership:** `update` no longer resolves a phone before
@@ -7097,3 +7106,74 @@ HID/media/CLI-selection/interactive acceptance or new XCTest parity.
 JSON, screenshots, failure/control details, smoke/host logs and Opus responses.
 Remote isolation `/tmp/ipb-deep-review-AKYK4fvO`; no global Python changes. Raw
 success evidence and temporary probes are not committed.
+
+
+## 2026-10-13 — 13 Pro same-page XCTest comparison, structural state and element press
+
+**Scope and reproduction:** User requested the same13Pro page against XCTest, missing
+nodes/attributes, hit testing and direct actions before PR#2 adoption. USB target only
+`7F2FE6E9-5423-552A-A2A2-C499F1D8672F` / UDID`00008110-0014711C3CC3801E`,
+iPhone14,2 /iOS27.0 /24A437. Local macOS26.5.1 /25F80, CoreDevice642.15, DDI27A5252f;
+Mac-M2 macOS27.2 /26B5091g, Xcode27.0 /27A266a. Python3.12 /pmd11.10.2.
+The human completed the reference UIAutomation authorization; credentials were never
+entered by the agent. The owned WDA16.14.2 reference is research-only, not product code.
+
+**Decisive observations and fixes:** Three AX/XCTest/AX rounds per page match all ordered
+paths: Calculator45/depth16, History99/depth19, Settings171/depth21. AXbefore/after graphs
+agree. All Calculator native rectangles match; Settings169–170 match and remaining
+AXCGRectNull correspond to WDAzero frames. The inactive reference returns Settings138,
+so historical12mini176 cannot imply current13Pro missing nodes. This session-state effect
+is confirmed; precise flag/root cause remains open.
+
+The missing structural state was client-side query coverage: previously only ordinary
+handles were supplemented. Real AXP27/28/30/32/42/45/46/51 controls succeed on all45
+Calculator and135 inactiveSettings unique handles. `--deep --full-state` supplements each
+extra handle once and preserves duplicate paths, false values and native-field precedence.
+Every enabled value matches the contemporaneous XCTest reference. Focus differs on one
+Calculator structural node; AXvisibility differs on52 Settings nodes in full-state controls.
+Final native2025 batch controls cover every node and differ from WDAvisible on53 Settings
+and22 History paths, always AXfalse/WDAtrue. Preserve the separate semantics. Native2002
+hint is present on25 History/2 Settings path records; it is not placeholder. Native2018 is
+not mapped to focused because a paired93-handle control differs once; native2025 matches
+AXP32 in93/93 cases. Class strings/raw traits are not converted into invented XCUI types.
+
+Query means, not total process startup: final defaultdeep Settings1828.704ms vs WDA2003.887ms;
+History1181.506ms vs1437.938ms. Full-state activeSettings~3481ms. Installed inactiveSettings
+full-state3214ms and forwardedMac27 full-state4910ms. This is why full-state is opt-in.
+
+**Direct operation controls:** Fresh native type7/action5 Seven responds error0/true and
+separate tree/screenshots show76→7. Product press confirms unique exact identifier/frame,
+known enabled/visible, actual frame-centre hit identity, foreground and display before a
+single action. Eight/Nine show78→789 and SidebarButton opens History. History still includes
+Seven, but its hidden state makes press fail before submission (exit1, empty stdout).
+Guard refusals never become HID fallback. `ui hit-test` returns actual Two/Seven elements,
+not merely their application. It does not implement XCTest isHittable.
+
+An Opus5.5 source review found two reachable concerns: lost native acceptance on cleanup/
+outer timeout and acting on hidden snapshot nodes. Both are fixed by persistent action
+status/exit6 and conservative actual-hit guards. Its follow-up finds no code blocker;
+an empty-timeout diagnostic regression is also repaired. Post-submission false/error/
+timeout/cleanup paths are fixtures, not live negative samples. No sent action is replayed.
+`nativeAccepted=true` is separate from `effectVerified=false`; effects above are independently
+observed. No HIDrc0 is used as effect proof.
+
+**Verification and cleanup:** 59 maintained AX regressions pass independently on both Macs;
+source hashes match. Local `make check-host` passes. Isolated install and source/installed
+ordinary/deep AX-only smoke pass on Settings; explicit installed full-state succeeds. After
+confirming PID0, the task-owned reference Runner is uninstalled and lookup proves absent.
+Installed pressOne shows789→1; the exact macOS27 helper through an owned USB socket forward
+pressesTwo and a new tree plus screenshot show1→12. All AX connections/tunnels close,
+including acknowledged and explicitly reported close-before-stop-ack cases. Phone returns
+to Settings; no shared Runner/app is removed. Owned SSH forward and read-only DDI mount are
+closed. Raw success logs/archives/screenshots stay outside Git at
+`~/.local/state/ipb/20261013-13pro-xctest/`; exact source/CI references are in its local handoff.
+Current CI/package status is available in PR#2 checks; this change publishes no release.
+
+**Remaining limits / merge gate:** fresh Mac-M2 native CoreDevice inventory still lacks this
+13Pro. Forwarded AX validation does not close supported native CLI-selection/HID/media or
+interactive acceptance. The required full supported gate remains open; conditional merge
+needs that gate or an explicit user exception. Calculator-only semantic effects, prior
+Automation Mode dependence on a never-automated phone, AX/XCTest type/state semantics,
+Bilibili's independently documented changing login background and global atomicity remain
+open. The product does not install a Runner or initialize XCTest; removing the Runner does
+not reset prior device authorization and therefore is not a fresh-device A/B.
