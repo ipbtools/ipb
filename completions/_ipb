@@ -54,7 +54,7 @@ _ipb_commands() {
     'screenrecord:record the screen'
     'stream:live JPEG frames'
     'mirror:live screen, mouse and shortcuts'
-    'ui:read application AX tree, frames and state over USB'
+    'ui:AX tree/state, point hit-test or fresh element press'
 
     'apps:installed apps'
     'ps:running processes'
@@ -126,7 +126,7 @@ _ipb() {
         displays|capabilities) _values 'format' --json ;;
         stream) _values 'option' --dir --count --fps --seconds --stdout ;;
         mirror) _values 'option' --seconds --csv --service-id --help ;;
-        ui) _arguments '--json[structured AX graph]' '--pid[explicit application PID]:PID:' '--point[normalized hit-test point]:X::Y:' '--help[AX command help]' ;;
+        ui) _arguments '1:operation:(press hit-test)' '--identifier[exact identifier for press]:identifier:' '--deep[native descendant snapshot; opt-in]' '--full-state[with --deep, read structural node state; slower]' '--json[structured AX result]' '--pid[explicit application PID]:PID:' '--point[normalized hit-test point]:X::Y:' '--help[AX command help]' ;;
       esac
       ;;
   esac

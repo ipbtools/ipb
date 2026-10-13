@@ -2775,7 +2775,7 @@ dictionary (`maxChildren=512`, `maxArrayCount=512`, `maxDepth=32`,
 `XCAXClient_iOS+FBSnapshotReqParams.m`'s documented defaults and real
 `FBXCAXClientProxy.snapshotForElement…` forwarding. This is not a captured native
 XCTest options dictionary or proof of sufficient parameters at the AXP boundary;
-The cause remains open.
+These incomplete controls are superseded by the [numeric-attribute snapshot controls](#devicesapp-deep-snapshot-required-attributes-and-host-decoding-2026-10-13) below.
 Two child-token controls (heading and first row) with those bounded option keys also
 return nil/error 0, so the observed nil is not confined to the application root.
 The minimum native options/admission semantics remain unproven. Apple's shipped
@@ -2907,8 +2907,8 @@ succeeds. The cause of that FD-path discrepancy remains open; it is not a device
    cleanup outcome separately from successful data capture.
 
 The six secure request fields are `parameters`, `requestType`, `actionType`, `attributeType`,
-`clientType`, `translation`. Tested read requests use native default **clientType=0** and zero
-unused action/attribute fields. Original dispatch's relative jump table at **0x24FE215A8**
+`clientType`, `translation`. Tested read requests use native default **clientType=0**. Requests1/5/6 use zero
+unused action/attribute fields; native deep request2 uses attribute52 (see the deep snapshot section). Original dispatch's relative jump table at **0x24FE215A8**
 resolves request types **1=application**, **4=frontmost**, **5=multiple attributes**,
 **6=hit test**. No guessed request-type sweep was used.
 
@@ -3485,3 +3485,219 @@ Dynamic content, overlay padding/path, occlusion, scrolling, rotation and token 
 need controls before any reusable bounds API. The renderer's internal geometry and backend
 91701 are concrete investigation targets; more guessed Frame names cannot bypass these
 fixed handlers. A full page snapshot and a runner-free XCTest snapshot session remain unproven.
+
+
+## DevicesApp deep snapshot: required attributes and host decoding (2026-10-13)
+
+**Sources/seed:** physical iPhone 13 Pro / iPhone14,2 / iOS 27.0 / 24A437;
+paired USB, API host7/device26, pymobiledevice3 11.10.2, CoreDevice642.15,
+UniversalHID90.1, DDI27A5252f, supplementary macOS26.5.1/25F80. Research retained on
+`codex/communication-capabilities-20261013` (`03f5ce8`) and locally at
+`/private/tmp/ipb-ax-snapshot-20261013`. Runtime raw archives and same-page option
+controls are independent of the matching shipped framework disassembly.
+
+**Matching source binaries:** `/Users/borealin/Library/Developer/Xcode/iOS DeviceSupport/iPhone14,2 27.0 (24A437)/Symbols/System/Library/PrivateFrameworks/`:
+AccessibilityPlatformTranslation UUID **AA0429D2-50DA-3B83-9C2A-A8D9E752581D**,
+AXRuntime **6A0D8F1C-E84D-3040-90DC-881A282774AF**, UIAccessibility
+**A6B3716C-8C01-3104-87F6-18F7F7B1D819**. Instruction/CFString bytes are checked
+against the original 24A437 cryptex cache, not an unmatched host XCTest image.
+
+### Required numeric options resolve nil
+
+APT request2/attribute52 forwards native95006. Target
+`-[NSObject(AXPrivCategory) _iosAccessibilityAttributeValue:forParameter:]`
+0x1bb736b00 indexes native95006 into table0x1bb7105fc (base95001/index5).
+Handler0x1bb738ad8 checks a dictionary and calls
+`_accessibilityUserTestingSnapshotWithOptions:` at0x1bb738afc. Its implementation
+0x1bb7679f4 reads `attributes`, `maxDepth`, `maxChildren`, `maxArrayCount`,
+`traverseFromParentsToChildren`, `snapshotKeyHonorModalViews`; literal keys reside
+at0x1ed2dd718/738/758/778/798/7b8. It filters attributes to NSNumber
+(predicate0x1bb767dc0). Missing/invalid required values take nil0x1bb767c40;
+empty filtered attributes take nil0x1bb767d80. True traversal calls the descendants
+builder0x1bb767d74; false calls the ancestors builder0x1bb767d90.
+
+**Runtime discriminator:** missing attributes, empty array and `["2003"]` all return
+nil/error0 on the same live root, whereas numeric **[2003]** returns a nested tree.
+Earlier WDA-informed dictionaries omitted attributes, which WDA passes separately.
+Their original resultData UID0 was device nil, not a host decode failure. There is
+no requirement demonstrated here to start XCTest or change Automation Mode.
+
+### Captured request and hierarchy
+
+Use the existing raw AX remote service / DTX channel0 and one outstanding read.
+This is a decoded secure keyed archive, not JSON on the wire. The following is the
+five-attribute research control. The current product adds hint, visibility and native
+class/bundle attributes; its exact list is
+`[2001,2002,2003,2004,5019,2006,2025,5003,5004,3003]`
+(Sources/ipb_ax.py SNAPSHOT_ATTRS).
+
+```text
+AXPTranslatorRequest {
+  requestType: 2, attributeType: 52, actionType: 0, clientType: 0,
+  translation: <fresh application AXPTranslationObject>,
+  parameters: {parameter: {
+    attributes: [2001,2003,2004,5019,2006],
+    maxDepth: 48, maxChildren: 512, maxArrayCount: 512,
+    traverseFromParentsToChildren: true, snapshotKeyHonorModalViews: false
+  }}
+}
+```
+
+Native IDs2001/2003/2004/5019/2006 supply label/frame/traits/identifier/value; these
+are distinct from AXP fields3/21/77/25/53. Replies carry associatedRequestType2,
+attribute52, associatedTranslationObject matching the root, error0 and resultData:
+
+```text
+{
+  UIAccessibilitySnapshotKeyElement: AXPTranslationObject,
+  UIAccessibilitySnapshotKeyAttributes: {<native integer ID>: <returned value>},
+  UIAccessibilitySnapshotKeyChildren: [<same record shape>, ...],
+  UIAccessibilitySnapshotKeyChildrenCount: <declared integer>
+}
+```
+
+Settings research controls return **138 records /135 handles /depth20 /138 frames**;
+Calculator **45/45/depth16/45 frames**. Every declared count agrees with its array,
+and all ordinary13/24 handles and frames match. Settings24/128/128 and48/512/512
+bounds return the same records; its maximum child count is26. Repeated handles can
+occur on distinct parent paths. Global handle deduplication would delete real edges.
+
+The same-seed UIKit default-attributes block0x1bb768344 copies22 NSNumber entries
+from constant array0x1ed2e3288 (storage0x1e157b9c0):
+`[5019,2001,5047,5048,5049,5050,2004,5003,5004,5009,2002,2020,3003,2006,2003,5034,5041,5042,2021,2123,5062,5063]`.
+That full array also returns the same Settings hierarchy;14 native fields are present
+somewhere. Native5003/5004 return class/type strings;3003 returns bundle ID.
+The product requests these three plus the basic five, hint2002 and visibility2025, preserving the three numeric
+keys under `nativeAttributes`; it does not infer XCUIElementType or unknown state flags.
+
+### Product decoding and observation contract
+
+The old decoder rejects retained valid40,338B/980-object and45,396B/1,074-object
+Settings responses with `AX archive nesting limit`: its100 levels count UID/list/dict
+wrappers, not UIKit depth. Their nonzero resultData UID2 distinguishes this independent
+host limit from the earlier nil. The product now decodes iteratively with20MiB,
+50,000-object,500,000-step and512 archive-nesting budgets. Native record traversal has
+independent512-record/depth32 bounds and rejects inconsistent children counts.
+
+`ui --deep` uses native snapshot edges and path-local IDs. Ordinary AXChildren
+reads supplement state/role/Description on accessible elements; missing native
+records or mismatched frames fail. Default deep includes native visibility; other structural
+states stay absent unless `--full-state` explicitly reads each unique handle. Ambiguous
+navigation/parent handle references are reported unavailable instead of choosing a
+path. Schema1 types and the existing text/JSON CLI remain; `hierarchySource` and
+`attributePolicy` identify the changed sources. One-request serialization, explicit
+nil/truncation failure, non-atomic output and root/PID/display checks remain.
+Ordinary AXChildren and Description-first remain the default: live Bilibili modal/
+numeric-keyboard controls succeed on main but deep+state reconciliation fails
+root/geometry/handle checks. The cause remains open; no silent fallback is added.
+A later installed visible-video-title control succeeds25/depth1 ordinary and94/depth19
+deep, with identical title and native frame. Deep2001 supplies a label without the
+previous type5 Label3 timeout; Description remains a separately returned field.
+This is a scoped positive control, not universal overlay or rich-text preservation.
+
+**Proof limits:** these are real descendant snapshots on the tested pages, not an
+all-views guarantee. The later same-page13Pro XCTest controls below establish scoped
+ordered-path/frame parity; historical12mini counts cannot establish missing percentages.
+Arbitrary third-party/WebView/secure/rotated/modal coverage, XCTest types, atomicity
+and token lifetime remain open. Current product test scope is in verification.md.
+
+
+## Same-page XCTest comparison and native element press (2026-10-13)
+
+**Runtime sources/seed:** the same USB iPhone14,2 / iOS27.0 /24A437 and local
+macOS26.5.1 /25F80 /CoreDevice642.15 /DDI27A5252f above. The independently owned
+reference was WDA16.14.2 (built October11 with Xcode27B6), started as XCTest solely
+for these comparisons after human UIAutomation authorization. Product reads/actions
+use the raw AX service, not its HTTP endpoint. Raw archives, JSON/XML and screenshots
+are retained outside Git at `~/.local/state/ipb/20261013-13pro-xctest/`.
+
+### Ordered hierarchy, attributes and request cost
+
+Three AX/XCTest/AX rounds on each page match ordered child-index paths exactly:
+Calculator45/45/depth16, Calculator History99/99/depth19, Settings171/171/depth21.
+The preceding and following AX graph agree in every round. Calculator frames all
+match XCTest nativeFrame. Settings169–170 comparable frames match; the remaining
+AXCGRectNull entries correspond to XCTest's zero rectangles. The product preserves
+unavailability. Labels are never used as the node pairing key. An inactive Runner
+control returns Settings138/depth20 on the same device; session-state correlation
+is observed, but the responsible service flag is not isolated.
+
+Snapshot-only handles accept AXP state fields `[27,28,30,32,42,45,46,51]`:
+Calculator45/45 unique handles and inactive Settings135/135. `--full-state` reads
+these once per unique handle and supplements all path occurrences without Label3
+or Children8 rereads. In contemporaneous main-page controls every enabled value
+matches XCTest. One Calculator focus and52 Settings visibility values differ.
+The final batch-visible controls have53 Settings and22 History path differences,
+all AXfalse/XCTesttrue, stable across six captures. AX and XCTest visibility/focus
+are kept as distinct semantics. Settings17 nonempty XCTest value strings are
+already represented by same-path AXlabel/Description, not lost text. Native classes,
+role codes and decimal64-bit traits are not the XCTest element-type taxonomy.
+
+**Native field mapping sources:** the matching24A437 APT attribute table
+(`apt-native-id-table.txt` retained locally) maps native2025 to `IsVisible`; native
+2002 is `Hint`. A read-only paired control on93 unique History handles shows native
+2025 equals AXP32 in93/93 cases. Native2018 is `AssistiveTechnologyFocused` and
+matches AXP28 only92/93, so it is not used as a focused alias. Product snapshot
+hint samples are present on25/99 History records and2/171 Settings records; hint is
+separate from placeholder42 and Description33. Unknown5034/2123 fields remain unmapped.
+
+Default deep now requests native2025 in its one batch snapshot and reports
+`stateScope=native-visible+ordinary-state`. `--deep --full-state` adds155 per-handle
+state reads on the active Settings reference and reports `all-native-handles`.
+Mean default query times in the final paired run are Settings1828.704ms and
+History1181.506ms, compared with WDA JSON2003.887ms and1437.938ms. Full-state Settings
+was about3481ms. These are scoped query timings, not end-to-end universal benchmarks.
+
+### Exact hit testing and one-shot action wire
+
+**Matching static source:** AccessibilityPlatformTranslation24A437 action handler
+at0x24fe0f07c calls `axElementFromTranslatorRequest:` then `press` for action5
+(`ios-apt-action-original-main.txt:61–68` retained locally); its reply copies the
+BOOL into resultData. AXRuntime `-[AXElement press]` is0x18f861b24. This path is
+separate from AXAudit's filtered Inspector action API. No recognizable XCTest
+Automation Mode check was found in the inspected handlers; downstream policy and
+fresh-device authorization have not been exhaustively traced.
+
+**Observed action request/reply:** fresh Calculator Seven control on this seed:
+
+```text
+AXPTranslatorRequest {
+  requestType: 7, actionType: 5, attributeType: 0, clientType: 0,
+  translation: <fresh target AXPTranslationObject>, parameters: nil
+}
+AXPTranslatorResponse {
+  associatedRequestType: 7, associatedTranslationObject: nil,
+  error: 0, resultData: true
+}
+```
+
+A new tree and independent screenshot show76→7. Installed guarded controls show
+789→1 after pressOne, and a macOS27.2 /26B5091g helper through an owned USB forward
+shows1→12 after pressTwo. The owned reference Runner is removed before those last
+controls; no product call starts XCTest. They do not isolate earlier Automation
+Mode authorization. Native response acceptance is not generic UI-effect proof.
+
+`ui press --identifier` resolves one exact native handle in a fresh snapshot,
+confirms identifier/frame and known enabled/visible state, verifies frame-centre
+hit identity, then rechecks displayed PID and display before one type7/action5.
+Repeated paths of one handle are not multiple targets. History's hidden Seven
+still exists in the snapshot but is refused before type7; actual fresh Nine and
+SidebarButton controls succeed and independent observations show their effects.
+Missing/ambiguous/unusable/occluded targets fail before submission. No automatic
+replay or HID fallback occurs. Submitted/refused/accepted state survives timeout,
+cancellation and cleanup failures; such failures exit6 and forbid automatic retry.
+False/error/timeout reply branches have maintained fixtures, not real device samples.
+
+`ui hit-test --point` returns the actual native hit element and available fields,
+checking identity/display again. It does not expose reusable tokens or `isHittable`.
+**DDI source:** `/Library/Frameworks/XCUIAutomation.framework/XCUIAutomation` inside
+022-22070-094.dmg (UUID
+2E59C889-EB2C-36E8-9307-E18467A325F8), `-[XCUIElement isHittable]` at0x3af88 calls
+snapshot `hitPoint:` at0x4918c and examines result.isHittable. It uses activation point,
+event-synthesis/frame candidates plus native hit-testing and container/fuzzy rules.
+Our exact-centre guard is conservative; it is not the full XCTest computation.
+
+**Remaining proof limits:** fresh-device authorization, complete type mapping,
+non-Calculator direct action effects, secure/rotated/WebView coverage and global
+atomicity. Mac-M2 helper tests through USB forwarding do not close native CoreDevice
+selection/HID/media acceptance; its native inventory still lacks this13Pro.

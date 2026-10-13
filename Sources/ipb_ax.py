@@ -31,6 +31,105 @@ FIELDS = {3: "label", 21: "frame", 25: "identifier", 27: "enabled", 28: "focused
 ATTRS = [8, 9, 41, *(key for key in FIELDS if key != 3)]
 BOOL_FIELDS = {27, 28, 30, 32}
 MAX_NODES, MAX_DEPTH = 512, 32
+# Native AX IDs, not AXP field IDs. Required numeric attributes and descendant
+# options: matching iOS 27 / 24A437 source and 13 Pro controls (protocol.md).
+SNAPSHOT_ATTRS = [2001, 2002, 2003, 2004, 5019, 2006, 2025, 5003, 5004, 3003]
+STATE_ATTRS = [27, 28, 30, 32, 42, 45, 46, 51]
+SNAPSHOT_OPTIONS = {"attributes": SNAPSHOT_ATTRS, "maxDepth": 48,
+                    "maxChildren": 512, "maxArrayCount": 512,
+                    "traverseFromParentsToChildren": True,
+                    "snapshotKeyHonorModalViews": False}
+ELEMENT = "UIAccessibilitySnapshotKeyElement"
+CHILDREN = "UIAccessibilitySnapshotKeyChildren"
+CHILD_COUNT = "UIAccessibilitySnapshotKeyChildrenCount"
+NATIVE_ATTRS = "UIAccessibilitySnapshotKeyAttributes"
+
+
+def snapshot_nodes(snapshot, root):
+    """Keep native path occurrences; handles can legitimately have two parents."""
+    if snapshot is None:
+        raise ValueError("AX snapshot unavailable: device returned nil")
+    if not isinstance(snapshot, dict):
+        raise ValueError("invalid AX snapshot record")
+    actual_root, expected_root = identity(snapshot.get(ELEMENT)), identity(root)
+    if actual_root != expected_root:
+        raise ValueError(f"AX snapshot root mismatch: expected={expected_root} actual={actual_root}")
+    nodes, by_handle = [], {}
+    pending = deque([(snapshot, None, 0, frozenset())])
+    while pending:
+        record, parent, depth, ancestors = pending.popleft()
+        if depth > MAX_DEPTH or len(nodes) >= MAX_NODES:
+            raise ValueError("AX snapshot limit reached; no partial tree emitted")
+        if not isinstance(record, dict) or id(record) in ancestors:
+            raise ValueError("invalid or cyclic AX snapshot")
+        key = identity(record.get(ELEMENT))
+        if key[0] != root["pid"]:
+            raise ValueError("AX snapshot child belongs to another process")
+        children, count, native = record.get(CHILDREN), record.get(CHILD_COUNT), record.get(NATIVE_ATTRS)
+        if (not isinstance(children, list) or type(count) is not int or count != len(children)
+                or not isinstance(native, dict)):
+            raise ValueError("AX snapshot children/attributes unavailable or truncated")
+        fields = node_fields({mapped: native[native_id] for native_id, mapped in
+                              ((2001, 3), (2003, 21), (2004, 77), (5019, 25), (2006, 53), (2025, 32))
+                              if native_id in native})
+        if native.get(2002) is not None:
+            if not isinstance(native[2002], str):
+                raise ValueError("invalid AX native hint")
+            fields["hint"] = native[2002]
+        metadata = {}
+        for native_id in (5003, 5004, 3003):
+            if native.get(native_id) is not None:
+                if not isinstance(native[native_id], str):
+                    raise ValueError("invalid AX native class/bundle attribute")
+                metadata[str(native_id)] = native[native_id]
+        if metadata:
+            fields["nativeAttributes"] = metadata
+        node_id = "n" + str(len(nodes))
+        node = {"id": node_id, "parentId": parent, "depth": depth, "children": [],
+                "attributeSource": "native-snapshot", **fields}
+        nodes.append(node)
+        by_handle.setdefault(key, []).append(node)
+        if parent is not None:
+            nodes[int(parent[1:])]["children"].append(node_id)
+        pending.extend((child, node_id, depth + 1, ancestors | {id(record)}) for child in children)
+    return nodes, by_handle
+
+
+def snapshot_target(snapshot, root, identifier):
+    """Resolve one native handle, retaining duplicate paths only in dump output."""
+    _, by_handle = snapshot_nodes(snapshot, root)
+    matches = {}
+    pending = [snapshot]
+    while pending:
+        record = pending.pop()
+        token = record[ELEMENT]
+        if record[NATIVE_ATTRS].get(5019) == identifier:
+            matches.setdefault(identity(token), (token, record[NATIVE_ATTRS]))
+        pending.extend(record[CHILDREN])
+    if len(matches) != 1:
+        raise ValueError(f"AX press identifier matches={len(matches)}; exactly one native element is required")
+    token, native = next(iter(matches.values()))
+    node = by_handle[identity(token)][0]
+    target = {key: node[key] for key in ("identifier", "label", "frame", "frameUnavailable", "nativeAttributes") if key in node}
+    return token, native, target
+
+
+def ordinary_nodes(captured, root):
+    """The existing AXChildren graph, using the same bounded attribute reads."""
+    nodes, by_handle = [], {}
+    pending = deque([(identity(root), None, 0)])
+    while pending:
+        key, parent, depth = pending.popleft()
+        attrs = captured[key]
+        node_id = "n" + str(len(nodes))
+        node = {"id": node_id, "parentId": parent, "depth": depth, "children": [],
+                "attributeSource": "AXAttributes", **node_fields(attrs)}
+        nodes.append(node)
+        by_handle[key] = [node]
+        if parent is not None:
+            nodes[int(parent[1:])]["children"].append(node_id)
+        pending.extend((identity(child), node_id, depth + 1) for child in attrs[8])
+    return nodes, by_handle
 
 
 def identity(obj):
@@ -185,15 +284,18 @@ async def capture(rsd, args):
         await asyncio.wait_for(dtx._ctrl_channel.invoke("clientNeedsAccessibility:", True), 3)
         subscribed = True
 
-        async def read(kind, params, token=None):
+        async def read(kind, params, token=None, *, action=0):
             nonlocal packet_bytes
             if fatal:
                 raise ValueError(fatal[0])
             # Exactly one outstanding semantic request. A timeout aborts the
             # connection; late type-5 replies are never assigned to a new node.
-            data = request(kind, params, translation=token)
+            data = request(kind, params, translation=token, action=action)
+            received_reply = False
             try:
                 async with asyncio.timeout(3):
+                    if kind == 7:
+                        args.press_state = "submitted"
                     await dtx._ctrl_channel.invoke("processDataFromHost:", data)
                     while True:
                         raw = await queue.get()
@@ -208,13 +310,25 @@ async def capture(rsd, args):
                             if len(unsolicited) > 256:
                                 raise ValueError("AX notification budget")
                             continue
+                        received_reply = True
+                        if kind == 7 and ("error" not in reply or type(reply["error"]) is not int):
+                            raise ValueError("AX press semantic status unavailable; do not retry automatically")
                         if reply.get("error") not in (None, 0):
                             raise ValueError("AX request refused: error " + str(reply["error"]))
+                        if kind == 2 and (reply.get("attribute") != 52 or
+                                          identity(reply.get("associatedTranslationObject")) != identity(token)):
+                            raise ValueError("AX snapshot response attribute/element mismatch")
                         return reply.get("resultData")
             except TimeoutError as error:
                 target = (f" pid={token['pid']} objectID={token['objectID']}" if token else "")
-                fields = f" attributes={params['attributes']}" if kind == 5 else ""
-                raise TimeoutError(f"AX request type={kind}{target}{fields} timed out") from error
+                fields = (f" attributes={params['attributes']}" if kind == 5 else
+                          " attribute=52" if kind == 2 else "")
+                suffix = "; press outcome unknown; do not retry automatically" if kind == 7 else ""
+                raise TimeoutError(f"AX request type={kind}{target}{fields} timed out{suffix}") from error
+            except Exception as error:
+                if kind == 7 and not received_reply:
+                    raise RuntimeError("AX press outcome unknown after submission; do not retry automatically") from error
+                raise
 
         async def node_attributes(token):
             attrs = attributes(await read(5, {"attributes": ATTRS}, token))
@@ -237,7 +351,9 @@ async def capture(rsd, args):
             identity(obj)
             return obj
 
-        if args.pid:
+        operation = getattr(args, "operation", None)
+        pressing = operation == "press"
+        if args.pid and not pressing:
             root = await app(args.pid)
             selection = "explicit-pid"
             hit_point = None
@@ -250,50 +366,143 @@ async def capture(rsd, args):
             hit_point = (rect["x"] + rect["width"] * args.point[0],
                          rect["y"] + rect["height"] * args.point[1])
             selected = await hit(hit_point)
+            if args.pid and selected["pid"] != args.pid:
+                raise ValueError("AX press PID is not the displayed application at the selected point")
             root = await app(selected["pid"])
-            selection = "hit-test"
+            selection = "explicit-pid+hit-test" if args.pid else "hit-test"
+
+        if operation == "hit-test":
+            fields = node_fields(await node_attributes(selected))
+            if identity(await hit(hit_point)) != identity(selected):
+                raise ValueError("AX hit target changed during collection")
+            async with DeviceInfoService(rsd) as service:
+                if display_geometry(await asyncio.wait_for(service.get_display_info(), 4)) != display:
+                    raise ValueError("AX display changed during hit test")
+            return {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
+                    "application": {"pid": selected["pid"], "selection": "hit-test"},
+                    "scope": "point-hit-test", "coordinateSpace": "device-logical-points",
+                    "point": {"x": hit_point[0], "y": hit_point[1]}, "target": fields,
+                    "atomic": False, "targetStable": True, "cleanup": cleanup,
+                    "queryMs": round((time.monotonic() - started) * 1000, 3), "deviceAPIVersion": api}
+
+        if pressing:
+            native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+            token, native_attrs, target = snapshot_target(native, root, args.identifier)
+            confirmed = await read(5, {"attributes": [21, 25, 27, 32]}, token)
+            if not isinstance(confirmed, dict) or confirmed.get(25) != args.identifier:
+                raise ValueError("AX press target identifier changed; no action sent")
+            if 2003 in native_attrs and confirmed.get(21) != native_attrs[2003]:
+                raise ValueError("AX press target frame changed; no action sent")
+            if any(type(confirmed.get(key)) not in (bool, int) or confirmed[key] != 1 for key in (27, 32)):
+                raise ValueError("AX press target is not known enabled and visible; no action sent")
+            target.update(enabled=True, visible=True)
+            rect = target.get("frame")
+            if not rect or rect["width"] <= 0 or rect["height"] <= 0:
+                raise ValueError("AX press target has no usable frame; no action sent")
+            candidate = (rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2)
+            if identity(await hit(candidate)) != identity(token):
+                raise ValueError("AX press target is not the frame-centre hit element; no action sent")
+            if identity(await hit(hit_point))[0] != root["pid"]:
+                raise ValueError("AX displayed process changed; no action sent")
+            async with DeviceInfoService(rsd) as service:
+                if display_geometry(await asyncio.wait_for(service.get_display_info(), 4)) != display:
+                    raise ValueError("AX display changed; no action sent")
+            accepted = await read(7, None, token, action=5)
+            if type(accepted) not in (bool, int) or accepted not in (0, 1):
+                raise ValueError("AX press returned no known native result; do not retry automatically")
+            if not accepted:
+                args.press_state = "refused"
+                raise ValueError("AX native press refused the element")
+            args.press_state = "accepted"
+            return {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
+                    "application": {"pid": root["pid"], "selection": selection},
+                    "action": {"name": "press", "identifier": args.identifier,
+                               "nativeAccepted": True, "effectVerified": False},
+                    "target": target, "coordinateSpace": "device-logical-points",
+                    "cleanup": cleanup, "queryMs": round((time.monotonic() - started) * 1000, 3),
+                    "deviceAPIVersion": api}
 
         first = await node_attributes(root)
         root_text_attribute = 33 if has_description(first) else 3
-        pending = deque([(root, first, None, 0)])
-        seen, nodes, max_depth = {}, [], 0
+        # Complete the ordinary graph before the native snapshot; all enrichment
+        # uses these same captured handles and fields, without descendant re-reads.
+        pending = deque([(root, first, 0)])
+        seen = {}
         while pending:
-            token, attrs, parent, depth = pending.popleft()
+            token, attrs, depth = pending.popleft()
             key = identity(token)
             if key in seen:
                 raise ValueError("AX child graph repeats an element")
             if key[0] != root["pid"]:
                 raise ValueError("AX child belongs to another process")
-            if depth > MAX_DEPTH or len(nodes) >= MAX_NODES:
+            if depth > MAX_DEPTH or len(seen) >= MAX_NODES:
                 raise ValueError("AX graph limit reached; no partial tree emitted")
             attrs = attributes(attrs if attrs is not None else await node_attributes(token))
-            node_id = "n" + str(len(nodes))
-            seen[key] = node_id
-            node = {"id": node_id, "parentId": parent, "depth": depth, **node_fields(attrs),
-                    "children": []}
-            children = attrs.get(8, [])
-            node["_children"] = [identity(c) for c in children]
-            if 9 in attrs:
-                node["_navigation"] = [identity(c) for c in attrs[9]]
-            if attrs.get(41) is not None:
-                node["_parent"] = identity(attrs[41])
-            nodes.append(node)
-            pending.extend((child, None, node_id, depth + 1) for child in children)
-            max_depth = max(max_depth, depth)
-        for node in nodes:
-            node["children"] = [seen[key] for key in node.pop("_children")]
-            navigation = node.pop("_navigation", None)
-            # Navigation relations are distinct from the traversed child edges.
-            if navigation is not None:
-                node["navigationOrder"] = [seen[key] for key in navigation if key in seen]
-                node["navigationOutsideGraph"] = sum(key not in seen for key in navigation)
-            parent = node.pop("_parent", None)
-            if parent is not None:
-                node["reportedParentId"] = seen.get(parent)
-                node["reportedParentOutsideGraph"] = parent not in seen
+            seen[key] = attrs
+            pending.extend((child, None, depth + 1) for child in attrs[8])
+        if args.deep:
+            native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+            nodes, by_handle = snapshot_nodes(native, root)
+        else:
+            nodes, by_handle = ordinary_nodes(seen, root)
+        missing = [key for key in seen if key not in by_handle]
+        if missing:
+            key = missing[0]
+            raise ValueError(f"AX ordinary element absent from native snapshot: pid={key[0]} "
+                             f"objectID={key[1]} missing={len(missing)}; cannot reconcile the two reads")
+        if args.deep and getattr(args, "full_state", False):
+            # Snapshot-only backing views also support the proven AX state reads.
+            # Share each native handle's read across its repeated path records.
+            pending_native = [native]
+            supplemented = set(seen)
+            while pending_native:
+                record = pending_native.pop()
+                token = record[ELEMENT]
+                key = identity(token)
+                if key not in supplemented:
+                    state = await read(5, {"attributes": STATE_ATTRS}, token)
+                    if not isinstance(state, dict):
+                        raise ValueError("AX structural state attributes unavailable")
+                    fields = node_fields(state)
+                    for node in by_handle[key]:
+                        node.update({name: val for name, val in fields.items() if name not in node})
+                        node["attributeSource"] = "native-snapshot+AXAttributes"
+                    supplemented.add(key)
+                pending_native.extend(record[CHILDREN])
+        for key, attrs in seen.items():
+            fields = node_fields(attrs)
+            for node in by_handle[key]:
+                if "frame" in fields and "frame" in node and fields["frame"] != node["frame"]:
+                    raise ValueError(f"AX frame mismatch during collection: pid={key[0]} objectID={key[1]} "
+                                     f"ordinary={fields['frame']} native={node['frame']}")
+                # Native snapshot owns geometry, label and native metadata. Preserve
+                # separately read Description, state and role fields on AX elements.
+                native_geometry = "frame" in node or "frameUnavailable" in node
+                node.update({name: val for name, val in fields.items() if name not in node
+                             and not (native_geometry and name in ("frame", "frameUnavailable"))})
+                node["attributeSource"] = "native-snapshot+AXAttributes" if args.deep else "AXAttributes"
+                if 9 in attrs:
+                    navigation = [identity(c) for c in attrs[9]]
+                    if any(len(by_handle.get(k, [])) > 1 for k in navigation):
+                        node["navigationUnavailable"] = "ambiguous-snapshot-handle"
+                    else:
+                        node["navigationOrder"] = [by_handle[k][0]["id"] for k in navigation if k in by_handle]
+                        node["navigationOutsideGraph"] = sum(k not in by_handle for k in navigation)
+                if attrs.get(41) is not None:
+                    matches = by_handle.get(identity(attrs[41]), [])
+                    if len(matches) > 1:
+                        node["reportedParentUnavailable"] = "ambiguous-snapshot-handle"
+                    else:
+                        node["reportedParentId"] = matches[0]["id"] if matches else None
+                        node["reportedParentOutsideGraph"] = not matches
+        max_depth = max(node["depth"] for node in nodes)
         last = attributes(await read(5, {"attributes": [8, 21, root_text_attribute]}, root))
-        if signature(first, root_text_attribute) != signature(last, root_text_attribute):
-            raise ValueError("AX root changed during collection; request a new snapshot")
+        before, after = signature(first, root_text_attribute), signature(last, root_text_attribute)
+        if before != after:
+            changed = ",".join(name for name, old, new in zip(("frame", "text", "children"), before, after)
+                               if old != new)
+            raise ValueError(f"AX root changed during collection: pid={root['pid']} "
+                             f"objectID={root['objectID']} changed={changed}")
         if hit_point is not None and identity(await hit(hit_point))[0] != root["pid"]:
             raise ValueError("displayed AX process changed during collection")
         if display is not None:
@@ -306,7 +515,12 @@ async def capture(rsd, args):
                 "deviceIdentifier": args.device_id, "udid": rsd.udid,
                 "application": {"pid": root["pid"], "selection": selection},
                 "scope": "application-accessibility", "coordinateSpace": "device-logical-points",
-                "hierarchySource": "AXChildren", "attributePolicy": "description-first",
+                "hierarchySource": "AXUserTestingSnapshot" if args.deep else "AXChildren",
+                "attributePolicy": ("native-snapshot+description-first+structural-state" if args.deep and getattr(args, "full_state", False) else
+                                    "native-snapshot+description-first" if args.deep else "description-first"),
+                "stateScope": ("all-native-handles" if args.deep and getattr(args, "full_state", False) else
+                               "native-visible+ordinary-state" if args.deep else "ordinary-accessible-elements"),
+                "ordinaryAXNodeCount": len(seen), "uniqueElementCount": len(by_handle),
                 "atomic": False, "rootStable": True,
                 "displayFrame": display,
                 "cleanup": cleanup,
@@ -367,14 +581,43 @@ def unit_interval(text):
     return number
 
 
+def report_failure(args, error, code):
+    """A nonzero exit after action submission must never invite an action replay."""
+    state = getattr(args, "press_state", "not-sent")
+    message = str(error) or ("AX query cancelled" if isinstance(error, asyncio.CancelledError) else
+                             "AX query timed out; no partial result emitted" if isinstance(error, TimeoutError) else
+                             "AX operation failed")
+    if getattr(args, "operation", None) == "press" and state != "not-sent":
+        status = "native press accepted" if state == "accepted" else "native press refused" if state == "refused" else "press submitted; outcome unknown"
+        print(f"ipb ui: {status}; {type(error).__name__}: {message}; do not retry automatically", file=sys.stderr)
+        return 6
+    print("ipb ui: " + type(error).__name__ + ": " + message, file=sys.stderr)
+    return code
+
+
 def main():
-    parser = argparse.ArgumentParser(prog="ipb ui", description="Read the selected application's AX graph; no XCTest or phone app.")
+    parser = argparse.ArgumentParser(prog="ipb ui", description="Read AX elements or press an exact identifier; no XCTest or phone app.")
+    parser.add_argument("operation", nargs="?", choices=("press", "hit-test"), help="press a fresh identifier or read the actual element at a point")
+    parser.add_argument("--identifier", help="exact accessibility identifier required by press")
     selector = parser.add_mutually_exclusive_group()
     selector.add_argument("--pid", type=int, help="read this application's PID explicitly")
     selector.add_argument("--point", type=unit_interval, nargs=2, default=(0.5, 0.5), metavar=("X", "Y"),
                           help="select the app by a read-only hit test at normalized X Y (default centre)")
     parser.add_argument("--json", action="store_true", help="emit schemaVersion 1 JSON; default is a text tree")
+    parser.add_argument("--deep", action="store_true", help="read the native descendant snapshot (opt-in; overlay coverage is limited)")
+    parser.add_argument("--full-state", action="store_true", help="with --deep, also read snapshot-only node state/role (extra per-handle requests)")
     args = parser.parse_args()
+    if args.full_state and (not args.deep or args.operation is not None):
+        parser.error("--full-state requires a --deep dump")
+    args.press_state = "not-sent"
+    if args.operation is not None and args.deep:
+        parser.error("--deep is only used by a dump")
+    if args.operation == "press" and not args.identifier:
+        parser.error("press requires a nonempty --identifier")
+    if args.operation == "hit-test" and args.pid is not None:
+        parser.error("hit-test uses --point, not --pid")
+    if args.operation != "press" and args.identifier is not None:
+        parser.error("--identifier is only used by press")
     args.device_id = os.environ.get("IPB_AX_DEVICE_ID")
     args.udid = os.environ.get("IPB_AX_UDID")
     if not args.device_id or not args.udid:
@@ -403,23 +646,25 @@ def main():
     try:
         result = asyncio.run(bounded())
     except TimeoutError as error:
-        print("ipb ui: " + (str(error) or "AX query timed out") + "; no partial tree emitted", file=sys.stderr)
-        return 5
-    except asyncio.CancelledError:
-        print("ipb ui: cancelled; no partial tree emitted", file=sys.stderr)
-        return 5
+        return report_failure(args, error, 5)
+    except asyncio.CancelledError as error:
+        return report_failure(args, error, 5)
     except Exception as error:
-        print("ipb ui: " + type(error).__name__ + ": " + str(error), file=sys.stderr)
-        return 1
+        return report_failure(args, error, 1)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+    elif args.operation == "hit-test":
+        print("AX hit-test PID " + str(result["application"]["pid"]) + ": " + json.dumps(result["target"], ensure_ascii=False))
+    elif args.operation == "press":
+        print("AX press accepted for " + json.dumps(args.identifier, ensure_ascii=False) + "; UI effect is not verified; observe again")
     else:
         print(f'AX PID {result["application"]["pid"]}: {result["nodeCount"]} nodes, depth {result["maxDepth"]}; non-atomic read')
         by_id = {node["id"]: node for node in result["nodes"]}
         pending = [result["nodes"][0]["id"]]
         while pending:
             node = by_id[pending.pop()]
-            text = node.get("label") or node.get("description") or node.get("identifier") or ""
+            text = (node.get("label") or node.get("description") or node.get("identifier")
+                    or node.get("nativeAttributes", {}).get("5003") or "")
             print("  " * node["depth"] + node["id"] + " " + json.dumps(text, ensure_ascii=False)
                   + " " + json.dumps(node.get("frame")))
             pending.extend(reversed(node["children"]))

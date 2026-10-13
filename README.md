@@ -9,15 +9,20 @@ live JPEG screen stream (`ipb stream`) and an interactive mirror window (`ipb mi
 `xcrun devicectl` for everything Apple already exposes: install, launch, files, clipboard,
 location, screenshots.
 
-`ipb ui` reads an application's accessibility graph, numerical element frames and state over
-the DevicesApp raw DTX service. It uses an optional host Python backend; it installs nothing
-on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
+In this source revision, `ipb ui --deep` reads an application's native deep accessibility tree,
+numerical element frames and state over the DevicesApp raw DTX service. `ui hit-test` reads
+the actual element at a point; `ui press --identifier ID` resolves and presses a fresh element
+once. `--deep --full-state` adds structural state/role reads. Stable `v0.2.0`
+and default `ipb ui` retain the ordinary AXChildren graph. It uses an optional host Python
+backend; it installs nothing on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
 
 The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
 service when `UHID_SERVICE_ID=auto`. The formal `v0.2.0` release is published as a simple
 validation release after host/package and Homebrew checks. The full supported physical-device
 gate remains open; this release does not claim full device acceptance. See
 [current verification scope](docs/verification.md#open-items--current-state-living-section).
+For `ui press`, exit **6** means failure after submission: the diagnostic preserves accepted,
+refused or unknown status. Never retry it automatically; read the page again first.
 
 [Install and update](#installation-channels) · [Commands](#usage) · [UI tree](docs/ui.md) ·
 [Mirror](docs/mirror.md) · [Documentation map](docs/README.md)
@@ -190,6 +195,10 @@ bin/ipb launch com.apple.Preferences
 bin/ipb open https://www.apple.com
 bin/ipb clipboard set "你好 🚀" && bin/ipb clipboard get
 bin/ipb text "你好 🚀"             # focus a text field first; replaces the device clipboard
+bin/ipb ui --deep --json                     # native application hierarchy
+bin/ipb ui --deep --full-state --json        # extra state/role reads (slower)
+bin/ipb ui hit-test --point 0.15 0.55 --json
+bin/ipb ui press --identifier Seven --json   # Calculator; re-read to verify effect
 bin/ipb displays --json
 bin/ipb capabilities --json
 bin/ipb apps | bin/ipb ps | bin/ipb lock-state | bin/ipb orientation
@@ -363,7 +372,7 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Screen recording | `screenrecord` | `ipb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
 | Live screen stream | scrcpy (an on-device server) | `ipb stream` (own, JPEG frames) | no | no |
 | Interactive mirror | scrcpy | `ipb mirror` (own) | no | Device Hub, GUI only |
-| UI hierarchy | `uiautomator dump` | `ipb ui` ([development branch](#installation-channels)): actual AX tree, text, frames and state; coverage differs from XCTest ([guide](docs/ui.md)) | `ui describe-all` (simulator) | no |
+| UI hierarchy | `uiautomator dump` | `ipb ui`: actual AX tree, text, frames and state; optional `--deep` in this source revision; coverage differs from XCTest ([guide](docs/ui.md)) | `ui describe-all` (simulator) | no |
 | Install / uninstall | `install` / `uninstall` | `ipb install` / `ipb uninstall` (devicectl) | yes | `install app` / `uninstall app` |
 | Launch / kill / ps | `am start` / `am force-stop` / `ps` | `ipb launch` / `ipb kill <pid>` / `ipb ps` (devicectl) | launch / terminate | `process launch/signal`, `info processes` |
 | Open URL / deep link | `am start -a VIEW -d` | `ipb open <url>` (devicectl) | `open` | `process openURL` |

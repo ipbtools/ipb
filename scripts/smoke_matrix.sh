@@ -76,26 +76,36 @@ echo "host: $(sw_vers -productVersion) $(sw_vers -buildVersion)  DEVICE_ID=${DEV
 if [[ "${SMOKE_AX:-0}" == 1 || "${SMOKE_AX_ONLY:-0}" == 1 ]]; then
   run "AX JSON" -- "$CTL" ui --json
   print -r -- "$LAST_OUT" > "$OUT/ui.json"
-  run "AX graph contract" -- python3 - "$OUT/ui.json" <<'PY'
+  run "AX deep JSON" -- "$CTL" ui --deep --json
+  print -r -- "$LAST_OUT" > "$OUT/ui-deep.json"
+  run "AX graph contract" -- python3 - "$OUT/ui.json" "$OUT/ui-deep.json" <<'PY'
 import json, sys
-d = json.load(open(sys.argv[1]))
-assert d['schemaVersion'] == 1 and d['atomic'] is False and d['rootStable'] is True
-assert d['scope'] == 'application-accessibility' and d['coordinateSpace'] == 'device-logical-points'
-nodes = d['nodes']; by_id = {n['id']: n for n in nodes}
-assert len(nodes) == d['nodeCount'] == len(by_id) and nodes
-roots = [n for n in nodes if n['parentId'] is None]; assert len(roots) == 1
-assert roots[0]['depth'] == 0 and any('frame' in n for n in nodes)
-visited = set(); pending = [roots[0]['id']]
-while pending:
-    ident = pending.pop(); assert ident not in visited; visited.add(ident)
-    node = by_id[ident]
-    for child in node['children']:
-        assert child in by_id and by_id[child]['parentId'] == ident
-        assert by_id[child]['depth'] == node['depth'] + 1
-    pending.extend(node['children'])
-assert len(visited) == len(nodes)
-assert d['cleanup']['connectionClosed'] and d['cleanup']['tunnelClosed']
-assert d['cleanup']['subscriptionStop'] in ('acknowledged', 'connection-closed-before-ack')
+for path, source, policy in zip(sys.argv[1:], ('AXChildren', 'AXUserTestingSnapshot'),
+                                 ('description-first', 'native-snapshot+description-first')):
+    d = json.load(open(path))
+    assert d['schemaVersion'] == 1 and d['atomic'] is False and d['rootStable'] is True
+    assert d['scope'] == 'application-accessibility' and d['coordinateSpace'] == 'device-logical-points'
+    assert d['hierarchySource'] == source
+    assert d['attributePolicy'] == policy
+    nodes = d['nodes']; by_id = {n['id']: n for n in nodes}
+    assert len(nodes) == d['nodeCount'] == len(by_id) and nodes
+    assert 0 < d['ordinaryAXNodeCount'] <= d['uniqueElementCount'] <= d['nodeCount'] <= 512
+    assert d['maxDepth'] == max(n['depth'] for n in nodes) <= 32
+    assert all(n['attributeSource'] in ('AXAttributes', 'native-snapshot', 'native-snapshot+AXAttributes') for n in nodes)
+    roots = [n for n in nodes if n['parentId'] is None]; assert len(roots) == 1
+    assert roots[0]['depth'] == 0 and any('frame' in n for n in nodes)
+    visited = set(); pending = [roots[0]['id']]
+    while pending:
+        ident = pending.pop(); assert ident not in visited; visited.add(ident)
+        node = by_id[ident]
+        for child in node['children']:
+            assert child in by_id and by_id[child]['parentId'] == ident
+            assert by_id[child]['depth'] == node['depth'] + 1
+        pending.extend(node['children'])
+    assert len(visited) == len(nodes)
+    assert d['cleanup']['connectionClosed'] and d['cleanup']['tunnelClosed']
+    assert d['cleanup']['subscriptionStop'] in ('acknowledged', 'connection-closed-before-ack')
+
 PY
   if [[ "${SMOKE_AX_ONLY:-0}" == 1 ]]; then
     (( failures == 0 )) || { echo "AX SMOKE FAILED"; exit 1; }

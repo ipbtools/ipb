@@ -73,7 +73,9 @@ screen
   stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout
                                                live JPEG frames, no DeviceHub
   mirror [--seconds S] [--csv PATH]            live screen, mouse, keyboard and text clipboard (GUI)
-  ui [--json] [--pid PID | --point X Y]        read the application's AX tree, frames and state (USB)
+  ui [--deep [--full-state]] [--json] [--pid PID | --point X Y] read AX tree/frames/state (USB)
+  ui hit-test [--point X Y] [--json]           read the actual AX element at a point
+  ui press --identifier ID [--json]           resolve a fresh element and press once
 
 apps and processes (devicectl)
   apps                                         installed apps
@@ -111,7 +113,8 @@ out. IPB_HELPER overrides the built helper path.
 
 Exit codes: 0 ok, 1 the device or connection reported failure, 2 usage or local
 error, 3 device selection or service socket refused, 4 the device tunnel is not
-connected, 5 watchdog timeout. stream and mirror define more; see README.md.
+connected, 5 watchdog timeout. ui press: 6 failure after action submission;
+never retry automatically. stream and mirror define more; see README.md.
 EOF
 }
 
