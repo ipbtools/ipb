@@ -31,6 +31,27 @@ product limits. Nil, malformed/truncated snapshots or ordinary elements absent
 from the snapshot fail without fallback or partial output. Root, selected process
 and display pre/post checks remain; `atomic=false` remains explicit.
 
+## Element press and supplementary attributes
+
+The same-device review establishes matching ordered native paths and frames against
+XCTest. Do not synthesize XCTest element types from native classes/traits. Supplement
+only attributes whose numeric meaning is established by the matching seed and live
+controls; preserve raw values for any unmapped attributes rather than inventing state.
+
+Add `ipb ui press --identifier <exact-id>` using the same USB/DTX session layer. Resolve
+the currently displayed application, request a fresh native snapshot, require exactly
+one matching native handle (repeated paths of that handle are not multiple targets),
+and read back its identifier before submitting one type-7/action-5 press. Node IDs from
+a previous dump remain invalid for actions. Failure/timeout after submission must never
+retry or fall back to HID. Report the semantic native result separately from generic
+UI-effect proof, and close the subscription/connection/tunnel. Default `ui` stays read-only.
+Keep the same portrait selection/explicit PID constraints and native snapshot budgets.
+
+Native `press` is verified on the 13 Pro Calculator Seven element: error0/resultData true,
+with fresh tree and independent screenshot showing the new value7. More controls and
+installed CLI acceptance are required before merging. XCTest hittability is a computed
+hit-point plus AX hit-test check; a frame midpoint alone must not be exposed as `isHittable`.
+
 ## Verification and delivery
 
 Use maintained host regressions for nested UID archives, cycle/nesting/graph budgets,
