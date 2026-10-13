@@ -518,8 +518,8 @@ summaries rather than rewriting earlier findings.
 configured branch; a Homebrew wrapper updates only when its canonical root matches
 `brew --prefix ipb`. A manual-prefix wrapper returns an explicit reinstall command for that
 prefix. This prevents an installed Homebrew copy from being updated in place of the user's
-running manual copy. No new persistent install-origin metadata or release automation is added.
-Homebrew HEAD still tracks `main`; source-branch availability does not mean a tag/release.
+running manual copy. No new persistent install-origin metadata is added. Homebrew HEAD tracks
+`main`; the stable formula is generated from the verified release asset in the tap workflow.
 
 ## Compressed PR and publishing scope
 
@@ -531,15 +531,18 @@ based on main f2e85a6. The human explicitly rejected an all-in-one squash: â€œä¸
 guide EOF whitespace. Follow-up CI changes add build/test/package automation without altering
 the device protocol or input implementation. Retain all dated verification records and protocol sources.
 
-[PR #1](https://github.com/ipbtools/ipb/pull/1) is Draft while the full supported
-macOS27/Xcode27 device gate remains open.
-The user requests PR CI and a downloadable test package first, then Release/Homebrew
-automation after an actual successful build/package verification. [Releasing](releasing.md)
-defines this sequence. The PR workflow builds ARM64 targets and runs host regressions on
-`xcode-27`, then verifies the staged archive and uploads a temporary artifact. The first cloud build and downloaded-package host startup pass. Follow-up automation prepares
-Draft Release candidates and generated stable archive formulas; tap publication uses its own
-manual workflow and reviewed candidate branch. Source `ipb update` separates stable upgrade
-from HEAD reinstall. No tag, release, main merge or stable tap-target change has occurred.
+Source PR #1 and tap PR #1 merged. The tagged source commit is `ac19b3fd4144b1b270ea1526af2cbbfcce884bfb`;
+the `v0.2.0` tag points to that commit. Main CI passed in run 38338717398, the formal release
+workflow passed in run 38338803091, and the tap formula workflow passed in run 38339077000.
+The formal GitHub release is published/latest and the stable formula was merged through
+[tap PR #2](https://github.com/ipbtools/homebrew-ipb/pull/2). Its generated formula matched the
+release asset byte-for-byte.
+
+This was authorized as a simple validation release after host/package and Homebrew checks,
+without a new physical-device run. The supported macOS 27 + Xcode 27 + iOS 27+ gate remains
+open; the release does not claim full physical acceptance. This current-release exception does
+not change the general future release gates. The disposable branch-test Release and tag were
+removed after the formal release was verified. Retain all prior dated verification records.
 
 ## Remaining work
 

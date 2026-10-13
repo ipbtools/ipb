@@ -4,43 +4,27 @@
 
 **Updated 2026-10-13. This section is overwritten; dated records below are append-only.**
 
-### Distribution and documentation scope (checked 2026-10-12)
+### Distribution and documentation scope (checked 2026-10-13)
 
-GitHub default `main` is f2e85a6d60c45f18e6f9f2a306f709ffb9710392; no stable version tag or
-stable GitHub Release is published. A disposable branch-test prerelease is now available below. Homebrew HEAD tracks `main` and the installed Homebrew keg is
-HEAD-f2e85a6. The new UI backend, Bilibili fix and mirror keyboard/clipboard exist on
-`codex/devicehub-alignment`, whose audited baseline is 1a3618e. They are installed separately
-under `~/.local`; the absolute wrapper there includes `ui` and mirror clipboard, unlike the
-Homebrew keg. Source VERSION0.2.0 is not a release/provenance identifier. This round does not
-merge main or change the stable tap target; a separately authorized branch-test tag/binary is now published. Development source can be built
-and installed explicitly; the full supported matrix remains open.
+Source PR #1 is merged; the tagged release commit is `ac19b3fd4144b1b270ea1526af2cbbfcce884bfb`, and
+`v0.2.0` targets that commit. Tap PR #1 is merged. Main CI passed in [run 38338717398](https://github.com/ipbtools/ipb/actions/runs/38338717398);
+the formal native build/package workflow passed in [run 38338803091](https://github.com/ipbtools/ipb/actions/runs/38338803091)
+on macOS 27.0.1 / Xcode 27.0 / CoreDevice 651.19. Host/package checks and a real Homebrew
+install with installed-file hashes passed. An independent download matched its checksum and
+all 14 packaged payload hashes.
 
-**PR submission decision:** the user now requests compressing the accumulated50 commits
-and opening a PR. A separate segmented `codex/devicehub-alignment-pr` branch preserves
-`codex/devicehub-alignment` and its original history. The initial 14-segment product tree matches09bc118; follow-up CI/release work adds
-host packaging and stable-update support without changing the AX/HID/media protocol. The full
-supported matrix remains open, and [PR #1](https://github.com/ipbtools/ipb/pull/1) remains open for review.
-The default-branch inventory found zero workflows in source/tap. The user has since authorized
-PR CI builds/test packages first and Release/Homebrew automation only after an actual passing
-build and downloaded-package verification. The PR workflow and package verifier are implemented;
-native build, host tests, package checks and actual precompiled Homebrew install/test pass
-on macOS27 in [run 38244949806](https://github.com/ipbtools/ipb/actions/runs/38244949806). The follow-up
-release/tap automation prepares drafts and candidate branches, with physical acceptance and
-publication still separate. [Releasing](releasing.md) defines the current sequence. The paired [tap PR #1](https://github.com/ipbtools/homebrew-ipb/pull/1) passes its
-offline contract/syntax CI. No stable Release, main merge or stable tap-target update has occurred; the disposable test prerelease below is published.
+The tap workflow passed in [run 38339077000](https://github.com/ipbtools/homebrew-ipb/actions/runs/38339077000),
+including public release/tag/main/hash checks and a real Homebrew install/test. Its generated
+formula was byte-identical to the verified release formula asset. Tap PR #2 merged at
+`c55740c31f74e35614216226879f5b58099046ee`; its CI passed in [run 38339257052](https://github.com/ipbtools/homebrew-ipb/actions/runs/38339257052).
+The source formula remains the `--HEAD` template; stable fields are rendered from the
+release asset. The former disposable branch-test Release and tag were removed after verification.
 
-The user now explicitly requests a disposable branch Release test. The isolated
-`release-test-vX.Y.Z-<UTC timestamp>` lane will use the real Actions token for draft/upload,
-publish as prerelease/latest=false, and check public download/Homebrew installation.
-[Actual run38274014354](https://github.com/ipbtools/ipb/actions/runs/38274014354) passes at e30cf71.
-The [test prerelease](https://github.com/ipbtools/ipb/releases/tag/release-test-v0.2.0-20261012155616)
-is published with five uploaded assets, prerelease=true and immutable=false. Real Actions
-token draft/upload, public download/checksum and Homebrew install/test are verified.
-Formal main/version/physical-acceptance boundaries remain in place.
-
-Current user guides are [README installation](../README.md#installation-channels),
-[UI](ui.md), [mirror](mirror.md) and [the document map](README.md). Protocol facts and dated
-verification history retain their existing sources/seed and append-only boundary.
+The user authorized this simple validation release without a new physical-device run. The
+supported macOS 27 + Xcode 27 + iOS 27+ device gate remains open, and `v0.2.0` does not claim
+full physical acceptance. This exception applies to the current release only; future release
+gates remain as documented. Current guides: [README installation](../README.md#installation-channels),
+[UI](ui.md), [mirror](mirror.md), and [document map](README.md).
 
 The 13 Pro AX result is **native element trees and numerical rectangles through
 DevicesApp's raw DTX service**. The initial research used an existing-paired local-network
@@ -6934,3 +6918,19 @@ executed by this prerelease; its validator rejects test tags/prereleases.
 Local raw artifacts/logs/metadata and handoff stay outside Git at
 `~/.local/state/ipb/20261013-branch-release-test/`. Native host checks do not certify
 browser-download quarantine or physical-device behavior. Earlier dated history retains its bytes.
+
+## 2026-10-13 — formal v0.2.0 simple validation release
+
+The `v0.2.0` tag targets source main `ac19b3fd4144b1b270ea1526af2cbbfcce884bfb`. Formal CI
+run 38338803091 passed on macOS 27.0.1 / Xcode 27.0 / CoreDevice 651.19, including native
+host/package checks and a real Homebrew install with installed-file hashes. An independent
+download checksum and all 14 payload hashes matched. Tap workflow run 38339077000 verified
+the public release metadata/tag/main ancestry and hashes, then passed a real Homebrew install
+and test; tap PR #2 merged at `c55740c31f74e35614216226879f5b58099046ee`. Tap CI passed in
+[run 38339257052](https://github.com/ipbtools/homebrew-ipb/actions/runs/38339257052); the
+generated formula was byte-identical to the release formula asset.
+The disposable `release-test-v0.2.0-20261012155616` release and tag were removed after this
+verification. Success-only local evidence is under `~/.local/state/ipb/20261013-formal-release/`.
+
+This simple validation release was explicitly authorized without a new physical-device run.
+The supported physical-device gate remains open, and no full physical acceptance is claimed.

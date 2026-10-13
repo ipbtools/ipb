@@ -14,8 +14,9 @@ the DevicesApp raw DTX service. It uses an optional host Python backend; it inst
 on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
 
 The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
-service when `UHID_SERVICE_ID=auto`. Feature validation is host/device specific; the current
-macOS 27 + Xcode 27 full gate for these branch changes remains open. See
+service when `UHID_SERVICE_ID=auto`. The formal `v0.2.0` release is published as a simple
+validation release after host/package and Homebrew checks. The full supported physical-device
+gate remains open; this release does not claim full device acceptance. See
 [current verification scope](docs/verification.md#open-items--current-state-living-section).
 
 [Install and update](#installation-channels) · [Commands](#usage) · [UI tree](docs/ui.md) ·
@@ -40,22 +41,43 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 ## Installation channels
 
-This README describes the alignment work submitted in [PR #1](https://github.com/ipbtools/ipb/pull/1),
-with the research history retained on `codex/devicehub-alignment`. As checked on 2026-10-12, `ipb ui`, the Bilibili text fix and the new mirror keyboard/clipboard work are
-on that branch; they are not on `main`. There is no stable GitHub release. A [disposable branch-test prerelease](https://github.com/ipbtools/ipb/releases/tag/release-test-v0.2.0-20261012155616) provides a downloadable binary and has passed the real release/upload/public-download flow. PR CI produces temporary test packages; see [download and verification instructions](docs/releasing.md#pr-test-packages). `VERSION=0.2.0` alone does not identify these branch changes.
+The alignment changes are on `main` after [PR #1](https://github.com/ipbtools/ipb/pull/1) merged
+at `ac19b3fd4144b1b270ea1526af2cbbfcce884bfb`. The formal [v0.2.0 release](https://github.com/ipbtools/ipb/releases/tag/v0.2.0)
+is published with the native package and stable formula verified. The supported physical-device
+gate remains open; this simple validation release does not claim full device acceptance. See
+[release verification](docs/releasing.md#current-channels).
 
 | Channel | What it installs | Update path |
 | --- | --- | --- |
-| Homebrew HEAD | Default branch `main`; currently lacks the new UI and mirror additions | Use `brew reinstall --HEAD ipbtools/ipb/ipb`; host-only `ipb update` needs the fix in `main` |
-| Branch-test Release | Explicit `release-test-*` branch tag, published as a disposable prerelease | Download another test release manually; no stable tap update |
-| PR CI test package | Precompiled macOS 27 ARM64 development build, with exact commit metadata | Download a newer Actions artifact; requires existing Apple runtime components |
-| Development source | The selected source branch, including the features described here | Run `bin/ipb update` in that checkout |
-| `make install PREFIX=...` | A local copy of the selected checkout | Pull/build the checkout, then repeat `make install` with the same prefix |
+| Stable Homebrew | Pinned prebuilt `v0.2.0` archive | `ipb update` or `brew upgrade ipbtools/ipb/ipb` |
+| Homebrew HEAD | Source from `main`, including the merged UI and mirror additions | `brew install --HEAD ipbtools/ipb/ipb`; `ipb update` keeps it current |
+| Release archive | Selected version with checksum/build metadata | Download a newer Release; keep bin/libexec/share together |
+| PR CI test package | Temporary precompiled development package | Download a newer Actions artifact |
+| Development source | The selected source checkout | Run `bin/ipb update` in that checkout |
+| `make install PREFIX=...` | A local copy of the selected checkout | Pull/build, then repeat install with the same prefix |
+
+### Homebrew stable release
+
+Install the pinned stable package:
+
+```sh
+brew update
+brew install ipbtools/ipb/ipb
+```
+
+To move an existing Homebrew `--HEAD` install to stable, first remove the HEAD install and
+then install the stable formula. `brew reinstall` preserves the original install options.
+
+```sh
+brew update
+brew uninstall ipbtools/ipb/ipb
+brew install ipbtools/ipb/ipb
+```
 
 ### Homebrew HEAD
 
-The tap builds from source. Select Xcode 27 beta for the build and install its CoreDevice
-package for runtime. A fully qualified formula name trusts only that formula:
+The HEAD formula builds `main` from source. Select Xcode 27 beta for the build and install its
+CoreDevice package for runtime. A fully qualified formula name trusts only that formula:
 
 ```sh
 brew install --HEAD ipbtools/ipb/ipb
@@ -66,14 +88,14 @@ ipb devices                  # then: ipb screenshot before.png; ipb tap 0.15 0.1
 
 ### Development source and local installation
 
-To install the features documented by this branch, with Xcode 27 beta selected:
+To build the current `main` source with Xcode 27 beta selected:
 
 ```sh
-git clone --branch codex/devicehub-alignment https://github.com/ipbtools/ipb.git
+git clone https://github.com/ipbtools/ipb.git
 cd ipb
 make install PREFIX="$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
-ipb help                     # confirm `ui` and mirror clipboard commands are present
+ipb help
 ```
 
 For an existing checkout, pull its selected branch and repeat `make install` with the same
@@ -108,16 +130,14 @@ Only zsh is provided; bash has no completion.
 
 ### Updating the running copy
 
-In this development branch, `ipb update` is a host-only command: it does not enumerate/select phones and needs no `-s`,
-regardless of how many devices are attached. It refreshes the running Homebrew install or
-source checkout. A manual-prefix install returns exit 2 with its exact reinstall prefix;
-it does not update another Homebrew copy. Source updates follow the checkout's configured
-branch, while Homebrew follows the formula's `main` branch. On a Homebrew install it
-compares the installed `HEAD-<sha>` against the remote HEAD and reinstalls only when they differ:
-`brew upgrade --fetch-HEAD` cannot be used, because it compares against a cached clone it does not
-refresh and answers "already installed" when the remote has moved. An install predating this fix
-runs the old wrapper; after the fix reaches `main`, use `brew reinstall --HEAD ipbtools/ipb/ipb`
-to replace it. Reinstalling current `main` does not obtain development-branch features.
+`ipb update` is host-only: it does not enumerate/select phones and needs no `-s`, regardless of
+how many devices are attached. It updates the running Homebrew install or source checkout. A
+manual-prefix install returns exit 2 with its exact reinstall prefix; it does not update another
+Homebrew copy. Source updates follow the checkout's configured branch. A Homebrew stable install
+uses `brew upgrade`; a `--HEAD` install is reinstalled from the refreshed `main` source while
+retaining its HEAD option. The command only updates the copy that is running. An older HEAD wrapper predating this
+fix needs a one-time `brew update` and `brew reinstall --HEAD ipbtools/ipb/ipb`, or the
+stable channel switch above.
 
 `make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`,
 the helpers in `libexec/` (including the optional AX backend), `share/ipb/VERSION`,

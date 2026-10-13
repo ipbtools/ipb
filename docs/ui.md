@@ -1,7 +1,9 @@
 # Application elements with `ipb ui`
 
-This command is available in the development source branch described in
-[installation channels](../README.md#installation-channels). Homebrew HEAD tracks `main`.
+`ipb ui` is included in the merged `main` source and the stable `v0.2.0` package. It reads an
+application's accessibility graph, numerical element frames and state over DevicesApp raw DTX.
+See the [installation channels](../README.md#installation-channels) for stable and `--HEAD`
+packages.
 
 ## Setup
 
