@@ -86,8 +86,8 @@ def decode(data):
     return values[0]
 
 
-def request(kind, parameters, *, translation=None):
-    """Encode proven application, native snapshot, attribute and hit-test reads."""
+def request(kind, parameters, *, translation=None, action=0):
+    """Encode proven reads and one native element press; never replay an action."""
     objects = ["$null"]
     classes = {}
 
@@ -125,11 +125,15 @@ def request(kind, parameters, *, translation=None):
     else:
         params = encode(parameters)
         token = handle(translation) if translation is not None else plistlib.UID(0)
-    if kind not in (1, 2, 5, 6):
+    if kind not in (1, 2, 5, 6, 7):
         raise ValueError("unverified AX request type")
     if kind == 2 and translation is None:
         raise ValueError("AX snapshot requires an element")
-    root = add({"requestType": kind, "clientType": 0, "actionType": 0, "attributeType": 52 if kind == 2 else 0,
+    if kind == 7 and (translation is None or type(action) is not int or action != 5):
+        raise ValueError("AX press requires an element and action 5")
+    if kind != 7 and action != 0:
+        raise ValueError("AX read cannot carry an action")
+    root = add({"requestType": kind, "clientType": 0, "actionType": action, "attributeType": 52 if kind == 2 else 0,
                 "translation": token, "parameters": params, "$class": cls("AXPTranslatorRequest")})
     return plistlib.dumps({"$version": 100000, "$archiver": "NSKeyedArchiver",
                           "$top": {"root": root}, "$objects": objects}, fmt=plistlib.FMT_BINARY)
