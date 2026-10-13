@@ -8,6 +8,8 @@ import re
 import secrets
 
 MAX_ARCHIVE_BYTES = 20 * 1024 * 1024
+MAX_ARCHIVE_NESTING = 512
+MAX_DECODE_STEPS = 500000
 
 
 def decode(data):
@@ -20,57 +22,72 @@ def decode(data):
     if not isinstance(objects, list) or len(objects) > 50000:
         raise ValueError("invalid AX object table")
     memo, visiting = {0: None}, set()
-
-    def value(obj, depth=0):
-        if depth > 100:
+    pending = [("value", archive["$top"]["root"], 0)]
+    values = []
+    steps = 0
+    while pending:
+        operation, obj, depth = pending.pop()
+        steps += 1
+        if steps > MAX_DECODE_STEPS:
+            raise ValueError("AX archive work limit")
+        if depth > MAX_ARCHIVE_NESTING:
             raise ValueError("AX archive nesting limit")
-        if isinstance(obj, plistlib.UID):
+        if operation == "reference":
+            visiting.remove(obj)
+            memo[obj] = values[-1]
+            continue
+        if operation in ("list", "dict"):
+            count = obj if operation == "list" else len(obj)
+            decoded = values[-count:] if count else []
+            if count:
+                del values[-count:]
+            if operation == "list":
+                values.append(decoded)
+                continue
+            fields = dict(zip(obj, decoded))
+            class_info = fields.pop("$class", {})
+            if not isinstance(class_info, dict):
+                raise ValueError("invalid AX class reference")
+            class_name = class_info.get("$classname")
+            if "NS.keys" in fields:
+                keys, vals = fields["NS.keys"], fields.get("NS.objects")
+                if not isinstance(keys, list) or not isinstance(vals, list) or len(keys) != len(vals):
+                    raise ValueError("AX dictionary length mismatch")
+                result = dict(zip(keys, vals))
+            elif class_name in ("NSArray", "NSMutableArray"):
+                result = fields["NS.objects"]
+                if not isinstance(result, list):
+                    raise ValueError("invalid AX array")
+            elif class_name in ("NSString", "NSMutableString", "NSAttributedString", "NSMutableAttributedString"):
+                result = fields.get("NSString", fields.get("NS.string", fields))
+            elif class_name == "NSValue" and "NS.rectval" in fields:
+                nums = [float(n) for n in re.findall(r"[-+]?(?:\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|inf|nan)", fields["NS.rectval"], re.I)]
+                if len(nums) != 4 or (nums != [math.inf, math.inf, 0.0, 0.0] and not all(math.isfinite(n) for n in nums)):
+                    raise ValueError("invalid AX rectangle")
+                result = ({"unavailable": "CGRectNull"} if nums == [math.inf, math.inf, 0.0, 0.0]
+                          else dict(zip(("x", "y", "width", "height"), nums)))
+            else:
+                result = fields
+            values.append(result)
+        elif isinstance(obj, plistlib.UID):
             index = obj.data
             if index in memo:
-                return memo[index]
+                values.append(memo[index])
+                continue
             if index in visiting or not 0 <= index < len(objects):
                 raise ValueError("cyclic or invalid AX reference")
             visiting.add(index)
-            result = value(objects[index], depth + 1)
-            visiting.remove(index)
-            memo[index] = result
-            return result
-        if isinstance(obj, list):
-            return [value(item, depth + 1) for item in obj]
-        if not isinstance(obj, dict):
-            return obj
-        class_name = None
-        if "$class" in obj:
-            class_name = value(obj["$class"], depth + 1).get("$classname")
-        if "NS.keys" in obj:
-            keys = value(obj["NS.keys"], depth + 1)
-            vals = value(obj["NS.objects"], depth + 1)
-            if len(keys) != len(vals):
-                raise ValueError("AX dictionary length mismatch")
-            return dict(zip(keys, vals))
-        if class_name in ("NSArray", "NSMutableArray"):
-            return value(obj["NS.objects"], depth + 1)
-        if class_name in ("NSString", "NSMutableString", "NSAttributedString", "NSMutableAttributedString"):
-            for key in ("NSString", "NS.string"):
-                if key in obj:
-                    return value(obj[key], depth + 1)
-        if class_name == "NSValue" and "NS.rectval" in obj:
-            text = value(obj["NS.rectval"], depth + 1)
-            nums = [float(n) for n in re.findall(r"[-+]?(?:\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|inf|nan)", text, re.I)]
-            if len(nums) != 4:
-                raise ValueError("invalid AX rectangle")
-            if nums == [math.inf, math.inf, 0.0, 0.0]:
-                return {"unavailable": "CGRectNull"}
-            if not all(math.isfinite(n) for n in nums):
-                raise ValueError("invalid AX rectangle")
-            return {"x": nums[0], "y": nums[1], "width": nums[2], "height": nums[3]}
-        return {key: value(val, depth + 1) for key, val in obj.items() if key != "$class"}
-
-    return value(archive["$top"]["root"])
+            pending.extend([("reference", index, depth), ("value", objects[index], depth + 1)])
+        elif isinstance(obj, (dict, list)):
+            pending.append(("dict" if isinstance(obj, dict) else "list", list(obj) if isinstance(obj, dict) else len(obj), depth))
+            pending.extend(("value", val, depth + 1) for val in reversed(list(obj.values()) if isinstance(obj, dict) else obj))
+        else:
+            values.append(obj)
+    return values[0]
 
 
 def request(kind, parameters, *, translation=None):
-    """Encode only the proven read requests (application, attributes and hit test)."""
+    """Encode proven application, native snapshot, attribute and hit-test reads."""
     objects = ["$null"]
     classes = {}
 
@@ -108,9 +125,11 @@ def request(kind, parameters, *, translation=None):
     else:
         params = encode(parameters)
         token = handle(translation) if translation is not None else plistlib.UID(0)
-    if kind not in (1, 5, 6):
+    if kind not in (1, 2, 5, 6):
         raise ValueError("unverified AX request type")
-    root = add({"requestType": kind, "clientType": 0, "actionType": 0, "attributeType": 0,
+    if kind == 2 and translation is None:
+        raise ValueError("AX snapshot requires an element")
+    root = add({"requestType": kind, "clientType": 0, "actionType": 0, "attributeType": 52 if kind == 2 else 0,
                 "translation": token, "parameters": params, "$class": cls("AXPTranslatorRequest")})
     return plistlib.dumps({"$version": 100000, "$archiver": "NSKeyedArchiver",
                           "$top": {"root": root}, "$objects": objects}, fmt=plistlib.FMT_BINARY)

@@ -17,7 +17,7 @@ branch may be ahead of Homebrew HEAD. Check the running path with `command -v ip
 
 | Question | Source of truth |
 | --- | --- |
-| What is implemented and why? | [Device Hub alignment plan](devicehub-alignment.md) |
+| What is implemented and why? | [Device Hub alignment plan](devicehub-alignment.md), [deep AX snapshot plan](ax-deep-snapshot.md) |
 | What is proven, still open, or awaiting a device/host? | [Verification: living current state](verification.md#open-items--current-state-living-section) |
 | What bytes/IDs does the client send? | [Protocol: captured Wire Format](protocol.md#wire-format-captured-2026-09-07), then the feature-specific sections |
 | How should Device Hub behavior be captured? | [Tracing procedure](devicehub-tracing.md) |

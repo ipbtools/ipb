@@ -9,9 +9,10 @@ live JPEG screen stream (`ipb stream`) and an interactive mirror window (`ipb mi
 `xcrun devicectl` for everything Apple already exposes: install, launch, files, clipboard,
 location, screenshots.
 
-`ipb ui` reads an application's accessibility graph, numerical element frames and state over
-the DevicesApp raw DTX service. It uses an optional host Python backend; it installs nothing
-on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
+On this development branch, `ipb ui --deep` reads an application's native deep accessibility tree,
+numerical element frames and state over the DevicesApp raw DTX service. Stable `v0.2.0`
+and default `ipb ui` retain the ordinary AXChildren graph. It uses an optional host Python
+backend; it installs nothing on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
 
 The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
 service when `UHID_SERVICE_ID=auto`. The formal `v0.2.0` release is published as a simple

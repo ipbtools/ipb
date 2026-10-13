@@ -31,6 +31,76 @@ FIELDS = {3: "label", 21: "frame", 25: "identifier", 27: "enabled", 28: "focused
 ATTRS = [8, 9, 41, *(key for key in FIELDS if key != 3)]
 BOOL_FIELDS = {27, 28, 30, 32}
 MAX_NODES, MAX_DEPTH = 512, 32
+# Native AX IDs, not AXP field IDs. Required numeric attributes and descendant
+# options: matching iOS 27 / 24A437 source and 13 Pro controls (protocol.md).
+SNAPSHOT_ATTRS = [2001, 2003, 2004, 5019, 2006, 5003, 5004, 3003]
+SNAPSHOT_OPTIONS = {"attributes": SNAPSHOT_ATTRS, "maxDepth": 48,
+                    "maxChildren": 512, "maxArrayCount": 512,
+                    "traverseFromParentsToChildren": True,
+                    "snapshotKeyHonorModalViews": False}
+ELEMENT = "UIAccessibilitySnapshotKeyElement"
+CHILDREN = "UIAccessibilitySnapshotKeyChildren"
+CHILD_COUNT = "UIAccessibilitySnapshotKeyChildrenCount"
+NATIVE_ATTRS = "UIAccessibilitySnapshotKeyAttributes"
+
+
+def snapshot_nodes(snapshot, root):
+    """Keep native path occurrences; handles can legitimately have two parents."""
+    if not isinstance(snapshot, dict) or identity(snapshot.get(ELEMENT)) != identity(root):
+        raise ValueError("AX snapshot unavailable or root mismatch")
+    nodes, by_handle = [], {}
+    pending = deque([(snapshot, None, 0, frozenset())])
+    while pending:
+        record, parent, depth, ancestors = pending.popleft()
+        if depth > MAX_DEPTH or len(nodes) >= MAX_NODES:
+            raise ValueError("AX snapshot limit reached; no partial tree emitted")
+        if not isinstance(record, dict) or id(record) in ancestors:
+            raise ValueError("invalid or cyclic AX snapshot")
+        key = identity(record.get(ELEMENT))
+        if key[0] != root["pid"]:
+            raise ValueError("AX snapshot child belongs to another process")
+        children, count, native = record.get(CHILDREN), record.get(CHILD_COUNT), record.get(NATIVE_ATTRS)
+        if (not isinstance(children, list) or type(count) is not int or count != len(children)
+                or not isinstance(native, dict)):
+            raise ValueError("AX snapshot children/attributes unavailable or truncated")
+        fields = node_fields({mapped: native[native_id] for native_id, mapped in
+                              ((2001, 3), (2003, 21), (2004, 77), (5019, 25), (2006, 53))
+                              if native_id in native})
+        metadata = {}
+        for native_id in (5003, 5004, 3003):
+            if native.get(native_id) is not None:
+                if not isinstance(native[native_id], str):
+                    raise ValueError("invalid AX native class/bundle attribute")
+                metadata[str(native_id)] = native[native_id]
+        if metadata:
+            fields["nativeAttributes"] = metadata
+        node_id = "n" + str(len(nodes))
+        node = {"id": node_id, "parentId": parent, "depth": depth, "children": [],
+                "attributeSource": "native-snapshot", **fields}
+        nodes.append(node)
+        by_handle.setdefault(key, []).append(node)
+        if parent is not None:
+            nodes[int(parent[1:])]["children"].append(node_id)
+        pending.extend((child, node_id, depth + 1, ancestors | {id(record)}) for child in children)
+    return nodes, by_handle
+
+
+def ordinary_nodes(captured, root):
+    """The existing AXChildren graph, using the same bounded attribute reads."""
+    nodes, by_handle = [], {}
+    pending = deque([(identity(root), None, 0)])
+    while pending:
+        key, parent, depth = pending.popleft()
+        attrs = captured[key]
+        node_id = "n" + str(len(nodes))
+        node = {"id": node_id, "parentId": parent, "depth": depth, "children": [],
+                "attributeSource": "AXAttributes", **node_fields(attrs)}
+        nodes.append(node)
+        by_handle[key] = [node]
+        if parent is not None:
+            nodes[int(parent[1:])]["children"].append(node_id)
+        pending.extend((identity(child), node_id, depth + 1) for child in attrs[8])
+    return nodes, by_handle
 
 
 def identity(obj):
@@ -210,10 +280,14 @@ async def capture(rsd, args):
                             continue
                         if reply.get("error") not in (None, 0):
                             raise ValueError("AX request refused: error " + str(reply["error"]))
+                        if kind == 2 and (reply.get("attribute") != 52 or
+                                          identity(reply.get("associatedTranslationObject")) != identity(token)):
+                            raise ValueError("AX snapshot response attribute/element mismatch")
                         return reply.get("resultData")
             except TimeoutError as error:
                 target = (f" pid={token['pid']} objectID={token['objectID']}" if token else "")
-                fields = f" attributes={params['attributes']}" if kind == 5 else ""
+                fields = (f" attributes={params['attributes']}" if kind == 5 else
+                          " attribute=52" if kind == 2 else "")
                 raise TimeoutError(f"AX request type={kind}{target}{fields} timed out") from error
 
         async def node_attributes(token):
@@ -255,42 +329,55 @@ async def capture(rsd, args):
 
         first = await node_attributes(root)
         root_text_attribute = 33 if has_description(first) else 3
-        pending = deque([(root, first, None, 0)])
-        seen, nodes, max_depth = {}, [], 0
+        # Complete the ordinary graph before the native snapshot; all enrichment
+        # uses these same captured handles and fields, without descendant re-reads.
+        pending = deque([(root, first, 0)])
+        seen = {}
         while pending:
-            token, attrs, parent, depth = pending.popleft()
+            token, attrs, depth = pending.popleft()
             key = identity(token)
             if key in seen:
                 raise ValueError("AX child graph repeats an element")
             if key[0] != root["pid"]:
                 raise ValueError("AX child belongs to another process")
-            if depth > MAX_DEPTH or len(nodes) >= MAX_NODES:
+            if depth > MAX_DEPTH or len(seen) >= MAX_NODES:
                 raise ValueError("AX graph limit reached; no partial tree emitted")
             attrs = attributes(attrs if attrs is not None else await node_attributes(token))
-            node_id = "n" + str(len(nodes))
-            seen[key] = node_id
-            node = {"id": node_id, "parentId": parent, "depth": depth, **node_fields(attrs),
-                    "children": []}
-            children = attrs.get(8, [])
-            node["_children"] = [identity(c) for c in children]
-            if 9 in attrs:
-                node["_navigation"] = [identity(c) for c in attrs[9]]
-            if attrs.get(41) is not None:
-                node["_parent"] = identity(attrs[41])
-            nodes.append(node)
-            pending.extend((child, None, node_id, depth + 1) for child in children)
-            max_depth = max(max_depth, depth)
-        for node in nodes:
-            node["children"] = [seen[key] for key in node.pop("_children")]
-            navigation = node.pop("_navigation", None)
-            # Navigation relations are distinct from the traversed child edges.
-            if navigation is not None:
-                node["navigationOrder"] = [seen[key] for key in navigation if key in seen]
-                node["navigationOutsideGraph"] = sum(key not in seen for key in navigation)
-            parent = node.pop("_parent", None)
-            if parent is not None:
-                node["reportedParentId"] = seen.get(parent)
-                node["reportedParentOutsideGraph"] = parent not in seen
+            seen[key] = attrs
+            pending.extend((child, None, depth + 1) for child in attrs[8])
+        if args.deep:
+            native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+            nodes, by_handle = snapshot_nodes(native, root)
+        else:
+            nodes, by_handle = ordinary_nodes(seen, root)
+        for key, attrs in seen.items():
+            if key not in by_handle:
+                raise ValueError("AX ordinary element absent from native snapshot; request a new snapshot")
+            fields = node_fields(attrs)
+            for node in by_handle[key]:
+                if "frame" in fields and "frame" in node and fields["frame"] != node["frame"]:
+                    raise ValueError("AX frame changed during collection; request a new snapshot")
+                # Native snapshot owns geometry, label and native metadata. Preserve
+                # separately read Description, state and role fields on AX elements.
+                native_geometry = "frame" in node or "frameUnavailable" in node
+                node.update({name: val for name, val in fields.items() if name not in node
+                             and not (native_geometry and name in ("frame", "frameUnavailable"))})
+                node["attributeSource"] = "native-snapshot+AXAttributes" if args.deep else "AXAttributes"
+                if 9 in attrs:
+                    navigation = [identity(c) for c in attrs[9]]
+                    if any(len(by_handle.get(k, [])) > 1 for k in navigation):
+                        node["navigationUnavailable"] = "ambiguous-snapshot-handle"
+                    else:
+                        node["navigationOrder"] = [by_handle[k][0]["id"] for k in navigation if k in by_handle]
+                        node["navigationOutsideGraph"] = sum(k not in by_handle for k in navigation)
+                if attrs.get(41) is not None:
+                    matches = by_handle.get(identity(attrs[41]), [])
+                    if len(matches) > 1:
+                        node["reportedParentUnavailable"] = "ambiguous-snapshot-handle"
+                    else:
+                        node["reportedParentId"] = matches[0]["id"] if matches else None
+                        node["reportedParentOutsideGraph"] = not matches
+        max_depth = max(node["depth"] for node in nodes)
         last = attributes(await read(5, {"attributes": [8, 21, root_text_attribute]}, root))
         if signature(first, root_text_attribute) != signature(last, root_text_attribute):
             raise ValueError("AX root changed during collection; request a new snapshot")
@@ -306,7 +393,9 @@ async def capture(rsd, args):
                 "deviceIdentifier": args.device_id, "udid": rsd.udid,
                 "application": {"pid": root["pid"], "selection": selection},
                 "scope": "application-accessibility", "coordinateSpace": "device-logical-points",
-                "hierarchySource": "AXChildren", "attributePolicy": "description-first",
+                "hierarchySource": "AXUserTestingSnapshot" if args.deep else "AXChildren",
+                "attributePolicy": "native-snapshot+description-first" if args.deep else "description-first",
+                "ordinaryAXNodeCount": len(seen), "uniqueElementCount": len(by_handle),
                 "atomic": False, "rootStable": True,
                 "displayFrame": display,
                 "cleanup": cleanup,
@@ -374,6 +463,7 @@ def main():
     selector.add_argument("--point", type=unit_interval, nargs=2, default=(0.5, 0.5), metavar=("X", "Y"),
                           help="select the app by a read-only hit test at normalized X Y (default centre)")
     parser.add_argument("--json", action="store_true", help="emit schemaVersion 1 JSON; default is a text tree")
+    parser.add_argument("--deep", action="store_true", help="read the native descendant snapshot (opt-in; overlay coverage is limited)")
     args = parser.parse_args()
     args.device_id = os.environ.get("IPB_AX_DEVICE_ID")
     args.udid = os.environ.get("IPB_AX_UDID")
@@ -419,7 +509,8 @@ def main():
         pending = [result["nodes"][0]["id"]]
         while pending:
             node = by_id[pending.pop()]
-            text = node.get("label") or node.get("description") or node.get("identifier") or ""
+            text = (node.get("label") or node.get("description") or node.get("identifier")
+                    or node.get("nativeAttributes", {}).get("5003") or "")
             print("  " * node["depth"] + node["id"] + " " + json.dumps(text, ensure_ascii=False)
                   + " " + json.dumps(node.get("frame")))
             pending.extend(reversed(node["children"]))

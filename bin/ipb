@@ -73,7 +73,7 @@ screen
   stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout
                                                live JPEG frames, no DeviceHub
   mirror [--seconds S] [--csv PATH]            live screen, mouse, keyboard and text clipboard (GUI)
-  ui [--json] [--pid PID | --point X Y]        read the application's AX tree, frames and state (USB)
+  ui [--deep] [--json] [--pid PID | --point X Y] read AX tree/frames/state; --deep opts into native descendants (USB)
 
 apps and processes (devicectl)
   apps                                         installed apps

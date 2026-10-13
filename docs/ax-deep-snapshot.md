@@ -8,7 +8,7 @@ The ordinary AXChildren graph omits backing layout containers: the iPhone 13 Pro
 Settings main page has 13 ordinary elements, whereas the independently verified
 DevicesApp snapshot has 138 records at depth 20. Earlier request 2 / attribute 52
 (native 95006) returned nil because its options lacked a nonempty array of numeric
-native AX attributes. The current archive decoder also rejects that valid response
+native AX attributes. The former archive decoder also rejects that valid response
 at its 100-level UID/container nesting limit.
 
 Keep the existing paired USB userspace RSD, raw DTX channel zero, one outstanding
@@ -33,7 +33,7 @@ and display pre/post checks remain; `atomic=false` remains explicit.
 
 ## Verification and delivery
 
-Use maintained host regressions for nested UID archives, cycle/size/graph budgets,
+Use maintained host regressions for nested UID archives, cycle/nesting/graph budgets,
 numeric request options, duplicate paths, omitted/false fields, truncation, root
 changes, notifications and cleanup. Build and install into an isolated prefix;
 exercise source and installed `ui` on the allocated iPhone 13 Pro, including
@@ -45,10 +45,19 @@ user guide and verification current state plus an append-only dated record.
 
 ## Status and open questions
 
-Implementation and product validation are in progress. The main Bilibili login/numeric
-keyboard page still reads 40 ordinary nodes, while deep+state reads fail geometry/root
+Implementation is complete on this local branch. Both hosts build and pass complete host
+regressions; final28 AX tests pass. Source/installed ordinary+deep AX gates and installed
+noninteractive smoke pass on the local13Pro; Calculator JSON/text deep reads pass.
+Installed Bilibili visible-title default25/depth1 and deep94/depth19 both pass with
+matching title and native frame; the previous Label timeout does not recur.
+Mac-M2 (macOS27/Xcode27) reads the same138-record Settings tree through owned USB forwarding.
+Its native CoreDevice cannot discover this13Pro (error1000), so full supported native/interactive
+acceptance remains open. The main Bilibili login/numeric
+keyboard page reads40/41 ordinary nodes, while deep+state reads fail geometry/root
 stability or handle-set reconciliation. Cause remains open. Keep ordinary AXChildren as
-the default and require `--deep` explicitly; deep failures never silently fall back. Research evidence is local
+the default and require `--deep` explicitly; deep failures never silently fall back.
+
+Research evidence is local
 at `/private/tmp/ipb-ax-snapshot-20261013` and retained on research branch
 `codex/communication-capabilities-20261013` (`03f5ce8`). Matching iOS 27 / 24A437
 framework disassembly and live controls prove the required numeric option and

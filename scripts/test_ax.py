@@ -83,8 +83,83 @@ CHILD = {"pid": 42, "objectID": 101, "isApplicationElement": False, "didPopuldat
 FRAME = {"x": 0, "y": 0, "width": 375, "height": 812}
 
 
+def snapshot(token, children=None, attrs=None):
+    children = [] if children is None else children
+    return {ipb_ax.ELEMENT: token, ipb_ax.CHILDREN: children,
+            ipb_ax.CHILD_COUNT: len(children),
+            ipb_ax.NATIVE_ATTRS: {2003: FRAME} if attrs is None else attrs}
+
+
+class SnapshotTests(unittest.TestCase):
+    def test_deep_keyed_archive_exceeds_old_wrapper_limit(self):
+        tree = snapshot(CHILD)
+        for _ in range(24):
+            tree = snapshot(CHILD, [tree])
+        decoded = ax_archive.decode(archive(tree))
+        nodes, _ = ipb_ax.snapshot_nodes(decoded, CHILD)
+        self.assertEqual(len(nodes), 25)
+        self.assertEqual(nodes[-1]["depth"], 24)
+
+    def test_native_request_has_numeric_attributes_and_parameter_wrapper(self):
+        data = ax_archive.request(2, {"parameter": ipb_ax.SNAPSHOT_OPTIONS}, translation=TOKEN)
+        decoded = ax_archive.decode(data)
+        self.assertEqual((decoded["requestType"], decoded["attributeType"], decoded["actionType"]), (2, 52, 0))
+        options = decoded["parameters"]["parameter"]
+        self.assertTrue(options["attributes"] and all(type(v) is int for v in options["attributes"]))
+        self.assertTrue(options["traverseFromParentsToChildren"])
+        with self.assertRaises(ValueError):
+            ax_archive.request(2, {})
+
+    def test_duplicate_handles_keep_distinct_path_nodes(self):
+        nodes, handles = ipb_ax.snapshot_nodes(snapshot(TOKEN, [snapshot(CHILD), snapshot(CHILD)]), TOKEN)
+        self.assertEqual(nodes[0]["children"], ["n1", "n2"])
+        self.assertEqual([n["parentId"] for n in nodes[1:]], ["n0", "n0"])
+        self.assertEqual(len(handles[ipb_ax.identity(CHILD)]), 2)
+
+    def test_native_fields_keep_unavailable_geometry_and_numeric_metadata(self):
+        native = {2001: "Title", 2003: {"unavailable": "CGRectNull"}, 2004: -(1 << 63),
+                  5019: "title-id", 2006: "中文🙂", 5003: "UIButton", 5004: "UIControl", 3003: "example.app"}
+        node = ipb_ax.snapshot_nodes(snapshot(TOKEN, attrs=native), TOKEN)[0][0]
+        self.assertEqual(node["traits"], str(1 << 63))
+        self.assertEqual(node["frameUnavailable"], "CGRectNull")
+        self.assertNotIn("frame", node)
+        self.assertNotIn("enabled", node)
+        self.assertEqual(node["value"], "中文🙂")
+        self.assertEqual(node["nativeAttributes"], {"5003": "UIButton", "5004": "UIControl", "3003": "example.app"})
+
+    def test_nil_truncated_cross_process_and_cyclic_snapshots_fail(self):
+        bad_count = snapshot(TOKEN, [snapshot(CHILD)])
+        bad_count[ipb_ax.CHILD_COUNT] = 2
+        missing = snapshot(TOKEN); del missing[ipb_ax.CHILDREN]
+        cycle = snapshot(TOKEN); cycle[ipb_ax.CHILDREN].append(cycle); cycle[ipb_ax.CHILD_COUNT] = 1
+        other_pid = snapshot(TOKEN, [snapshot({**CHILD, "pid": 43})])
+        for tree in (None, bad_count, missing, cycle, other_pid):
+            with self.subTest(tree=type(tree).__name__), self.assertRaises(ValueError):
+                ipb_ax.snapshot_nodes(tree, TOKEN)
+
+    def test_record_and_depth_budgets(self):
+        tree = snapshot(TOKEN, [snapshot(CHILD) for _ in range(511)])
+        self.assertEqual(len(ipb_ax.snapshot_nodes(tree, TOKEN)[0]), 512)
+        tree[ipb_ax.CHILDREN].append(snapshot(CHILD)); tree[ipb_ax.CHILD_COUNT] += 1
+        with self.assertRaisesRegex(ValueError, "snapshot limit"):
+            ipb_ax.snapshot_nodes(tree, TOKEN)
+        tree = snapshot(CHILD)
+        for _ in range(32):
+            tree = snapshot(CHILD, [tree])
+        self.assertEqual(ipb_ax.snapshot_nodes(tree, CHILD)[0][-1]["depth"], 32)
+        with self.assertRaisesRegex(ValueError, "snapshot limit"):
+            ipb_ax.snapshot_nodes(snapshot(CHILD, [tree]), CHILD)
+
+    def test_archive_nesting_still_bounded_without_python_recursion(self):
+        objects = ["$null"] + [{"next": plistlib.UID(n + 1)} for n in range(1, 601)] + ["end"]
+        data = plistlib.dumps({"$archiver": "NSKeyedArchiver", "$objects": objects,
+                              "$top": {"root": plistlib.UID(1)}}, fmt=plistlib.FMT_BINARY)
+        with self.assertRaisesRegex(ValueError, "nesting limit"):
+            ax_archive.decode(data)
+
+
 class SessionTests(unittest.IsolatedAsyncioTestCase):
-    async def run_capture(self, mode):
+    async def run_capture(self, mode, *, deep=True):
         state = {"requests": [], "attribute_requests": [], "closed": False,
                  "dtx_closed": False, "root_reads": 0}
         class Terminated(Exception):
@@ -106,6 +181,21 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                 state["requests"].append(req["requestType"])
                 if req["requestType"] == 1:
                     result = TOKEN
+                elif req["requestType"] == 2:
+                    result = snapshot(TOKEN, [snapshot(CHILD)])
+                    if mode == "native-duplicate":
+                        result = snapshot(TOKEN, [snapshot(CHILD), snapshot(CHILD)])
+                    if mode == "native-deep":
+                        container = {**CHILD, "objectID": 102}
+                        result = snapshot(TOKEN, [snapshot(container, [snapshot(CHILD)])])
+                    if mode == "native-nil":
+                        result = None
+                    if mode == "native-truncated":
+                        result[ipb_ax.CHILD_COUNT] = 2
+                    if mode == "native-missing-element":
+                        result = snapshot(TOKEN)
+                    if mode == "native-null-frame":
+                        result[ipb_ax.NATIVE_ATTRS][2003] = {"unavailable": "CGRectNull"}
                 else:
                     token = req["translation"]
                     requested = req["parameters"]["attributes"]
@@ -120,6 +210,8 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                         if mode == "duplicate":
                             children = [CHILD, CHILD]
                         result = {8: children, 21: FRAME, 3: "Test app"}
+                        if mode == "native-duplicate":
+                            result[9] = [CHILD]
                         if mode in ("description", "description-changed"):
                             result[33] = "Test app"
                         if mode == "description-changed" and state["root_reads"] > 1:
@@ -137,7 +229,9 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                     result = {key: val for key, val in result.items() if key in requested}
                 if mode == "notification":
                     await self.conn._services[0].packet(archive({"associatedRequestType": 11, "resultData": None}))
-                await self.conn._services[0].packet(archive({"associatedRequestType": req["requestType"], "resultData": result, "error": 0}))
+                await self.conn._services[0].packet(archive({"associatedRequestType": req["requestType"], "resultData": result,
+                    "error": 0, "attribute": 51 if mode == "wrong-attribute" else req["attributeType"],
+                    "associatedTranslationObject": req["translation"]}))
         class Connection:
             def __init__(self, reader, writer):
                 self._control_svc = Service({})
@@ -162,7 +256,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         mods["pymobiledevice3.dtx.service"].DTXControlService = Service
         mods["pymobiledevice3.dtx.service"].dtx_on_invoke = lambda name: lambda fn: fn
         mods["pymobiledevice3.exceptions"].ConnectionTerminatedError = Terminated
-        args = argparse.Namespace(pid=42, point=(.5, .5), device_id="fixture")
+        args = argparse.Namespace(pid=42, point=(.5, .5), device_id="fixture", deep=deep)
         with patch.dict(sys.modules, mods):
             try:
                 result = await ipb_ax.capture(Rsd(), args)
@@ -178,6 +272,52 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(result["nodes"][1]["enabled"], False)
         self.assertTrue(state["closed"] and state["dtx_closed"])
 
+    async def test_default_keeps_ordinary_graph_without_snapshot_request(self):
+        result, state, error = await self.run_capture("native-nil", deep=False)
+        self.assertIsNone(error)
+        self.assertEqual((result["nodeCount"], result["maxDepth"]), (2, 1))
+        self.assertEqual(result["hierarchySource"], "AXChildren")
+        self.assertEqual(result["attributePolicy"], "description-first")
+        self.assertNotIn(2, state["requests"])
+        self.assertIs(result["nodes"][1]["enabled"], False)
+
+    async def test_native_geometry_precedence_does_not_emit_frame_and_unavailable(self):
+        result, state, error = await self.run_capture("native-null-frame")
+        self.assertIsNone(error)
+        root = result["nodes"][0]
+        self.assertEqual(root["frameUnavailable"], "CGRectNull")
+        self.assertNotIn("frame", root)
+
+    async def test_deep_structure_and_ordinary_state_use_same_transport(self):
+        result, state, error = await self.run_capture("native-deep")
+        self.assertIsNone(error)
+        self.assertEqual((result["nodeCount"], result["maxDepth"], result["ordinaryAXNodeCount"]), (3, 2, 2))
+        self.assertEqual(result["hierarchySource"], "AXUserTestingSnapshot")
+        self.assertEqual(result["nodes"][1]["children"], ["n2"])
+        self.assertEqual(result["nodes"][2]["parentId"], "n1")
+        self.assertNotIn("enabled", result["nodes"][1])
+        self.assertIs(result["nodes"][2]["enabled"], False)
+        self.assertEqual(state["requests"].count(2), 1)
+
+    async def test_repeated_native_paths_share_one_state_read(self):
+        result, state, error = await self.run_capture("native-duplicate")
+        self.assertIsNone(error)
+        self.assertEqual((result["nodeCount"], result["uniqueElementCount"]), (3, 2))
+        self.assertEqual(result["nodes"][0]["children"], ["n1", "n2"])
+        self.assertEqual(result["nodes"][0]["navigationUnavailable"], "ambiguous-snapshot-handle")
+        self.assertNotIn("navigationOrder", result["nodes"][0])
+        self.assertTrue(all(node["enabled"] is False for node in result["nodes"][1:]))
+        self.assertEqual(sum(obj == CHILD["objectID"] and 8 in fields
+                             for obj, fields in state["attribute_requests"]), 1)
+
+    async def test_invalid_native_snapshot_never_falls_back(self):
+        for mode in ("native-nil", "native-truncated", "native-missing-element", "wrong-attribute"):
+            with self.subTest(mode=mode):
+                result, state, error = await self.run_capture(mode)
+                self.assertIsNone(result)
+                self.assertIsInstance(error, ValueError)
+                self.assertTrue(state["closed"] and state["dtx_closed"])
+
     async def test_changed_root_does_not_emit_partial_tree(self):
         result, state, error = await self.run_capture("changed")
         self.assertIsNone(result)
@@ -188,7 +328,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         result, state, error = await self.run_capture("description")
         self.assertIsNone(error)
         self.assertEqual(result["nodeCount"], 2)
-        self.assertEqual(result["attributePolicy"], "description-first")
+        self.assertEqual(result["attributePolicy"], "native-snapshot+description-first")
         title = result["nodes"][1]
         self.assertEqual(title["description"], "Example video title")
         self.assertEqual(title["frame"], FRAME)
