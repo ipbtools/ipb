@@ -20,11 +20,45 @@
 
 ## 5. WebDriverAgent（appium fork）与真机触控原理
 - WDA 通过链接 `XCTest.framework`，用 Apple 私有 API 在设备上执行命令；appium-xcuitest-driver 用 `devicectl`（iOS17+/Xcode15+）或 `appium-ios-device`（iOS16 及以下）来安装/拉起已预装的 WDA，减少每次 `xcodebuild` 启动开销。Sauce Labs 从 2026-01 起真机会话默认改用官方 Appium WDA，放弃了自维护的 SauceWebDriverAgent fork。（[Appium 文档](https://appium.github.io/appium-xcuitest-driver/latest/guides/run-preinstalled-wda/)、[Sauce Labs](https://docs.saucelabs.com/mobile-apps/automated-testing/appium/real-devices/)）
-- **底层链路**（公开逆向资料佐证）：硬件事件 → IOKit 生成 `IOHIDEvent` → 经 Mach port 送到 SpringBoard → SpringBoard 分发给目标 App 主线程 runloop 的 source0 回调 → 封装成 `UIEvent`。XCTest/WDA 的 `XCUICoordinate.tap()` 等 API 正是通过系统私有接口合成这类 HID/UIEvent 注入到目标进程，**这套合成注入能力仅对已签名、挂载了 XCTest 的测试进程开放**，不存在系统级、任意进程可用的"adb input tap"等价物。
+- **实现与边界（2026-09-22 更正）**：WDA 在设备上运行签名的测试 runner，链接 XCTest；`/element/:uuid/click` 先取出并检查缓存的 `XCUIElement`，再调用 `[element tap]`。这解释了 WDA 自己的路径，不能推出所有真机输入都需要 XCTest。ipb 已通过 Apple 自带 `dtuhidd` 验证坐标触控和按键，不安装第三方手机端组件。来源：[WDA README](https://github.com/appium/WebDriverAgent/blob/master/README.md)、[元素命令](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Commands/FBElementCommands.m)、[本项目协议](../protocol.md)。
+
+### 5.1 WDA 相对 ipb 的增量与无第三方设备端组件的边界
+
+截至 2026-09-22，以下 WDA 能力由当前上游源码/文档确认，**未在本项目当前 iOS 27 手机上验证 WDA**。
+ipb 一栏区分现有 CLI 与 AXAudit 研究原型；不是两种后端在同一台手机上的性能或稳定性 A/B。
+
+| 能力 | WDA 的具体实现 | ipb 当前状态 / 是否构成无组件路线的硬限制 |
+| --- | --- | --- |
+| 页面结构 | `/source` 提供 XML/JSON，另有 `/wda/accessibleSource` | AXAudit 已导出 131 节点的跨时刻合并树；目标同步、完整性未解决。没有证据证明其他 Apple 服务绝对无法补齐。 |
+| 元素几何与状态 | 元素 `rect`、enabled、selected、visible、hittable 等；矩形源自 XCTest frame | 稳定矩形/命中状态接口尚未跑通。单靠 HID 输入通道不能获得这些信息，需要另外的观察服务。 |
+| 选择器 | accessibility id、class、predicate、class chain、XPath、子树查找 | 缺产品接口；在获得足够准确的树和属性后，可在主机实现匹配，选择器算法本身不要求设备端 runner。 |
+| 按元素操作 | click、clear、输入、slider/picker 操作、scrollTo | 目前是坐标输入和焦点剪贴板粘贴；AXAudit 的 Activate 描述符已观察到，动作效果未验证。不能把未知权限条件写成永久不可用。 |
+| 系统弹窗语义 | 读弹窗文字、列按钮、按名称 accept/dismiss | 已验证部分系统弹窗可坐标点击；缺结构化定位接口。WDA 的优势是语义封装，不能据此称所有系统弹窗都只有 WDA 能处理。 |
+| 多指与组合手势 | pinch、rotate、双指点击、W3C actions 等 | 正式 CLI 缺少这些组合；协议是否足够需要实测。当前未发现必须安装 WDA 的证据。 |
+| 自动化会话 | 元素缓存/失效检查、活动 App 选择、动画/空闲等待 | 缺对应完整会话层。主机可实现轮询、缓存和后置验证，但若要复现 XCTest 内部的准确状态，需要可访问的底层观测接口。 |
+| 基础远控 | 截图、点击、拖动、按键、应用启动等 | 已有对应功能；接口语义不同，不因 WDA 使用 runner 就认定这一层必然更强。 |
+
+源码依据：[页面 source](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Commands/FBDebugCommands.m)、
+[元素查找](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Commands/FBFindElementCommands.m)、
+[元素动作](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Commands/FBElementCommands.m)、
+[状态与矩形](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Categories/XCUIElement%2BFBWebDriverAttributes.m)、
+[弹窗](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Commands/FBAlertViewCommands.m)、
+[W3C actions](https://github.com/appium/WebDriverAgent/blob/master/WebDriverAgentLib/Commands/FBTouchActionCommands.m)、
+[等待与快照设置](https://appium.github.io/appium-xcuitest-driver/latest/reference/settings/)。
+
+WDA 的设备端代码与 XCTest 运行环境是它这套实现的必需条件；普通沙箱 App 并不会因为安装到手机就自动获得同等能力。
+真机 runner 的签名/安装要求见 [Appium provisioning 文档](https://appium.github.io/appium-xcuitest-driver/latest/getting-started/provisioning-profile/)。
+这不等价于“同样的用户功能不装第三方 App 就绝不可能”：ipb 已调用 Apple 自带服务完成输入，AXAudit 也已提供部分语义。
+当前可明确报告的是 **本项目尚未验证出能完整替代 XCTest 元素查询接口的无 runner 路径**，而不是不可能性证明。
+
+WDA 也不保证任意 App 的完整 UIKit/SwiftUI 内部对象树。它依赖系统 accessibility，未暴露的元素可能缺失，
+一次只针对一个活动 App 层级，快照还受深度/数量限制；Inspector 的树与 XCTest 的树也可能不同。
+来源：[元素缺失与属性限制](https://appium.github.io/appium-xcuitest-driver/latest/troubleshooting/element-lookup/)、
+[snapshotMaxDepth / snapshotMaxChildren](https://appium.github.io/appium-xcuitest-driver/latest/reference/settings/)。
 
 ## 6. `xcrun devicectl` 与 Apple 官方 Xcode 27 "Device Hub"
-- `devicectl` 目前**没有独立的 screenshot 子命令**（只能拿到 `screenViewingURL` 之类的元信息），也**没有公开的输入注入接口**；它是 Device Hub 的命令行对应物，主要用于 CI 流水线里装包/拉起而非交互控制。
-- Xcode 27 的 Device Hub 把模拟器与真机管理界面合并，提供真机远程屏幕镜像/控制、系统更新触发等能力，但**社区反馈的重要限制**：屏幕镜像仅支持 iOS 27+ 真机（旧系统版本不支持）；不支持拖拽文件到模拟器（相对旧版是倒退）；缺少精确像素缩放和 Debug 菜单。目前没有公开的 CoreDevice `UniversalHID`/`dtuhidd` 逆向文档——这部分协议仍是黑盒，社区搜索未发现相关逆向成果。（[The Swift Dev](https://www.theswift.dev/posts/debug-ios-device-bugs-with-xcode-27-device-hub/)、[mjtsai 博客标题确认](https://mjtsai.com/blog/2026/06/25/xcode-27s-device-hub/)）
+- 当前 Xcode 27 `devicectl` 有 `device capture screenshot`，ipb 的截图命令已使用该路径；`capture screen-record` 在测试设备上报告不支持。原来的“没有截图子命令”结论已过时。当前实现与边界见 [README 能力矩阵](../../README.md#feature-matrix-ipb-vs-adb-vs-idb-vs-devicectl)。
+- Device Hub 的真机镜像和输入服务已在本项目跟踪，`UniversalHID`/`dtuhidd` 的已捕获协议见 [protocol.md](../protocol.md)，不能再称为完全未逆向的黑盒。当前发布范围是 macOS 27 + Xcode 27 + iOS 27；历史其他组合的结果保留在 [verification.md](../verification.md)，不能用旧社区摘要替代本项目实测矩阵。
 
 ### 6.1 Device Hub 的快捷键约定（2026-09-08 实测，Xcode 27 beta 6 + iPhone 13 Pro）
 
@@ -60,7 +94,7 @@ iOS 没有 BACK 键，scrcpy 的 `MOD+b`／右键没有直接等价物。
 - **iPhone Mirroring 官方无自动化 API**（Apple DTS 明确答复无此 API）；社区方案（如 midscene-ios、"iPhone Mirroir" MCP）本质是**截图 + 坐标映射到 Mac 屏幕再模拟鼠标点击**，即操作的是 macOS 侧的镜像窗口而非设备本身的注入通道。
 - Sauce Labs / BrowserStack / AWS Device Farm 真机云的输入注入路径统一：**Appium → XCUITest driver → WebDriverAgent → XCTest**，或直接跑开发者自己的 XCTest UI bundle；AWS Device Farm 用 Amazon 托管的 macOS host 动态连接真机跑这套链路，没有绕开 XCTest 的旁路方案。（[AWS 文档](https://docs.aws.amazon.com/devicefarm/latest/developerguide/test-types-ios-xctest-ui.html)、[BrowserStack](https://www.browserstack.com/guide/appium-ios-tutorial)）
 
-## 8. `Git-Agni/prod-FARM-IOS-Core`：一个 2026 年的真机农场，仍然只能走 WDA（2026-09-14 阅读）
+## 8. `Git-Agni/prod-FARM-IOS-Core`：一个采用 WDA 的真机农场（2026-09-14 阅读）
 
 [仓库](https://github.com/Git-Agni/prod-FARM-IOS-Core)。Apache-2.0，`@git-agni/phone-farm-core` 0.1.0-review.0，Node ≥22。
 **本节依据 README + `docs/architecture.md` + `docs/coordinates.md` + `package.json`，未读源码**；凡涉及实现细节的判断都以这四份文档的原文为准。
@@ -137,23 +171,26 @@ sees pixels" 在这个对照下是明显更优的选择：换机型不需要改�
 | 工具 | 真机支持 | 需要设备端 App/Server | 需要 XCTest | 需要 Mac | 输入注入方式 | 截图方式 | License | 活跃度(截至2026-09) |
 |---|---|---|---|---|---|---|---|---|
 | idb | 部分（无 tap/swipe） | idb_companion(Mac) | 仅部分真机流程 | 是 | 模拟器=Indigo HID；真机=不支持 | 模拟器完善，真机历史多 bug | MIT | 有提交，架构迁移中 |
-| pymobiledevice3 | 是 | 否（RSD隧道） | 否（多数功能） | 否（跨平台） | 未见公开真机通用注入API | developer dvt 截图 | MIT | 最活跃，2026仍在更新 |
+| pymobiledevice3 | 是 | 多数服务不需要；WDA后端需要 | 依所选后端 | 否（跨平台客户端） | AXAudit有限动作；另有WDA客户端 | developer dvt / WDA 截图 | GPL-3.0 | 活跃，当前AXAudit验证见devicehub-alignment.md |
 | go-ios | 是 | 依赖DDI/隧道 | 委托给WDA | 否（Go跨平台） | 委托WDA/DeviceKit，自身不做 | 支持 | MIT | 活跃，产业采用(Sauce/HeadSpin) |
 | libimobiledevice/ideviceinstaller | 是(装包为主) | 否 | 否 | 否 | 无 | 无 | LGPL | 活跃(2025-10发布) |
 | tidevice/tidevice3 | 是 | 否 | 部分 | 否 | 依赖WDA | 支持 | MIT | tidevice3已归档(2025-07) |
-| WebDriverAgent | 是 | 是(WDA需装到机器上) | 是 | 是(构建/签名) | XCTest合成HID/UIEvent | 支持 | Apache2.0 | 活跃(appium维护) |
-| xcrun devicectl | 是 | 否 | 否 | 是 | 无 | 无独立命令 | Apple专有 | 随Xcode更新 |
-| Xcode 27 Device Hub | 是(iOS27+镜像) | 否 | 否 | 是 | 官方黑盒(未逆向) | 屏幕镜像 | Apple专有 | 2026新功能 |
+| WebDriverAgent | 是 | 是(WDA runner) | 是 | 构建/签名通常需要 | XCTest | 支持 | BSD | 活跃(appium维护) |
+| xcrun devicectl | 是 | 无第三方组件 | 否 | 是 | CLI无通用tap命令 | capture screenshot | Apple专有 | 随Xcode更新 |
+| Xcode 27 Device Hub | 当前支持矩阵为iOS27+ | 无第三方组件 | 否 | 是 | CoreDevice / dtuhidd；本项目已有捕获 | 屏幕镜像 | Apple专有 | 2026新功能 |
 | iPhone Mirroring+社区自动化 | 是 | 否(系统内建) | 否 | 是 | 截图+坐标映射点击Mac窗口 | 系统镜像 | Apple专有+MIT封装 | 活跃(社区MCP) |
 | Sauce/BrowserStack/AWS Device Farm | 是 | 是(WDA/XCTest bundle) | 是 | 云端Mac host | XCTest/WDA | 支持 | 商业 | 活跃 |
 | prod-FARM-IOS-Core (农场) | 是 | 是(WDA) | 是 | 是(签名+xcodebuild) | WDA HTTP → XCTest | WDA 截图 / MJPEG 流 | Apache2.0 | 2026-09 公开，0.1.0-review.0 |
 
-## 结论：真机上没有任何开源工具能在不装设备端 server 的前提下提供的能力
-截至目前公开资料，**在物理 iOS 设备、且不预先安装/签名任何设备端进程（无 XCTest bundle、无 WDA、无镜像 App）的前提下，没有开源工具能提供系统级任意坐标的触控/按键注入**（等价于 adb 的 `input tap`）。原因是 Apple 把 `IOHIDEvent` 合成注入能力锁定在经开发者证书签名并挂载 `XCTest.framework`/`testmanagerd` 的进程里；pymobiledevice3、go-ios 提供的都是隧道/协议层（RSD、DDI、devicectl 通道），真正落地的触控注入最终都要绕回 WebDriverAgent/XCTest 这条唯一公开路径。同样，Device Hub 背后的 `UniversalHID`/`dtuhidd` 协议目前仍是 Apple 内部黑盒，没有公开逆向实现可用；iPhone Mirroring 的自动化方案本质是"操作 Mac 窗口"而非"注入设备"。因此，"不依赖设备端 server 的真机 adb 等价物"在当前生态里**不存在**。
+## 当前结论：输入能力已跑通，元素语义仍需补齐
 
-2026-09-14 补充佐证：`prod-FARM-IOS-Core`（第 8 节）是一个 2026 年公开的生产级真机农场，仍然
-走 WDA/XCTest，并为此付出签名、provisioning、100 UDID 上限、钥匙串解锁这一整套代价。它没有
-推翻上面的结论，而是再次确认了它 —— 同时也说明 ipb 走的 `dtuhidd` 路线到目前为止仍无第二个
-公开实现。
+旧版“不装第三方设备端组件就不能进行真机触控/按键注入”的结论已撤回：ipb 的
+`dtuhidd` 路径已有实机证据。Apple 自带 DDI 服务也是设备端代码，“无第三方组件”不意味着
+“设备上没有任何服务”。第 8 节的另一项目使用 WDA，只能证明其实现选择，不能证明其他路线不可能。
+
+当前增量应聚焦页面结构、元素矩形/状态、目标同步、按元素动作与动作后验证。
+AXAudit 已证明部分层级和属性可读；坐标、完整快照和动作权限仍是待研究项。
+WDA 提供现成的 XCTest 元素后端，并承担 runner 签名、安装和会话生命周期成本。
+是否引入它应作为产品取舍，不能用旧的不可能性判断替代。具体比较见第 5.1 节。
 
 （因搜索工具限制，`mjtsai.com` 原文被 403 拒绝，仅取到标题与搜索摘要；如需更深入的 Device Hub 技术细节，需要访问 Apple 官方 Xcode 27 release notes 或后续逆向文章。）

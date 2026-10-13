@@ -1,0 +1,74 @@
+name: Release candidate and branch test
+
+on:
+  push:
+    tags: ['v*', 'release-test-*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vX.Y.Z main tag or release-test-vX.Y.Z-YYYYMMDDHHMMSS branch tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: xcode-27
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.app/Contents/Developer
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Validate tag spelling
+        run: printf '%s\n' "$RELEASE_TAG" | /usr/bin/grep -Eq '^(v[0-9]+[.][0-9]+[.][0-9]+|release-test-v[0-9]+[.][0-9]+[.][0-9]+-[0-9]{14})$'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Verify tag identity, version and release lane
+        run: |
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          kind="$(python3 -c 'from scripts.release_tag import parse_tag; import os; from pathlib import Path; print(parse_tag(os.environ["RELEASE_TAG"], Path("VERSION").read_text().strip())[0])')"
+          if [ "$kind" = release-candidate ]; then
+            git merge-base --is-ancestor HEAD origin/main
+          fi
+      - name: Check Apple build environment
+        run: sh scripts/check_build_environment.sh
+      - name: Build and test
+        run: make -j3 check-host
+      - name: Build verified release candidate and formula
+        run: python3 scripts/package_test_build.py "$RUNNER_TEMP/ipb-release" --release-tag "$RELEASE_TAG"
+      - name: Verify precompiled Homebrew install
+        run: python3 scripts/test_homebrew_package.py "$RUNNER_TEMP/ipb-release"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-candidate-${{ github.run_id }}
+          path: ${{ runner.temp }}/ipb-release/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Prepare draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/draft_release.py "$RUNNER_TEMP/ipb-release"
+      - name: Publish disposable branch-test prerelease
+        if: startsWith(env.RELEASE_TAG, 'release-test-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+      - name: Verify public Release download and Homebrew install
+        if: startsWith(env.RELEASE_TAG, 'release-test-')
+        run: python3 scripts/test_homebrew_package.py "$RUNNER_TEMP/ipb-release" --published

@@ -1,0 +1,559 @@
+# Device Hub alignment and reliability
+
+## Scope and decisions
+
+Branch `codex/devicehub-alignment` originally started from `cc43495`. The table below
+describes its current implementation; dated verification records retain earlier baselines.
+On 2026-09-22 the user selected live display/capability metadata, literal text input and mirror
+orientation: “135都得解决，你继续研究下devicehub的实现，和我们现在做下对比，没问题就修复了”.
+Keep the native oracle, accepted resident devicectl notification-observer keepalive, bounded
+sender ownership and no uncertain input replay. No XCTest or third-party phone server.
+
+## Current implementation
+
+| Selected function | Implementation | Verification boundary |
+| --- | --- | --- |
+| Display/capability snapshot | `displays --json` and `capabilities --json` expose schemaVersion 1 + deviceIdentifier and Apple's live values. Capabilities are advertised operations, not guessed support. Mirror selects the unique primary nativeSize before table/Xcode/detection fallback. | Real primary LCD 1170x2532 / scale 3 vs padded 1184x2576; Wireless entry is not selected. Host fixtures cover missing/duplicate primary, invalid values and query errors. |
+| Literal text | `text <text>` resolves keyboard, copies exact UTF-8 once, then sends `{Cmd}`, `{Cmd,V}`, `{V}`, `{}` on the existing keyboard service. Copy failure prevents paste; uncertain paste is not replayed. | Exact `ipb-中文🙂 A1!` appeared in Settings with Pinyin active. Clipboard policy can present Allow Paste; rc0 is submission, not semantic insertion. Clipboard is replaced. No implicit permission approval or clipboard synchronization in the command. |
+| Orientation | Native crop, device direction, content direction and presentation coordinates are separate. Cmd-Left/Right changes actual device orientation; ordinary touch maps back to native axes, pointer uses presentation coordinates. A geometry change releases/drains old input before publishing. | Final native mirror opened/returned from General at all four device orientations. Rotated content was separately exercised in Calculator. No claim of calibrated physical trackpad behavior. |
+| UI observation | `ipb ui` reads DevicesApp raw DTX through an existing-paired USB userspace RSD. It exports actual AX child edges, text, frames and scoped attributes with Description-first reads. | Settings 13/13 and Bilibili title-visible 25/25; AX-only gates pass. General hierarchy completeness, snapshot95006 and the full supported matrix remain open. |
+| Mirror keyboard/clipboard | One held-key/FIFO path covers physical keys, repeat, Mac input-method commits and text Copy/Cut/Paste. | 13 Pro ordinary Settings input passes; secure fields, other layouts/apps and the full macOS27 gate remain open. |
+
+
+`device_control.h` runs one background metadata query at most per second, never overlapping.
+Apple timeout is 5 s with a 6 s host kill bound. Read queries do not wait on HID; explicit rotation
+waits at most 2 s for old input releases on a separate waiter before entering the device-control
+queue. The queue never waits on input that itself needs a clipboard child. Close cancels the
+current query and prevents new launches.
+Unsent rotation requests are coalesced while the query is busy. Query/schema failures end the session
+explicitly. Polling is not frame-synchronous: external orientation may lag by a refresh interval.
+`devicectl displays --stream` did not yield structured JSON updates, so its human console output is
+not parsed. Saved screenshots stay cropped native pixels, independent of host preview rotation.
+
+## Confirmed problems found while aligning
+
+- The first rotated-content edge implementation incorrectly sent native coordinates through
+  portrait Indigo edge handling. Device Hub's actual landscape Calculator capture instead uses
+  58 B UHID touch on 0x101, locked + left; portrait capture uses locked + up. Static setters confirm
+  all seven flag offsets. Rotated-content edges now use those native-space direction flags, frozen
+  at Down through UP. Portrait content keeps the existing verified Indigo path.
+- The HIDReport-returning ordinary-touch builder still used count 0 on UP, unlike the previously
+  fixed Data-returning builder. They now share one byte builder with count 1 on release. Ordinary
+  identity/max/timestamp conventions remain unchanged; the edge report follows its captured shape.
+- A first rotation shortcut was dropped while metadata refreshed. Unsent relative intent is now
+  queued and applied after the snapshot; no uncertain sent request is retried.
+- A fixture with JSON `info: []` raised an Objective-C exception. The response shape is checked before
+  subscripting; successful, failed, malformed, timed-out and cancelled queries have host regression tests.
+- The initial new smoke text step accepted a paste-permission modal as a pixel change. It now uses
+  Vision OCR within the focused Settings search field, excludes the clipboard suggestion row,
+  and stops before clear/close when expected text is absent. Exact punctuation/emoji still require
+  screenshot inspection. The CLI deliberately does not claim to inspect the focused application.
+
+## Measured seed and acceptance
+
+macOS 26.5.1 (25F80), Xcode 27 Beta 6, DeviceHub 27.0 (255.2.3.5), DeviceKit 255.2.3,
+CoreDevice 642.15, UniversalHID 90.1, DDI 27A5252f, wired iPhone 13 Pro / iOS 27.0 (24A437).
+Raw captures and success-only artifacts remain outside Git under the local state directory;
+`docs/verification.md` records the condensed run and limits.
+
+Build: `make XCODE_PATH=/Applications/Xcode-27.0.0-Beta.6.app`, followed by staged `make install`.
+Host checks cover report bytes/held keys, all four transforms, metadata/clipboard failure contracts,
+child timeouts/cancellation, sender ownership and smoke assertion failures. Device checks use the
+installed layout and inspect actual screenshots, not return codes alone.
+The final installed-layout interactive smoke passed, with all 20 screenshots inspected. Its text
+step required the operator to allow one synthetic paste; the gate itself never answers the prompt.
+Two unanswered-prompt runs correctly failed, and an earlier pixel-only false pass was rejected.
+
+A 300 ms edge sequence using the same wire builder returned Home from Calculator
+at both landscape directions. Approximately 6 ms CUA synthetic drags with correct flags did not;
+no production delay or interpolation was added to hide that boundary. A physical mouse's timing
+and physical trackpad calibration remain distinct from synthetic input tests.
+
+The supported macOS 27 + Xcode 27 + iOS 27 release gate is still pending. A current SSH attempt to the
+prior macOS 27 host closed at port 22; its older Xcode 26.4/unavailable-device observation is historical,
+not a current prerequisite check. This local macOS 26 run is supplementary validation only.
+
+## Mirror keyboard and text clipboard
+
+User request on 2026-10-12: complete ordinary keyboard input, modifiers/repeat, host IME
+composition and text Copy/Cut/Paste in mirror. Implemented on this branch and installed locally.
+The supplementary macOS 26.5.1 / Xcode 27 B6 / iPhone 13 Pro iOS 27.0 run verifies ordinary
+typing, Shift punctuation, caret movement, repeat, text Copy/Cut/Paste and native Mac Chinese
+composition. The installed noninteractive smoke passes; the supported macOS 27 gate remains open.
+
+- Keep the existing serial input FIFO and bounded sender. Raw key down/up carry the complete
+  held-usage set; AppKit repeats re-edge the repeated key while preserving modifiers. Keypad
+  clicks and clipboard chords remain atomic FIFO operations. Focus loss, geometry changes
+  and close release keys; unsent stale keyboard operations are cancelled, never replayed.
+- Extend the existing makeKeyboardHIDReport array builder with a bounded C entry. No new
+  Apple private symbol/ABI shim, transport/socket, device app or entitlement is introduced.
+- MirrorView owns and activates an NSTextInputContext implementing NSTextInputClient. Public
+  handleEvent dispatch and Edit → Input Method / Control-Space select enabled host input methods.
+  Marked text stays on the Mac; committed non-ASCII
+  or composed text uses exact UTF-8 clipboard copy plus the captured Command+V chord. Plain
+  single-byte typing remains physical HID and follows the iPhone keyboard layout/input method.
+- Command+V reads Mac text when it reaches the FIFO head, after any preceding Copy publishes its
+  result. Command+C/X send device copy/cut, require a device clipboard
+  change count, then retrieve UTF-8 and update Mac text only if its clipboard/focus is unchanged.
+  Clipboard tasks share the bounded device-control runner and hold FIFO ownership through
+  completion. Text/payloads never enter argv, CSV or diagnostics; total pending UTF-8 is capped at
+  2 MiB. No selected text is a nonfatal notice; newer Mac clipboard contents are retained.
+- Existing mirror shortcuts and Command-W/Q remain reserved. Transfer failures and uncertain sends
+  are explicit. The product leaves iOS paste prompts visible; this synthetic-text bench approves
+  them under the user's explicit instruction. Images/rich text and continuous clipboard sync
+  are outside this text clipboard feature.
+
+Confirmed integration fixes: metadata rotation waiting on the input group would deadlock clipboard
+input waiting on device control, so the bounded wait now precedes that queue. Generic Command
+forwarding swallowed the Mac Close shortcut in a live run; explicit reservation and menu targets
+restore normal close. Host tests cover exact report bytes, bounded child failure contracts, held
+modifiers/repeat, FIFO clipboard order and stale-input release. Real tests confirm `ipb-中文🙂 A1!`,
+local `ce’shi` composition with no premature phone text, committed/copied `测试`, eleven deletions
+during a 1.4 s Backspace hold, numeric panel, Home and final Command-W exit 0. Secure-field/keypad
+acceptance, every key-layout mapping and other-app coverage remain unverified.
+
+Only ipb host tooling changes. Android/iOS application repositories, Bluetooth/ISP firmware,
+schema/rpc and audio bindings are unaffected: the existing Apple DDI/clipboard contract is used.
+Release version, schedule and supported-host acceptance remain pending. Rejected alternatives:
+independent CLI calls per key/chord (lose held state/order); clipboard polling in the background
+(unrequested synchronization); Unicode-to-HID substitution (cannot preserve committed text).
+
+## UI context research
+
+**Current research result (2026-10-11):** prioritize Device Hub's separate **DevicesApp raw-DTX
+AX service**. An ordinary Python client on the paired local-network tunnel now reads native
+nodes, children and Frame 21 on the 13 Pro, without XCTest or installing a phone server.
+Calculator's initial bulk graph has 24 nodes/24 rectangles; explicit application reads match
+Settings main (13/13), Battery (32/32), Home (29/29) and ordinary 哔哩哔哩 (40/40, including
+its login modal/numeric keyboard). Fresh node-centre HID taps open the
+Calculator History sheet and Settings Battery page, with updated AX trees and screenshot
+confirmation. That protocol probe established this route; `ipb ui` now integrates the
+scoped AX graph and attributes described below. MCP integration remains separate.
+
+The user now selects **“那你看看能不能用12mini做测试”**. On the local USB-connected
+iPhone13,1 / iOS 27.0 / 24A437, existing pairing and a CoreDeviceProxy userspace RSD
+tunnel work. Ordinary testmanagerd's capability handshake succeeds without starting
+automation. The same raw AX client reads a preexisting XCTest authorization page:
+16 nodes / 16 frames, including all numeric keys and Delete, with a closed observed
+child graph and 375×812 logical root; fresh setup/read/cleanup takes 598 ms.
+The active Runner belongs to the separate AltStoreProbe test, so this is read-only
+overlay coverage, not this session's authentication or a completed WDA comparison.
+Further input/Runner testing awaits device-use coordination. Native CoreDevice details
+and lockState queries time out; `displays --json` fails RSD device allocation with
+0xE8000003. Cause remains open. Mac UI control reports a locked Mac. No source fix,
+secure-page keyboard acceptance or supported-host gate is claimed by this control.
+
+**Current comparison result (2026-10-12):** after the user's 12 mini password entry,
+real WDA/XCTest source collection succeeds on the same USB RSD as the raw AX client.
+Calculator is AX 24 nodes/depth 1 versus XCTest 45/depth 16; Settings main is 13/1
+versus 176/21. All 23 and 12 nonroot elements have identical native rectangles over
+three stable interleaved samples. WDA's ordinary rect is integer-rounded; nativeFrame
+is the correct geometry comparator. A suggestion-page AX node combines text that
+XCTest splits across a Cell and descendants. The trees have different structure and
+field scopes, so node totals do not directly count missing actions/views.
+
+Query medians are 343/869 ms for Calculator and 186/2710 ms for Settings main;
+startup is separate, samples are serial and workload differs. After the temporary
+independent reference is stopped/uninstalled, fresh AX alone still returns the 13/13
+main-list graph with no active Runner. The shared app is preserved. The measurement
+client's EOF wait on HTTP keep-alive caused an intermediate false not-ready result;
+Content-Length/chunked framing resolves it. Preliminary LA -1004 did
+not mean final authorization failed. No product code is changed by this benchmark.
+The user subsequently chose **“先看 12 mini 结果”**. Keep this completed comparison as
+the current baseline and defer the 13 Pro repeat; resume it only after renewed user
+readiness and successful unlock. Supported-host validation, arbitrary-app coverage,
+richer coverage and snapshot-generation semantics remain open; the CLI integration below
+exports these limits instead of claiming an atomic/full backing view tree.
+
+### AX CLI integration
+
+The user requests investigation of Settings AX 13 versus XCTest 176, richer hierarchy/fields,
+then integration when sound. The residual ledger is 121 structural entries, 19 text,
+19 images, 3 buttons (two invisible rows plus one duplicate Dictate entry), and 1 Switch.
+Parent is absent and navigation children equal ordinary children; the graph stays depth 1.
+AXP 52 maps to native snapshot attribute 95006, but nil, empty and source-informed bounded
+options return nil/error 0. Cause remains open; no guessed container hierarchy is generated.
+
+`Sources/ipb_ax.py` and `Sources/ax_archive.py` implement one-shot `ipb ui [--json]` on the
+captured raw DTX route. `bin/ipb` resolves the selected UUID to its exact USB identifier and
+passes it through internal environment values. Optional pinned pymobiledevice3 11.10.2 owns
+one USB userspace RSD: existing pairing only, no fallback or Runner. This host dependency
+is separate from native HID/media helpers; install copies the backend/requirements without
+silently installing Python packages. README and completion describe it.
+
+Output retains actual Children edges and separate navigation order, available label/value/
+placeholder, role/subrole codes, traits, enabled/focused/selected/visible flags and logical
+frames. IDs are snapshot-local. Missing properties stay absent; missing Children fails the
+capture. Queries are serial, with node/depth/time/byte bounds and no partial JSON on failure.
+The description-first policy reads raw Description 33 and queries optional Label 3 only when
+Description has no nonblank text. JSON keeps both fields distinct; the text renderer can use
+Description. Root checks use the same initial text field (33 or 3), plus frame/children;
+PID/effective-display checks detect observed changes and `atomic=false` remains explicit.
+Direct AX actions and MCP are not implemented. Android/iOS apps, firmware, schema/rpc and
+audio repositories are unaffected: this is a host ipb observation command only.
+
+Confirmed fixes: a 13 Pro Bilibili title's direct Label 3 request receives no reply, while its
+geometry, Identifier, Value and Description reads work. The old command fails with the title
+visible and succeeds after it leaves the AX graph. Description-first reads retain the actual
+title and rectangle without issuing the redundant failing Label request; three visible-title
+reads pass, and Calculator/Settings-search old/new graphs and all non-Label node fields agree.
+The device's missing Label reply is now traced to secure archive failure: rich output contains
+an unsupported `__NSCFType`, yielding NSCocoa4866/4864 and a log/return without transport send.
+Both Label3 and Description33 share native text getter2001; the outgoing representation differs.
+Paired controls correlate the archive error with Label, while plain Description succeeds.
+The exact CF-backed rich-text attribute remains unidentified. Other request failures still fail
+explicitly, now with timeout request/node/attribute context; increasing timeout cannot produce
+the reply already discarded by this error branch.
+
+Other confirmed fixes: box objectID as an archive UID, preserve CGRectNull as unavailable, and use
+effective display bounds/pointScale instead of a status-bar hit, background-app frame or
+physical nativeSize. Regression tests cover wire/state distinctions, changed roots, missing/
+duplicate children and cleanup failure. Source and installed AX smoke pass; fresh Calculator
+and Settings reads give 24/24 and 13/13 with screenshots inspected. The final AX helper gives
+13/13 on macOS 27.2 over forwarded USB. Native inventory/toolchain prerequisites there still
+prevent the full supported Xcode 27 CLI/HID/media gate; no release-matrix pass is claimed.
+
+Rejected alternatives: synthesize XCTest containers without returned edges; read all 99
+fields despite the child timeout; infer display dimensions from a nil/CGRectNull element.
+
+Automatic bulk/frontmost selection can return unrelated PDUIApp. A native system hit-test
+request instead selects the displayed application's PID on the tested pages; the pure-Python
+hit-test → application → attribute traversal reads Battery's 32-node graph in 941 ms including
+fresh tunnel/DTX setup and cleanup, excluding interpreter imports/app launch. Calculator main takes 740 ms and the ordinary third-party modal/keyboard takes 1744 ms.
+Its launch-splash hit test returns nil/error 8 before a later visible-page success.
+Centre hit testing still needs broader overlay/keyboard coverage. These findings supersede the earlier no-physical-tree
+research boundary below; Inspector and Mirroring remain distinct paths with their own limits.
+See [captured wire contract](protocol.md#devicesapp-ax-over-raw-dtx-2026-10-11) and
+[physical record](verification.md#2026-10-11--devicesapp-raw-dtx-tree-rectangles-and-explicit-application-control).
+
+SDK/source review and subsequent real-device AXAudit research on 2026-09-22. The current product
+still has no element-query command. No jailbreak, injection or phone-side helper installation was
+performed. A caption-only AX CLI result is not proof that the system lacks geometry.
+
+- Apple exposes structured onscreen context through `appEntityIdentifier`,
+  `appEntityUIElementProvider` and `AppEntityUIElement` (identifier, local bounds, selection state,
+  subelements). These are app-provided semantic annotations, not a reader for arbitrary UIKit views.
+  The local Xcode 27 Beta 6 iPhoneOS SDK declares `AppEntityUIElement` from iOS 18.4.
+  [Apple contextual-cues documentation](https://developer.apple.com/documentation/appintents/providing-contextual-cues-to-apple-intelligence-and-siri)
+  and [WWDC26 session 343](https://developer.apple.com/videos/play/wwdc2026/343/) explain the
+  relationship between pixel understanding, entities and actions; they do not disclose Siri's full
+  internal retrieval pipeline.
+- iOS 27 `AppIntentsTesting.AppEntityDefinition.viewAnnotations()` is a public consumer for those
+  annotations. The shipped interface returns entity + isSelected, without a frame property.
+  Apple requires an XCUITest bundle signed by the same development team as the target app;
+  this does not meet ipb's current no-XCTest/arbitrary-app goal.
+  [Apple test-framework session](https://developer.apple.com/videos/play/wwdc2026/295/).
+- The jailbreak project ios-mcp injects into SpringBoard and dynamically binds private AXRuntime
+  functions to query another PID's AX handles, attributes and hit tests. Its source requests
+  label/value/role/frame/children; source existence is not proof every fallback works, and its
+  README's claimed iOS 13–18 range does not establish iOS 27 support.
+  [Injection filter](https://github.com/witchan/ios-mcp/blob/38cafd5fbda7a4dcb3821b94cbb3523fc905c0b2/ios-mcp.plist),
+  [runtime bridge](https://github.com/witchan/ios-mcp/blob/38cafd5fbda7a4dcb3821b94cbb3523fc905c0b2/MCPAXAttributeBridge.m),
+  [node attributes](https://github.com/witchan/ios-mcp/blob/38cafd5fbda7a4dcb3821b94cbb3523fc905c0b2/MCPAXNodeSource.m#L2843).
+  This remains AX. FLEX instead recursively reads real `UIView.subviews` inside the target process;
+  it requires app integration or injection, not a remote UIKit-object API.
+  [FLEX hierarchy implementation](https://github.com/FLEXTool/FLEX/blob/63a6f588841e94e4c3adaa045ff16eb8163f0bb4/Classes/ViewHierarchy/TreeExplorer/FLEXHierarchyTableViewController.m#L122).
+- Accessibility Inspector's attribute-query path is now captured, and an independent pymobiledevice3
+  probe has read labels, traits, class/address and a 15-node partial hierarchy in Looktech Lab through
+  the advertised RSD `remoteserver.shim.remote` service. The
+  [pymobiledevice3 implementation](https://github.com/doronz88/pymobiledevice3/blob/10194d12e7cf17453887b7ac3d46e1b85b5a057a/pymobiledevice3/services/accessibilityaudit.py)
+  exposes focus traversal but omits the property-query wrapper and `AXAuditNode_v1` decoding used
+  in this probe. On two Settings elements the same queries returned labels/traits but only a single
+  hierarchy node and no class/address; the target-dependent restriction has no established cause.
+  `Frame`/`AXFrame` probes returned nil. Preview + screenshot drew the selected element's green
+  outline, but returned display geometry without a structured element rectangle. Normalized-point
+  hit-test probes returned nil; their arguments were constructed from host disassembly, not captured
+  from a successful Inspector hit test. See [captured protocol](protocol.md#accessibility-inspector-and-axaudit-2026-09-22).
+  A follow-up focus cycle in Lab exported 36 focus elements and a 131-node merged hierarchy, but
+  automatically scrolled the page and accumulated two distinct heading tokens. It is a temporal
+  union, not a complete snapshot. Recursive expansion stopped on a timeout; that run also returned
+  Lab's root while screenshots showed Settings. After restoring Lab, a fresh session had app-state
+  events but no focus seed within three seconds. These failures have no established root cause.
+  Rechecking individual replies shows 14–46 nodes per focus query; the app-root query already
+  occurred and returned only two nodes. The missing step is not simply querying the root once.
+  Cached iOS 27 AXRuntime serialization identifies an application-root handle from a real PID,
+  avoiding dependence on a focus event. On the returned 13 Pro, a bounded read of Lab PID 7720
+  twice reached the same 129-node/128-edge element tree, with every handle queried and no nil or
+  timeout. The tool used each node's own reply for its children; two extra edges in ancestor-context
+  replies would otherwise create false double parents. Before/after screenshots showed the same
+  Lab home page. This proves a usable tree for that page and build without a phone-side helper or
+  focus motion, not atomic capture or completeness across apps.
+  Offline iOS 26.5 simulator `axauditd` provides a concrete comparison: hierarchy replies contain
+  local children/siblings and an ancestor chain, child enumeration is capped, and attributes have
+  target-policy and focus-history filters. Its parameterized handler immediately returns nil.
+  These are simulator-specific constraints, not an established cause of the physical iOS 27
+  failures. See [root and hierarchy evidence](protocol.md#axaudit-root-handles-and-hierarchy-limits-2026-09-22).
+- Offline inspection of DDI 27A5252f / XCTest 25227 now traces XCTest snapshots to device
+  `testmanagerd`: `XCTestSession` → `XCAXManager_iOS` → `XCTAutomationSupport` → AXRuntime's
+  parameterized snapshot query. A separate `com.apple.dt.testmanagerd.remote.automation` service
+  directly implements snapshot and attribute RPCs over DTX. Its launchd declaration requires
+  `AppleInternal`, and startup only registers its listener when
+  `os_variant_allows_internal_security_policies("com.apple.testmanagerd")` succeeds. The ordinary
+  `.remote` service instead creates a harness/control session; a successful control handshake is
+  not proof of snapshot access. See [service and authorization evidence](protocol.md#xctest-snapshot-service-boundary-2026-09-22).
+  This establishes a specific restricted implementation, not universal impossibility of a
+  runner-free AX reader. On the 13 Pro, RSD advertised the direct automation endpoint, but its
+  TCP connection did not answer a generic DTX capability handshake or a bounded proxy-channel
+  request; ordinary testmanagerd `.remote` completed the same DTX handshake. This does not prove
+  the direct endpoint's exact rejection reason or exclude a different Apple client exchange.
+  `remoteAXService` was also advertised but closed during RemoteXPC handshake. See the dated
+  verification record. AXAudit remains the demonstrated element-tree path.
+
+Element trees have now been obtained without installing a phone-side app on two devices: the
+13 Pro's existing Lab page and, after Developer Mode/DDI became available, the 12 mini's
+SpringBoard and Calculator pages. The 12 mini yielded bounded, zero-nil graph closure twice per
+target; Calculator's 45-node tree was identical in both runs. This closes the initial
+feasibility question for those seeds. Arbitrary-app coverage, geometry and snapshot atomicity
+remain open. Requested Opus 5, Grok 4.7 and DeepSeek Flash
+consultations returned candidates; their suggestions were treated as hypotheses, not protocol
+evidence. A successful hierarchy RPC or a closed graph alone does not establish completeness.
+
+A fresh Opus 5.5 review focused the geometry search on three discriminators: capture Apple's
+actual Inspector DTX exchange, test preview-outline differencing, and determine whether audit
+rectangles are ordinary element frames. The 2026-09-27 physical 12 mini checks found one
+Calculator and two SpringBoard **audit-issue** rectangles, but no mapping from an issue to an
+arbitrary tree node. Several targeted previews did not reproduce an outline; a node action
+re-encoded from the received focus token and descriptor still left Calculator unchanged.
+The host point-query method sends an `NSValue` `{CGPoint=dd}` and handles a direct DTX reply;
+the older suggestion that a nil reply necessarily means a missing `host*` callback is not
+supported by that implementation. Correctly typed point requests nevertheless returned nil on
+the physical device, so this is still an unresolved route. The 12 mini screenshot's actual
+PNG/logical ratio is 3, while `displayNativeScale` reports 2.88; any visual fallback must map
+from image dimensions rather than assume that scale is the PNG ratio. See the
+[physical follow-up](protocol.md#element-geometry-and-action-follow-up-on-the-12-mini-2026-09-27).
+
+A second bounded attempt got past Inspector's target picker, but the Apple host failed before
+DTX: `AMDeviceConnect` and `AMDeviceStartSession` succeeded, while
+`AMDeviceSecureStartService("com.apple.accessibility.axAuditDaemon.remoteserver")` returned
+`kAMDRemoteConnectError`. The same service name opened through paired Python USB lockdown and
+reported 45 AXAudit capabilities, so the host failure does not establish a missing device
+service. A raw physical-device point request on that lockdown channel received a DTX `OK`
+without payload; there was no later message in four seconds, while a capability control returned
+an object. This corrects the ambiguity in the wrapper's `None` and bounds the callback
+hypothesis, but does not explain why the point had no element. See the
+[Apple-client boundary](protocol.md#apple-inspector-connection-and-point-reply-type-2026-09-27).
+
+At the user's request, the same Xcode Inspector was then tested against the unlocked wired
+13 Pro. Its `PDUIApp` audit completed with nine warnings, proving that this host can establish
+an effective Apple AXAudit session on that phone. Direct AXAudit `testTypeHitRegion` on the
+13 Pro returned three issue records that paired element tokens with rectangles; one token also
+returned a label when re-encoded into the captured wire wrapper. `Frame`/`AXFrame` and direct
+point lookups still returned nil. The audit's Home-screen Quick Look image did not match the
+selected `PDUIApp` target's issue label, so it is not a verified screen-to-element mapping.
+The 12 mini Apple connection failure is therefore not a universal host failure; its
+device/state-dependent cause and arbitrary-node geometry remain open. See the
+[13 Pro follow-up](protocol.md#iphone-13-pro-apple-inspector-and-issue-geometry-2026-09-28).
+
+A bounded Apple-client selector trace on the 13 Pro captured target PID `0`, app monitoring,
+targeted notification, event type `2` and inspection visuals. That run did not exercise a
+pointer hit test and captured no point query. Replaying the observed setup in a direct session
+still produced a nil point reply, so these selectors alone do not explain the missing element.
+
+A further 13 Pro control selected foreground Calculator explicitly in Apple Inspector (its
+process appeared after `ipb launch com.apple.calculator`). Injected taps opened Weather from
+Device Hub's mirror and Calculator's History sheet from `ipb`, but Inspector continued to show
+no selected element. A bounded host trace recorded only null focus/preview and section
+descriptors during an All-processes target change; two touch windows had no hit on the traced
+point/focus methods. This narrows the missing trigger to Inspector's selection path for these
+injected touches; it does not rule out a human finger touch. The latest Apple audit outlines
+were empty, so the documented issue-double-click path still lacks a reference capture. See
+the [dated follow-up](verification.md#2026-09-28--13-pro-point-selection-and-foreground-app-control).
+
+### AXAudit capture plan
+
+**Updated 2026-10-09 after real-device captures.** The independent `claude-opus-5` and
+`gpt-6-astra` assessments (source: peer) led to main-session verification of the old trace's
+missing receive coverage, silent caps and wrong CGPoint decoder. The known host point caller
+is Simulator code; physical selection must also be judged by device-pushed focus. The user
+then explicitly chose **“用 13 pro 吧”** for this round and confirmed a real finger tap.
+This overrides the earlier 12 mini allocation for these captures; refresh ownership and
+host/device/PID state before another round. Results are supplemental macOS 26.5.1 + Xcode
+27 B6 + iOS 27.0 research, not the macOS 27 release gate.
+
+1. **R0 — passed within the stated capture boundary.** Python raw stream copies/offline decode
+   passed local fixtures and retained live paired USB AXAudit message prefixes. In two session
+   closures a final inbound header lacked its body; the decoder reports that incomplete tail
+   explicitly, while selection and cleanup barriers are fully captured. A separate native Foundation
+   fixture verified the exact loaded arm64e DTX ABI and outgoing callback bytes before Apple
+   Inspector attachment. Bounded Apple runs retained outgoing serialization and incoming
+   assembled parser bodies, complete typed focus/attribute/action data and detach footers.
+   Incoming bodies do not preserve original fragmentation; a screenshot's last-fragment
+   header requires explicitly labelled post-assembly size normalization. Preserve parser/
+   transmitter identity: the Mac and phone can reuse message IDs. Detailed limits are in
+   [the tracing method](devicehub-tracing.md#axaudit-reference-capture-boundary).
+2. **R1 — finger and injection selection both positive.** Separate sessions first obtained
+   a fresh matching Calculator focus, then armed the observed monitoring type 2. The
+   confirmed finger tap and one `ipb tap 0.10 0.08` each pushed the History element without
+   a host point query, then pushed monitoring 0. Re-arm before another selection; navigation
+   used monitoring 0 because the actual CanNav reply was false. No inherent injected-input
+   filter is supported by these results. Old September failures remain un-root-caused;
+   initialization, target and daemon state changed together. Keep Calculator value 7.
+3. **R2 — Apple selection/property/action reference captured.** Actual target PID 51031 and
+   monitoring 2 preceded Apple's positive History selection. Ten ordinary property reads
+   matched an independent fresh-token direct session; no ordinary Frame was advertised or
+   requested. Apple Activate sends a null third argument and expects a reply. Both Apple
+   and a single direct Apple-shaped action received empty OK but did not open History.
+   This is a confirmed semantic no-effect on Calculator, not an action success or a proven
+   entitlement cause. The installed pmd3 wrapper's shape differs, but aligning it alone did
+   not establish activation. Do not automatically replay actions after empty OK.
+4. **R3 — current issue handoff positive.** Both audits completed seven advertised types and
+   returned one output-field issue. Apple's selected issue rectangle, transported token,
+   target PID, double-click focus/lock request, Inspection identifier and phone highlight
+   all matched the existing 7. The 390×844 logical / scale-3 screenshot agrees with the
+   issue rectangle. Inspection gained no ordinary Frame query or descriptor afterward.
+   This validates issue-to-element association only.
+
+The [current captured protocol](protocol.md#axaudit-physical-selection-action-and-issue-handoff-2026-10-09)
+records the request shapes and [dated verification](verification.md#2026-10-09--13-pro-axaudit-finger-injection-apple-action-and-issue-handoff)
+records reproduction, cleanup and local references. The follow-up below resolves the earlier
+framework call target and establishes a development-app action effect. Raw probes remain
+outside Git. No production AX feature was added.
+
+**Development-app/permission follow-up:** the existing Lab 1.20.0 (514) reports
+`get-task-allow=true` in the current device installation database. A fresh matching gear-button
+focus at PID 51300 returned `SwiftUI.AccessibilityNode` and its address, and one captured
+Activate/null/expected-reply request opened Settings. It returned the same empty OK as the
+earlier Calculator no-effect. The raw 24A437 dyld subcache now resolves
+`AuditDoesAllowDeveloperAttributes` to `task_for_pid(mach_task_self_, pid, &task) == KERN_SUCCESS`.
+The matching physical daemon has now been extracted from Apple's iPhone14,2 / 24A437 firmware;
+its Mach-O UUID matches the live daemon's syslog UUID. Concrete callers check the predicate
+for developer properties, actions and parent traversal. Current paired captures report NO for
+Calculator PID 51502 and YES for Lab PID 51452, agreeing with their class/address reads.
+The kernel policy causing task-port success remains untraced; literal get-task-allow alone
+is not the proven cause. No extra semantic action was sent to repeat the earlier controls.
+
+**Physical daemon boundary, now resolved:** ordinary reads use a fixed attribute-name dispatch
+with no Frame/Position/Bounds branch; unknown names complete nil. Parameterized reads directly
+complete nil. The action server discards its third argument, and denied/attempted actions all
+complete without a semantic outcome. Nondeveloper string results are limited to 64 UTF-16
+code units; hierarchy serialization caps child collections at 51 and filters parent traversal.
+These are now physical iOS 27 findings, superseding the Simulator-only comparison for this
+seed. More guessed ordinary Frame names or parameterized snapshot requests add no value here.
+
+**Ordinary-element preview, positive:** the physical renderer refreshes native frame attribute
+2003 and consumes the element's frame without the task-port predicate in the inspected path.
+On Calculator, previewing a freshly received History token highlighted that specific button
+despite developer permission NO. Before/after screenshots isolate a 120×120 pixel overlay
+at (54,147), approximately (18,49,40,40) logical points at scale 3. This is measured overlay
+geometry, not a returned native CGRect. It required neither an audit issue nor activation.
+Cleanup removed the highlight, preserved Calculator 7 and restored the original Home page.
+
+The [physical daemon protocol](protocol.md#axaudit-physical-daemon-handlers-permission-logs-and-element-preview-2026-10-09)
+and [dated verification](verification.md#2026-10-09--13-pro-physical-axauditd-handlers-permission-logs-and-preview)
+record source identity, handlers, captures and limitations. A separate native accessibilityFrame
+attempt still has no getter result because debugger attachment stalled; the extra Apple Lab
+reference with zero incoming messages remains invalid as a physical control.
+
+**Latency constraint / revised priority:** the user rejected page-wide serial preview with
+“耗时太久了吧，一个个来不知道要多久，没有更直接的方案吗”. Preview is retained as a
+bounded single-target fallback and a proof of local geometry. Do not expand it into one
+render/screenshot transaction per page node or claim an unmeasured latency. The main goal is
+a device-side snapshot or an existing remote AX data/cache stream carrying node properties
+and geometry together. AXAudit issue batches cover reported problems, not every page node.
+
+**Next discriminators, in order:**
+
+1. Finish **DevicesApp DTX target/coverage controls**, then define the product observation
+   contract. Keep one semantic request outstanding because captured unit type-5 replies lack
+   a node correlator. Use received handles and retain device/connection/PID identity, explicit
+   partial results, limits, page generation and token invalidation. Separate unsolicited type-11
+   trees from unit reads; notifications may have nil resultData. Prefer bulk when its root is
+   verified, and explicit application traversal otherwise. Do not assume centre hit testing is
+   a universal foreground resolver or graph closure proves every visible element is represented.
+2. Test persistent-session latency, rotation, scrolling/offscreen nodes, keyboard/system overlays
+   and more ordinary third-party apps. One Bilibili modal/keyboard graph is positive, while its
+   launch splash is temporarily unreadable. Direct AX semantic actions are a new separate hypothesis;
+   current node-centre actions use verified ipb HID. A one-off concurrent screenshot timeout has
+   no diagnosed cause; a later active-AX screenshot works. Stop-ack socket races are recorded.
+   Before declaring WDA parity, compare the same 13 Pro page against an actual XCTest snapshot:
+   match identifiers/labels and logical-point frames, separate container hierarchy from usable
+   controls, and measure warm snapshot time separately from Runner setup. The current native
+   reference reaches Running tests after the user's unlock, but the local Apple tunnel fails
+   before driver establishment, including with Device Hub foreground. Mac-M2's independent
+   USB CoreDeviceProxy userspace RSD path establishes the reverse driver, loads the same test
+   bundle and reaches the separate **Enable UI Automation** password gate. The same USB path
+   also establishes Driver when its Python process runs on the local macOS 26 host; the
+   host OS/Python change is not required for that success, while route and paired-host identity
+   remain confounded. Device logs reach LocalAuthentication and SpringBoard overlay presentation.
+   The user reports no prompt on the physical panel but confirms input works in Device Hub,
+   with a mistyped attempt. No authorization success is established. Credential entry belongs
+   to the user; PID authorization and ordinary unlock do not satisfy that gate.
+   The harness handoff/disconnection also occurs on the working driver path and is not itself
+   a failure cause. Native-path root cause remains open. Runner initialization fails after
+   60 seconds, while the authorization sheet can outlive the Runner. The external probe now
+   stops on the actual initialization-failure callback. Subsequent pre-launch handshake timeout
+   and the physical/mirrored presentation difference need separate diagnosis; do not stack retries.
+   No successful same-page XCTest baseline exists yet. New AX action-subset replies are positive, while
+   attribute-support Bools contradict already readable fields and need their own semantics control.
+   The user subsequently identifies Device Hub's hidden streamed password keypad as the input
+   obstacle and requests controls in ipb mirror. The new manual title-bar **123 / Cmd-K** panel
+   sends existing keyboard HID, with all digits, deletion and Return verified in Calculator.
+   Human-operated password/lockscreen acceptance is still pending; no touch rectangles or
+   credential-page classifier are assumed. The subsequent readiness attempt fails at USB
+   Lockdown service startup with PasswordProtected before Runner/auth; CoreDevice and native
+   Device Hub still report locked after the user reports unlocking, even with the mirror closed.
+   The reason for that difference is open. The user pauses testing with “现在没法搞了，之后再说吧”;
+   resume from an observed actual unlock rather than another blind authorization retry. See [the mirror plan](video-stream.md#numeric-keypad-controls-for-hidden-input-2026-10-11).
+3. Verify the supported **macOS 27 + Xcode 27 + iOS 27** matrix before product integration.
+   The successful current AX client runs on supplementary macOS 26.5.1. Then extend the existing
+   session layer for CLI/MCP; no duplicated transport, Runner or new phone app is proposed.
+
+Mirroring/MCK admission, the host permission cache and development-app debugger getters are
+secondary investigations now that DevicesApp data is reachable. Their historical source and
+normal-entry controls remain in [protocol.md](protocol.md#normal-mirroring-transport-entry-and-mck-discovery-2026-10-11).
+The user rejected page-wide serial **preview/screenshot** (“耗时太久了吧，一个个来不知道要多久”).
+It remains a bounded single-target fallback. The working attribute traversal reads multiple
+properties per node without rendering an overlay; measured child walks are approximately
+0.22–1.42 seconds on the sampled pages. No uncertain input is replayed.
+
+## User documentation and install ownership
+
+README is the install/command entry point. `docs/ui.md` and `docs/mirror.md` hold detailed
+usage; `docs/README.md` routes readers to current plans, protocol and dated evidence. The
+verification head remains the current problem ledger; dated records and the captured Wire
+Format stay intact. Correct stale “no CLI yet” / “future AX backend” statements in current
+summaries rather than rewriting earlier findings.
+
+`update` is host-only and bypasses device selection. A source checkout pulls/builds its
+configured branch; a Homebrew wrapper updates only when its canonical root matches
+`brew --prefix ipb`. A manual-prefix wrapper returns an explicit reinstall command for that
+prefix. This prevents an installed Homebrew copy from being updated in place of the user's
+running manual copy. No new persistent install-origin metadata or release automation is added.
+Homebrew HEAD still tracks `main`; source-branch availability does not mean a tag/release.
+
+## Compressed PR and publishing scope
+
+The user requested compressing the accumulated50 commits and opening a PR. Keep
+`codex/devicehub-alignment` as the research history; submit the tested product tree through
+`codex/devicehub-alignment-pr` as14 topic commits plus a submission/release-document commit,
+based on main f2e85a6. The human explicitly rejected an all-in-one squash: “不是 1 个”. The initial 14-segment product tree matches
+09bc118; the initial submission changes document the history/release boundary and trim
+guide EOF whitespace. Follow-up CI changes add build/test/package automation without altering
+the device protocol or input implementation. Retain all dated verification records and protocol sources.
+
+[PR #1](https://github.com/ipbtools/ipb/pull/1) is Draft while the full supported
+macOS27/Xcode27 device gate remains open.
+The user requests PR CI and a downloadable test package first, then Release/Homebrew
+automation after an actual successful build/package verification. [Releasing](releasing.md)
+defines this sequence. The PR workflow builds ARM64 targets and runs host regressions on
+`xcode-27`, then verifies the staged archive and uploads a temporary artifact. The first cloud build and downloaded-package host startup pass. Follow-up automation prepares
+Draft Release candidates and generated stable archive formulas; tap publication uses its own
+manual workflow and reviewed candidate branch. Source `ipb update` separates stable upgrade
+from HEAD reinstall. No tag, release, main merge or stable tap-target change has occurred.
+
+## Remaining work
+
+1. Complete the supported release-matrix gate with an available host/device pair.
+2. Frame identity/PTS correlation, persistent AX/MCP sessions and semantic actions remain
+   separate work. `ipb ui` and ordinary mirror keyboard/clipboard are implemented; their
+   secure-field/general-app limits are recorded above.
+3. Physical trackpad calibration, original privacy-prompt A/B and locked-device protocol behavior
+   need their corresponding actual inputs/states. No permanent impossibility claim.
+4. Siri has a captured code but no verified effect; recording and newer hardware buttons remain
+   gated by capability/hardware evidence. Standalone CLI/MCP transport remains a separate spike.
+
+## Rejected alternatives
+
+- Treat a capability listing, rc0, pixel change or an HID barrier as proof of UI action success.
+- Copy ordinary-touch identity/timestamp values without a demonstrated need; silently guess geometry.
+- Replay uncertain input, add synthetic gesture delays, or replace the accepted tunnel keepalive.

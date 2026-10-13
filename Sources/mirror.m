@@ -19,6 +19,9 @@
 #include <signal.h>
 #include <math.h>
 #include <unistd.h>
+#include "display_geometry.h"
+#include "device_control.h"
+#include "keyboard_input.h"
 
 #define LOGE(...) do{ fprintf(stderr, "ipb-mirror: " __VA_ARGS__); fprintf(stderr,"\n"); }while(0)
 #define DIE(code, ...) do{ fail((code), [NSString stringWithFormat:@"" __VA_ARGS__]); return (code); }while(0)
@@ -59,14 +62,18 @@ extern xpc_object_t xpc_remote_connection_send_message_with_reply_sync(xrc_t,xpc
 #include <stdatomic.h>
 #include <fcntl.h>
 #include <poll.h>
+#include "bounded_sender.h"
 // Evidence: docs/video-stream.md and docs/verification.md (2026-09-08), and
 // Sources/video_stream.m: mode-5 negotiation and VCImageQueue installation copied below.
 // HID evidence: docs/protocol.md Wire Format and Sources/action_sender.m:625,
 // using the existing Xcode 27 oracle glue unchanged.
 extern int uhid_make_digitizer_hid_report(double,double,int,int,void*);
+extern int uhid_make_edge_touch_hid_report(double,double,int,int,int,void*);
 extern int uhid_make_scroll_hid_report(int64_t,int64_t,uint32_t,uint32_t,uint32_t,double,double,void*);
 extern int uhid_make_scroll_wire_hid_report(int32_t,int32_t,uint32_t,uint32_t,double,double,void*);
 extern int uhid_make_absolute_pointer_hid_report(double,double,uint32_t,void*);
+extern int uhid_make_keyboard_hid_report(uint32_t,int,void*);
+extern int uhid_make_keyboard_state_hid_report(const uint32_t*,int32_t,void*);
 extern int coredevice_print_connected_descriptors_async_raw(xrc_t);
 extern int coredevice_send_universalhid_hid_report(xrc_t,const void*,uint64_t);
 extern int coredevice_send_universalhid_barrier(xrc_t);
@@ -77,7 +84,8 @@ extern int coredevice_send_hid_digitizer_cgpoint(xrc_t,double,double,double,doub
 
 enum { Capacity=8192, PendingLimit=64 };
 typedef enum { Down, Move, Up, ScrollPrecise, ScrollWheel, ScrollEnd,
-               KeyHome, KeyRecents, KeyVolumeUp, KeyVolumeDown, KeyLock } Kind;
+               KeyHome, KeyRecents, KeyVolumeUp, KeyVolumeDown, KeyLock, KeyKeyboard,
+               KeyboardState, PasteText, CopyText, CutText } Kind;
 typedef enum { Touch, BottomEdge, Scroll } InputMode;
 // Product choice: bottom 2% of the mapped content, NOT an Apple/protocol threshold.
 static const double BottomEdgeFraction=.02;
@@ -89,19 +97,29 @@ typedef struct {
 } ScrollReport;
 typedef enum { Pending, Running, Sent, Rejected, Overload, BuildFailed, SendFailed, BarrierFailed, SendTimedOut, Interrupted, ScrollUnsupported, ScrollStationary, InputConflict, ScrollUnavailable, ScrollOrphan, ScrollOffTarget } Result;
 typedef struct { uint64_t seq, generation, gesture; Kind kind; double x,y,submit;
-                 InputMode mode; ScrollReport scroll;
+                 InputMode mode; int edgeQuarter; ScrollReport scroll;
                  // Where the pointer was when a scroll arrived. For scroll events
                  // x/y are the deltas, so the position needs its own field: the
                  // device routes a scroll to the view under the cursor, and
                  // without one a list scroll has no target. See pointerValid.
                  double pointerX,pointerY; BOOL pointerValid;
-                 NSUInteger appPhase,appMomentum; } Event;
+                 NSUInteger appPhase,appMomentum;
+                 uint32_t keyboardUsage;
+                 IPBKeyboardState keyboardState;
+                 uint64_t keyboardEpoch; NSInteger hostClipboardCount; BOOL pasteFromHost; } Event; // private payload, never CSV/logged
 typedef struct { Event event; unsigned depth; Result result; int reportCode,barrierCode;
                  double received,reportReturn,barrierReturn; } Record;
 static pthread_mutex_t gLock=PTHREAD_MUTEX_INITIALIZER;
 // The existing Swift report builder retains reports; the same run cap also bounds
 // that oracle allocation without modifying released glue.
 static Record gRecords[Capacity]; // bounded ring; CLI caps total so no submission is overwritten
+static NSData *gTextPayloads[Capacity]; // gLock; clear as soon as the operation completes/rejects
+static NSUInteger gTextPayloadBytes;
+static int64_t gCopyChangeCounts[Capacity];
+static IPBKeyboardState gKeyboardHeld; // main-thread producer
+static BOOL gKeyboardTouched;
+static _Atomic uint64_t gKeyboardEpoch=1;
+static void (^gKeyboardNotice)(NSString*); // main-thread UI only, no text diagnostics
 static unsigned gPending[PendingLimit],gHead,gCount,gMaxDepth,gSubmitted;
 static BOOL gWorker,gStopping,gCollect;
 static _Atomic uint64_t gGeneration=1;
@@ -129,8 +147,9 @@ static BOOL gLocalShortcutPending; // at most one local action awaiting the inpu
 static dispatch_group_t gScreenshotGroup;
 static uint64_t gDisplayDrops,gDisplayed,gBlackBars;
 static BOOL gReady,gClosing,gMousePressed;
-static uint64_t gServiceID,gGesture,gMouseGeneration;
+static uint64_t gServiceID,gKeyboardServiceID,gGesture,gMouseGeneration;
 static double gMouseX,gMouseY;
+static int gMouseEdgeQuarter;
 static InputMode gMouseMode; // main thread: frozen at Down, copied into every event
 static uint64_t gScrollServiceID,gScrollGesture,gScrollGeneration;
 // Last AbsolutePointer position accepted by the device, input queue only.
@@ -138,7 +157,9 @@ static double lastPointerX=-1,lastPointerY=-1;
 static const double PointerEpsilon=0.001;
 static BOOL gScrollActive,gScrollPrecise,gScrollMomentum,gScrollMomentumAllowed; // main thread
 static BOOL isScroll(Kind kind){ return kind>=ScrollPrecise && kind<=ScrollEnd; }
-static BOOL isEnd(Event event){ return event.kind==Up || (isScroll(event.kind) && event.scroll.ends); }
+static BOOL isIndigoEdge(Event event){ return event.mode==BottomEdge && event.edgeQuarter==0; }
+static BOOL isEnd(Event event){ return event.kind==Up || (isScroll(event.kind) && event.scroll.ends) ||
+    (event.kind==KeyboardState && ipbKeyboardEmpty(event.keyboardState)); }
 static const char *inputResults[]={"pending","running","sent","rejected","overload","build_failed",
     "send_failed","barrier_failed","send_timed_out","interrupted","scroll_unsupported","scroll_stationary",
     "input_conflict","scroll_unavailable","scroll_orphan","scroll_off_target"};
@@ -154,6 +175,14 @@ static CGSize gVideoSize; // content size used by every UI geometry consumer
 static CGSize gFrameSize;
 static CGRect gContentRect;
 static CALayer *gContentClip;
+static CALayer *gNativeClip;
+static IPBDisplayInfo gDisplayInfo; // updated on main, copied under gLock for the media sink
+static int gPresentationQuarter=-1;
+static BOOL gGeometryUpdating,gMetadataBusy;
+static int gPendingRotation;
+static NSString *gDeviceIdentifier;
+static dispatch_queue_t gDeviceQueue;
+static dispatch_group_t gDeviceGroup;
 static AVSampleBufferDisplayLayer *gDisplay;
 static NSWindow *gWindow;
 static int gOutputFD=-1; // saved stdout for descriptor discovery
@@ -165,6 +194,8 @@ static xpc_connection_t gMediaService;
 static int gMediaFD=-1,gRTP=-1;
 static void requestClose(NSString *reason);
 static void presentLatest(void);
+static void applyContentGeometry(CGSize frameSize,CGRect crop);
+static void rotateDisplay(int delta);
 static AVCVideoStream *gStream;
 static dispatch_queue_t gDelegateQueue,gInputQueue;
 static dispatch_group_t gInputGroup;
@@ -172,6 +203,8 @@ static xrc_t gInput; // only input queue reads/writes this connection and gestur
 static int gInputFD=-1;
 static xrc_t gButton,gDigitizer;
 static int gButtonFD=-1,gDigitizerFD=-1;
+static ipb_bounded_sender gInputSender,gButtonSender,gDigitizerSender;
+static BOOL gSendersInitialized;
 static BOOL gInputLive;
 static double nowSec(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); return ts.tv_sec+ts.tv_nsec/1e9; }
 static void fail(int code,NSString *reason){
@@ -234,11 +267,11 @@ static void finish(int code,NSString *reason){
         (unsigned long long)atomic_load(&gAbandonedSends),(double)SendDeadlineSeconds];
     static double values[4][Capacity]; unsigned counts[4]={0};
     unsigned executed=0,rejected=0,overload=0,inflight=0;
-    const char *kinds[]={"DOWN","MOVE","UP","SCROLL_PRECISE","SCROLL_WHEEL","SCROLL_END","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN","KEY_LOCK"};
+    const char *kinds[]={"DOWN","MOVE","UP","SCROLL_PRECISE","SCROLL_WHEEL","SCROLL_END","KEY_HOME","KEY_RECENTS","KEY_VOLUME_UP","KEY_VOLUME_DOWN","KEY_LOCK","KEY_KEYBOARD","KEY_STATE","TEXT_PASTE","TEXT_COPY","TEXT_CUT"};
     // KEY_LOCK was added to Kind without a string here, so kinds[KeyLock] read past the end and
     // %s ran strlen on whatever followed: any session using Cmd-L with --csv crashed in finish.
     // These asserts make the next such omission a build error instead of a SIGSEGV at exit.
-    _Static_assert(sizeof kinds / sizeof *kinds == KeyLock + 1,
+    _Static_assert(sizeof kinds / sizeof *kinds == CutText + 1,
                    "kinds[] must have one string per Kind");
     _Static_assert(sizeof inputResults / sizeof *inputResults == ScrollOffTarget + 1,
                    "inputResults[] must have one string per Result");
@@ -268,8 +301,8 @@ static void finish(int code,NSString *reason){
         intervalN?[NSString stringWithFormat:@"%.3f",intervals[(unsigned)ceil(intervalN*.50)-1]*1000]:@"NA",
         intervalN?[NSString stringWithFormat:@"%.3f",intervals[(unsigned)ceil(intervalN*.95)-1]*1000]:@"NA",
         (unsigned long long)drops,(unsigned long long)errors,intervalN,(unsigned long long)intervalCount];
-    [s appendString:@"KEY_* report_return=first send return; barrier_return=button barrier or RECENTS end return (digitizer has no barrier in the existing oracle).\n"];
-    [s appendString:@"BOTTOM_EDGE UP: end return only; no digitizer barrier exists in the oracle. Scroll x/y are relative AppKit deltas; scroll calibration is UNVERIFIED.\n"];
+    [s appendString:@"KEY_* report_return=first send return; barrier_return=button/UHID barrier. Keyboard usages are not recorded.\n"];
+    [s appendString:@"BOTTOM_EDGE: portrait-content uses Indigo END only; rotated content uses UHID direction flags + UP barrier. Scroll x/y are relative AppKit deltas; scroll calibration is UNVERIFIED.\n"];
     [s appendString:@"drops=local invalid/non-increasing PTS only; transport/decoder losses unknown. Times=CLOCK_MONOTONIC seconds; blank=not reached.\n"];
     NSMutableString *csv=nil;
     if(gCSVFD>=0) csv=[NSMutableString stringWithString:@"seq,type,generation,gesture,result,queue_depth,x,y,t_submit,t_received,t_report_return,t_barrier_return,report_code,barrier_code,mode,scroll_phase,scroll_momentum,scroll_flags,raw_x,raw_y,accel_x,accel_y,app_phase,app_momentum\n"];
@@ -429,6 +462,7 @@ static BOOL acceptScreenSize(CGSize size,const char *source){
     selectContentRect((CGRect){CGPointZero,size},source); return YES;
 }
 static BOOL selectTableContentRect(void){
+    if(acceptScreenSize(gDisplayInfo.nativeSize,"live-primary-display")) return YES;
     BOOL matched=NO;
     for(size_t i=0;i<sizeof gScreenTable/sizeof gScreenTable[0];i++){
         if(strcmp(gProductType,gScreenTable[i].productType)) continue;
@@ -633,34 +667,24 @@ static int openInput(const char *dev,const char *feature,xrc_t *remote,int *fd){
 
 // Apple's HID senders are synchronous and cannot be cancelled. On a connection that has gone
 // invalid they block for hundreds of milliseconds to seconds -- measured 744 ms to 2846 ms, against
-// a 3.5-5.3 ms healthy median -- and then return 0, so a caller that waits on one strands every
-// event queued behind it (docs/verification.md, 2026-09-14). Run the call off the input queue and
-// stop waiting at a deadline. The abandoned call still runs to completion in the background; it
-// simply no longer owns the input queue. Expiry is a send failure, never a retry: nothing is re-sent.
-static int sendBounded(int (^call)(void)){
-    __block int result=0;
-    dispatch_semaphore_t done=dispatch_semaphore_create(0);
-    // Global concurrent queue: a stuck call must not hold up the next one behind it.
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
-        result=call();
-        dispatch_semaphore_signal(done);
-    });
-    if(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,
-            (int64_t)(SendDeadlineSeconds*NSEC_PER_SEC)))){
-        // Timed out. `result` belongs to the still-running block from here on; never read it.
-        atomic_fetch_add(&gAbandonedSends,1);
-        return SendTimedOutCode;
-    }
+// a 3.5-5.3 ms healthy median. The bounded sender runs the call off the input queue, but retains
+// ownership of its connection until the abandoned call really returns; no later call can overlap it.
+// Expiry is a send failure, never a retry: nothing is re-sent.
+static int sendBounded(ipb_bounded_sender *sender,int (^call)(void)){
+    bool started=false;
+    int result=ipb_bounded_call(sender,
+        ipb_bounded_now_ns()+(uint64_t)(SendDeadlineSeconds*NSEC_PER_SEC),call,&started);
+    if(result==SendTimedOutCode && started) atomic_fetch_add(&gAbandonedSends,1);
     return result;
 }
 
 // A C array cannot be captured by a block, and the report bytes must outlive an abandoned call,
 // so they are copied to the heap and the block owns the copy.
-static int sendReportBounded(xrc_t connection,const void *words,size_t length,uint64_t serviceID){
+static int sendReportBounded(ipb_bounded_sender *sender,xrc_t connection,const void *words,size_t length,uint64_t serviceID){
     void *copy=malloc(length);
     if(!copy) return SendTimedOutCode;
     memcpy(copy,words,length);
-    return sendBounded(^{
+    return sendBounded(sender,^{
         int code=coredevice_send_universalhid_hid_report(connection,copy,serviceID);
         free(copy);
         return code;
@@ -675,15 +699,168 @@ static Result failureFor(int code,Result onFail){ return code==SendTimedOutCode?
 // Sources/action_sender.m button_click and digitizer_swipe + bin/ipb recents are
 // the timing/argument oracle. No guessed digitizer barrier is sent.
 static void drainInput(void);
+static void clearKeyboardPayloadLocked(unsigned index){
+    gTextPayloadBytes-=gTextPayloads[index].length; gTextPayloads[index]=nil;
+    memset(&gRecords[index].event.keyboardState,0,sizeof(IPBKeyboardState));
+    gRecords[index].event.keyboardUsage=0;
+}
+static void finishKeyboard(unsigned index,Record r){
+    pthread_mutex_lock(&gLock); gRecords[index]=r; clearKeyboardPayloadLocked(index); pthread_mutex_unlock(&gLock);
+    drainInput(); dispatch_group_leave(gInputGroup);
+}
+static int sendKeyboardState(IPBKeyboardState state){
+    uint32_t usages[232]; unsigned count=ipbKeyboardUsages(state,usages);
+    uint64_t words[2]={0,0};
+    if(uhid_make_keyboard_state_hid_report(usages,(int32_t)count,words)!=(int)sizeof words) return -1;
+    return sendReportBounded(&gInputSender,gInput,words,sizeof words,gKeyboardServiceID);
+}
+static int64_t clipboardChangeCount(NSString **error){
+    NSDictionary *info=ipbDeviceControl(gDeviceIdentifier,@[@"device",@"pasteboard",@"info"],error);
+    id count=info[@"changeCount"];
+    if(![count isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)count)==CFBooleanGetTypeID() || [count longLongValue]<0){
+        if(!*error) *error=@"device clipboard has no valid change count";
+        return -1;
+    }
+    return [count longLongValue];
+}
+static void keyboardStep(unsigned index,unsigned step);
+static void copyClipboardResult(unsigned index){
+    pthread_mutex_lock(&gLock); uint64_t epoch=gRecords[index].event.keyboardEpoch; pthread_mutex_unlock(&gLock);
+    dispatch_group_async(gDeviceGroup,gDeviceQueue,^{ @autoreleasepool {
+        NSString *error=nil; NSData *data=nil; BOOL unchanged=NO;
+        double deadline=nowSec()+1.0;
+        while(!error){
+            if(epoch!=atomic_load(&gKeyboardEpoch)) break;
+            int64_t count=clipboardChangeCount(&error);
+            if(error) break;
+            if(count!=gCopyChangeCounts[index]){
+                data=ipbDeviceCommand(gDeviceIdentifier,@[@"device",@"pasteboard",@"paste"],nil,NO,&error); break;
+            }
+            if(nowSec()>=deadline){ unchanged=YES; break; }
+            usleep(50000);
+        }
+        NSString *text=data?[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]:nil;
+        if(data && !text) error=@"iPhone clipboard is not UTF-8 text; Mac clipboard unchanged";
+        dispatch_async(dispatch_get_main_queue(),^{
+            pthread_mutex_lock(&gLock); Record r=gRecords[index]; pthread_mutex_unlock(&gLock);
+            if(r.event.keyboardEpoch!=atomic_load(&gKeyboardEpoch)) r.result=Interrupted;
+            else if(unchanged){
+                r.result=Interrupted; NSBeep();
+                if(gKeyboardNotice) gKeyboardNotice(r.event.kind==CutText?@"No new text was cut":@"No text was copied");
+            }
+            else if(error){ r.result=SendFailed; fail(1,error); }
+            else if(NSPasteboard.generalPasteboard.changeCount!=r.event.hostClipboardCount){
+                // Universal Clipboard may have installed the same text already.
+                if(text && [[NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString] isEqualToString:text]) r.result=Sent;
+                else { r.result=Interrupted; if(gKeyboardNotice) gKeyboardNotice(@"Mac clipboard changed; newer contents kept"); }
+            }else if(text){
+                [NSPasteboard.generalPasteboard clearContents];
+                if(![NSPasteboard.generalPasteboard setString:text forType:NSPasteboardTypeString]){
+                    r.result=SendFailed; fail(1,@"could not write Mac text clipboard");
+                }else r.result=Sent;
+            }else r.result=Interrupted;
+            if(r.result==Sent && gKeyboardNotice) gKeyboardNotice(r.event.kind==CutText?@"Cut to Mac":@"Copied to Mac");
+            dispatch_async(gInputQueue,^{ finishKeyboard(index,r); });
+        });
+    }});
+}
+// One FIFO operation owns the full chord/clipboard transfer. No action is replayed.
+static void keyboardStep(unsigned index,unsigned step){
+    pthread_mutex_lock(&gLock); Record r=gRecords[index]; pthread_mutex_unlock(&gLock);
+    BOOL stateEvent=r.event.kind==KeyboardState;
+    BOOL repeat=stateEvent && r.event.keyboardUsage!=0;
+    unsigned barrierStep=stateEvent?(repeat?2:1):4;
+    BOOL interrupted=r.event.keyboardEpoch!=atomic_load(&gKeyboardEpoch) || r.event.generation!=atomic_load(&gGeneration);
+    if(interrupted && !isEnd(r.event)){
+        // A chord/held key may already have reached the device: release before finishing.
+        int code=sendKeyboardState((IPBKeyboardState){0});
+        if(!code) code=sendBounded(&gInputSender,^{ return coredevice_send_universalhid_barrier(gInput); });
+        r.result=code?failureFor(code,SendFailed):Interrupted;
+        if(code) inputError(@"keyboard release failed; device release is NOT guaranteed");
+        finishKeyboard(index,r); return;
+    }
+    int code=0;
+    if(step==barrierStep) code=sendBounded(&gInputSender,^{ return coredevice_send_universalhid_barrier(gInput); });
+    else {
+        IPBKeyboardState held={0};
+        if(stateEvent){ held=r.event.keyboardState; if(repeat && step==0) ipbKeyboardSet(&held,r.event.keyboardUsage,false); }
+        else {
+            uint32_t key=r.event.kind==PasteText?0x19:r.event.kind==CutText?0x1b:0x06;
+            if(step<2) ipbKeyboardSet(&held,0xe3,true);
+            if(step==1 || step==2) ipbKeyboardSet(&held,key,true);
+        }
+        code=sendKeyboardState(held);
+    }
+    if(step==0){ r.reportCode=code; r.reportReturn=nowSec(); }
+    if(step==barrierStep){ r.barrierCode=code; r.barrierReturn=nowSec(); }
+    if(code){
+        r.result=failureFor(code,step==barrierStep?BarrierFailed:SendFailed);
+        inputError(r.event.kind==PasteText?@"iPhone clipboard updated; paste failed or is uncertain; do not blindly retry":
+            @"keyboard/clipboard sender failed; input is not replayed");
+        finishKeyboard(index,r); return;
+    }
+    pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
+    if(step==barrierStep){
+        if(r.event.kind==CopyText || r.event.kind==CutText){ copyClipboardResult(index); return; }
+        r.result=Sent; finishKeyboard(index,r); return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,stateEvent?0:20*NSEC_PER_MSEC),gInputQueue,^{ keyboardStep(index,step+1); });
+}
+static void beginKeyboard(unsigned index){
+    pthread_mutex_lock(&gLock); Record r=gRecords[index]; NSData *text=gTextPayloads[index]; pthread_mutex_unlock(&gLock);
+    if(r.event.kind==KeyboardState){ keyboardStep(index,0); return; }
+    if(r.event.keyboardEpoch!=atomic_load(&gKeyboardEpoch)){
+        r.result=Interrupted; finishKeyboard(index,r); return;
+    }
+    if(r.event.pasteFromHost){
+        // Read on main when this operation reaches the FIFO head. A preceding Copy
+        // must publish its Mac clipboard result before the following Paste reads it.
+        dispatch_async(dispatch_get_main_queue(),^{
+            NSData *payload=nil;
+            if(r.event.keyboardEpoch==atomic_load(&gKeyboardEpoch))
+                payload=[[NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString] dataUsingEncoding:NSUTF8StringEncoding];
+            pthread_mutex_lock(&gLock);
+            BOOL admitted=payload.length && gTextPayloadBytes+payload.length<=IPBDevicePayloadLimit;
+            if(admitted){ gTextPayloads[index]=payload; gTextPayloadBytes+=payload.length; gRecords[index].event.pasteFromHost=NO; }
+            pthread_mutex_unlock(&gLock);
+            dispatch_async(gInputQueue,^{
+                if(admitted) beginKeyboard(index);
+                else { Record ended=r; ended.result=Interrupted; finishKeyboard(index,ended); }
+            });
+            if(!admitted && r.event.keyboardEpoch==atomic_load(&gKeyboardEpoch)){
+                NSBeep(); if(gKeyboardNotice) gKeyboardNotice(@"Clipboard has no supported text (limit 2 MiB)");
+            }
+        });
+        return;
+    }
+    dispatch_group_async(gDeviceGroup,gDeviceQueue,^{ @autoreleasepool {
+        NSString *error=nil; int64_t count=-1;
+        if(r.event.keyboardEpoch==atomic_load(&gKeyboardEpoch)){
+            if(r.event.kind==PasteText){
+                (void)ipbDeviceCommand(gDeviceIdentifier,@[@"device",@"pasteboard",@"copy"],text,NO,&error);
+            }else count=clipboardChangeCount(&error);
+        }
+        dispatch_async(gInputQueue,^{
+            if(r.event.keyboardEpoch!=atomic_load(&gKeyboardEpoch)){ Record ended=r; ended.result=Interrupted; finishKeyboard(index,ended); }
+            else if(error){ Record ended=r; ended.result=SendFailed; fail(1,[NSString stringWithFormat:@"clipboard transfer failed; key chord was not sent: %@",error]); finishKeyboard(index,ended); }
+            else { gCopyChangeCounts[index]=count; keyboardStep(index,0); }
+        });
+    }});
+}
 static void keyStep(unsigned index,unsigned step){
     pthread_mutex_lock(&gLock); Record r=gRecords[index]; pthread_mutex_unlock(&gLock);
     BOOL done=NO;
     double delay=0;
-    if(r.event.generation!=atomic_load(&gGeneration)){
+    // A keyboard key already pressed must still be released after a focus/geometry change.
+    if((r.event.generation!=atomic_load(&gGeneration) ||
+        (r.event.kind==KeyKeyboard && r.event.keyboardEpoch!=atomic_load(&gKeyboardEpoch))) &&
+        !(r.event.kind==KeyKeyboard && step>0)){
         r.result=Interrupted; done=YES;
     }else{
         int code;
         {
+            // Standard keyboard reports share the existing UHID sender; hardware shortcuts
+            // retain their separate button socket below.
             // Every shortcut is a button click now, App Switcher included. It used to be a
             // 14-step digitizer swipe costing 1.66 s (12 x 30 ms of motion, then a 1.05 s dwell,
             // then a 0.25 s settle), which is why it felt like a slowly mocked drag.
@@ -693,10 +870,24 @@ static void keyStep(unsigned index,unsigned step){
             // Home: docs/protocol.md. Volume: E9 showed a HUD on the 13 Pro (M3 brief,
             // 2026-09-08); EA was rc=0-only until 2026-09-14, when both directions were
             // exercised interactively on a 12 mini over localNetwork and confirmed working.
+            if(r.event.kind==KeyKeyboard){
+                if(step==2) code=sendBounded(&gInputSender,^{ return coredevice_send_universalhid_barrier(gInput); });
+                else {
+                    uint64_t words[2]={0,0};
+                    if(uhid_make_keyboard_hid_report(r.event.keyboardUsage,step==0,words)!=(int)sizeof words){
+                        r.result=BuildFailed; inputError(@"keyboard report build failed");
+                        r.event.keyboardUsage=0;
+                        pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
+                        drainInput(); dispatch_group_leave(gInputGroup); return;
+                    }
+                    code=sendReportBounded(&gInputSender,gInput,words,sizeof words,gKeyboardServiceID);
+                }
+                done=step==2; delay=step==0?.08:.12;
+            }else{
             uint64_t page=r.event.kind==KeyRecents?0xff01:0x0c;
             uint64_t usage=r.event.kind==KeyHome?0x40:r.event.kind==KeyRecents?0x10:
                            r.event.kind==KeyVolumeUp?0xE9:r.event.kind==KeyVolumeDown?0xEA:0x30;
-            code=sendBounded(^{ return step==2?coredevice_send_hid_button_barrier(gButton):
+            code=sendBounded(&gButtonSender,^{ return step==2?coredevice_send_hid_button_barrier(gButton):
                 coredevice_send_hid_button_custom(gButton,page,usage,(uint8_t)step); });
             // Hold is per-shortcut, not shared. The side button is duration-gated: the boundary is
             // 0.29 s (0.28 fails, 0.29 works -- user measurement 2026-09-15), identical on wired and
@@ -709,6 +900,7 @@ static void keyStep(unsigned index,unsigned step){
             // 346 ms have been measured on localNetwork). ~1.38x the boundary buys that margin
             // while staying far below the 0.7 s that once opened Siri.
             done=step==2; delay=step==0?(r.event.kind==KeyLock?.4:.08):.12;
+            }
         }
         double returned=nowSec();
         if(step==0){ r.reportCode=code; r.reportReturn=returned; }
@@ -726,10 +918,11 @@ static void keyStep(unsigned index,unsigned step){
             else inputError(r.result==SendTimedOut?
                 @"shortcut sender exceeded the send deadline; input queue released":
                 @"shortcut sender failed (see CSV codes)");
-        }else if(r.event.generation!=atomic_load(&gGeneration)){
+        }else if(r.event.generation!=atomic_load(&gGeneration) && r.event.kind!=KeyKeyboard){
             r.result=Interrupted; done=YES;
         }else if(done) r.result=Sent;
     }
+    if(done && r.event.kind==KeyKeyboard) r.event.keyboardUsage=0;
     pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
     if(done){
         // The digitizer swipe needed a post-END settle; a button click does not.
@@ -757,10 +950,10 @@ static void drainInput(void){
         const Event event=r.event; // immutable main-thread-produced value
         uint64_t generation=atomic_load(&gGeneration);
         if(activeGeneration!=generation){ state=Idle; activeGesture=0; }
-        if(event.generation!=generation || (atomic_load(&gFailure) && !isEnd(event))) r.result=Rejected;
+        if((event.generation!=generation && !isEnd(event)) || (atomic_load(&gFailure) && !isEnd(event))) r.result=Rejected;
         else if(event.kind>=KeyHome){
             if(state!=Idle){ r.result=Rejected; inputError(@"shortcut reached active touch; release required"); }
-            else { dispatch_group_enter(gInputGroup); keyStep(index,0); return; }
+            else { dispatch_group_enter(gInputGroup); if(event.kind>=KeyboardState) beginKeyboard(index); else keyStep(index,0); return; }
         }
         else {
             BOOL scrolling=isScroll(event.kind);
@@ -777,7 +970,7 @@ static void drainInput(void){
                 if(ends) state=Ending;
                 uint64_t words[2]={0,0};
                 int count=sizeof words;
-                if(activeMode!=BottomEdge){
+                {
                     ScrollReport scroll=event.scroll;
                     // The wire builder, not uhid_make_scroll_hid_report: it stamps
                     // remoteTimestamp, which Device Hub sets on every report and
@@ -787,14 +980,15 @@ static void drainInput(void){
                     // already hold.
                     count=scrolling?uhid_make_scroll_wire_hid_report((int32_t)scroll.rawX,(int32_t)scroll.rawY,
                         scroll.phase,scroll.momentum,scroll.accelX,scroll.accelY,words):
-                        uhid_make_digitizer_hid_report(event.x,event.y,!ends,!ends,words);
+                        uhid_make_edge_touch_hid_report(event.x,event.y,!ends,!ends,
+                            activeMode==BottomEdge?event.edgeQuarter:-1,words);
                 }
                 if(count!=sizeof words){ r.result=BuildFailed; r.reportCode=count; inputError(@"HID report construction failed"); }
                 else if(event.generation!=atomic_load(&gGeneration)) r.result=Rejected;
                 else {
-                    // gesture-impl.md task 1: one IndigoDigitizerEvent per real mouse
-                    // event, optional second point absent, edge=bottom, mainScreen=(0,0).
-                    // Never use the 320-bit swipe-contact report or shortcut interpolation.
+                    // Preserve the verified portrait-content Indigo edge behavior.
+                    // Rotated-content edges need native UHID directional flags;
+                    // direction stays frozen through UP. No time interpolation.
                     // Place the cursor before opening a scroll gesture. The
                     // device routes a scroll to the view under the pointer, and
                     // Device Hub keeps an AbsolutePointer stream running as the
@@ -825,7 +1019,7 @@ static void drainInput(void){
                             r.result=BuildFailed; r.reportCode=pointerCount;
                             inputError(@"AbsolutePointer report construction failed");
                         }else{
-                            int pointerCode=sendReportBounded(gInput,pointerWords,sizeof pointerWords,gScrollServiceID);
+                            int pointerCode=sendReportBounded(&gInputSender,gInput,pointerWords,sizeof pointerWords,gScrollServiceID);
                             if(pointerCode){
                                 r.result=failureFor(pointerCode,SendFailed); r.reportCode=pointerCode;
                                 r.reportReturn=nowSec();
@@ -838,10 +1032,10 @@ static void drainInput(void){
                     // still holds. r.result and r.reportCode are already set.
                     BOOL pointerFailed=(r.result==BuildFailed || r.result==SendFailed || r.result==SendTimedOut);
                     if(!pointerFailed){
-                        r.reportCode=activeMode==BottomEdge?
-                            sendBounded(^{ return coredevice_send_hid_digitizer_cgpoint(gDigitizer,
+                        r.reportCode=isIndigoEdge(event)?
+                            sendBounded(&gDigitizerSender,^{ return coredevice_send_hid_digitizer_cgpoint(gDigitizer,
                                 event.x,event.y,0,0,1,starts?0:ends?2:1,3,0,0); }):
-                            sendReportBounded(gInput,words,sizeof words,scrolling?gScrollServiceID:gServiceID);
+                            sendReportBounded(&gInputSender,gInput,words,sizeof words,scrolling?gScrollServiceID:gServiceID);
                         r.reportReturn=nowSec();
                         r.result=r.reportCode?failureFor(r.reportCode,SendFailed):Sent;
                     }
@@ -850,10 +1044,9 @@ static void drainInput(void){
                     else if(r.reportCode) inputError(@"HID report sender failed (see report_code)");
                     else if(event.generation!=atomic_load(&gGeneration)) r.result=Interrupted;
                     else if(ends){
-                        // No digitizer barrier in the existing oracle. Its END return is
-                        // the fourth point, just as for RECENTS; not device acknowledgement.
-                        r.barrierCode=activeMode==BottomEdge?0:
-                            sendBounded(^{ return coredevice_send_universalhid_barrier(gInput); });
+                        // Flush only: this does not acknowledge the UI effect.
+                        r.barrierCode=isIndigoEdge(event)?0:
+                            sendBounded(&gInputSender,^{ return coredevice_send_universalhid_barrier(gInput); });
                         r.barrierReturn=nowSec();
                         if(r.barrierCode){
                             r.result=failureFor(r.barrierCode,BarrierFailed);
@@ -872,7 +1065,7 @@ static void drainInput(void){
             }
         }
         if(event.generation!=atomic_load(&gGeneration)){ state=Idle; activeGesture=0; }
-        pthread_mutex_lock(&gLock); gRecords[index]=r; pthread_mutex_unlock(&gLock);
+        pthread_mutex_lock(&gLock); gRecords[index]=r; if(event.kind>=KeyKeyboard) clearKeyboardPayloadLocked(index); pthread_mutex_unlock(&gLock);
     }}
 }
 static void submitEvent(Event event,Result disposition){
@@ -886,7 +1079,7 @@ static void submitEvent(Event event,Result disposition){
     unsigned index=gSubmitted++%Capacity;
     Record r={.event=event,.depth=gCount,.result=Pending};
     if(disposition!=Pending) r.result=disposition; // dropped now, never queued/replayed
-    else if(gStopping || event.generation!=atomic_load(&gGeneration) || (atomic_load(&gFailure) && !isEnd(event))) r.result=Rejected;
+    else if(gStopping || (event.generation!=atomic_load(&gGeneration) && !isEnd(event)) || (atomic_load(&gFailure) && !isEnd(event))) r.result=Rejected;
     else if(gCount==PendingLimit){ r.result=Overload; overloaded=YES; }
     else {
         gPending[(gHead+gCount)%PendingLimit]=index; gCount++;
@@ -894,13 +1087,14 @@ static void submitEvent(Event event,Result disposition){
         if(!gWorker){ gWorker=YES; dispatch_group_async(gInputGroup,gInputQueue,^{ drainInput(); }); }
     }
     gRecords[index]=r;
+    if(r.result!=Pending) clearKeyboardPayloadLocked(index);
     pthread_mutex_unlock(&gLock);
     // Losing DOWN/UP/MOVE invalidates the entire gesture, never sends a partial replay.
     if(overloaded) inputError(@"pending input queue overloaded");
 }
 static void submit(Kind kind,uint64_t gesture,uint64_t generation,double x,double y,double submitted){
     submitEvent((Event){.generation=generation,.gesture=gesture,.kind=kind,.x=x,.y=y,.submit=submitted,
-        .mode=kind<=Up?gMouseMode:Touch},Pending);
+        .mode=kind<=Up?gMouseMode:Touch,.edgeQuarter=gMouseEdgeQuarter},Pending);
 }
 // Single conversion boundary, gesture-impl.md task 2, UniversalHID 90.1 enums.
 // UNVERIFIED: units, sign, gain and flags=0 need real-device calibration. These
@@ -1009,12 +1203,14 @@ static void discoverService(void){
         if(strncmp(line,"connectedDescriptor[",20)) continue;
         BOOL touch=strstr(line,"string:\"CoreDevice touchscreen(")!=NULL;
         BOOL scroll=strstr(line,"string:\"CoreDevice touchscreenGesture\"")!=NULL;
-        if(!touch && !scroll) continue;
+        BOOL keyboard=strstr(line,"string:\"CoreDevice keyboard\"")!=NULL;
+        if(!touch && !scroll && !keyboard) continue;
         char *id=strstr(line,"serviceID:");
         if(id){ char *end=NULL; errno=0; uint64_t value=strtoull(id+10,&end,0);
             if(!errno && end!=id+10 && (*end==' ' || *end=='\n') && value){
                 if(touch && !gServiceID) gServiceID=value; // preserve explicit touchscreen override
                 if(scroll) gScrollServiceID=value;
+                if(keyboard) gKeyboardServiceID=value;
             }
         }
     }
@@ -1022,6 +1218,7 @@ static void discoverService(void){
     if(!gScrollServiceID) LOGE("scroll disabled: no CoreDevice touchscreenGesture descriptor; no fallback ID or second socket");
     else LOGE("scroll service=0x%llx on existing universalhidservice; units/direction/gains/flags UNVERIFIED",(unsigned long long)gScrollServiceID);
     if(!gServiceID) fail(3,@"no touchscreen descriptor; use --service-id only with a known touchscreen ID");
+    if(!gKeyboardServiceID) LOGE("numeric keypad unavailable: no CoreDevice keyboard descriptor");
 }
 
 static void releaseMouse(double submitted){
@@ -1029,9 +1226,19 @@ static void releaseMouse(double submitted){
     gMousePressed=NO;
     submit(Up,gGesture,gMouseGeneration,gMouseX,gMouseY,submitted);
 }
+static void releaseKeyboard(BOOL invalidate){
+    if(invalidate) atomic_fetch_add(&gKeyboardEpoch,1);
+    memset(&gKeyboardHeld,0,sizeof gKeyboardHeld);
+    if(!gKeyboardTouched || !gKeyboardServiceID) return;
+    gKeyboardTouched=NO;
+    submitEvent((Event){.kind=KeyboardState,.generation=atomic_load(&gGeneration),
+        .keyboardEpoch=atomic_load(&gKeyboardEpoch),.submit=nowSec()},Pending);
+}
 static void requestClose(NSString *reason){
+    ipbStopDeviceControl();
     if(gClosing) return;
     releaseMouse(nowSec()); releaseScroll(nowSec());
+    releaseKeyboard(YES);
     gReady=NO; gClosing=YES;
     // First failure keeps its precise reason; successful close records its event.
     pthread_mutex_lock(&gLock);
@@ -1113,8 +1320,345 @@ static void saveScreenshot(void){
     }});
 }
 
-@interface MirrorView : NSView @end
+// Geometry changes end an old gesture on its original coordinates before a new
+// transform is published. No queued event is reinterpreted or replayed.
+static void publishDisplayInfo(IPBDisplayInfo info){
+    BOOL changed=info.displayID!=gDisplayInfo.displayID ||
+        !CGSizeEqualToSize(info.nativeSize,gDisplayInfo.nativeSize) ||
+        info.deviceQuarter!=gDisplayInfo.deviceQuarter || info.contentQuarter!=gDisplayInfo.contentQuarter;
+    if(!changed){ gGeometryUpdating=NO; rotateDisplay(0); return; }
+    gGeometryUpdating=YES;
+    releaseMouse(nowSec()); releaseScroll(nowSec());
+    releaseKeyboard(YES);
+    dispatch_group_notify(gInputGroup,dispatch_get_main_queue(),^{
+        if(gClosing || atomic_load(&gFailure)) return;
+        pthread_mutex_lock(&gLock);
+        gDisplayInfo=info;
+        if(gCrop.size.width>0) selectTableContentRect();
+        CGSize size=gCrop.size; CGRect crop=gCrop.rect;
+        pthread_mutex_unlock(&gLock);
+        if(size.width>0) applyContentGeometry(size,crop);
+        LOGE("display: id=%llu native=%.0fx%.0f deviceQuarter=%d contentQuarter=%d",
+            (unsigned long long)info.displayID,info.nativeSize.width,info.nativeSize.height,info.deviceQuarter,info.contentQuarter);
+        gGeometryUpdating=NO;
+        rotateDisplay(0);
+    });
+}
+static void refreshDisplay(NSString *orientation){
+    if(gClosing || atomic_load(&gFailure)) return;
+    if(gMetadataBusy || gGeometryUpdating){
+        if(orientation) LOGE("rotation not submitted: display update in progress");
+        return;
+    }
+    gMetadataBusy=YES;
+    if(orientation){ gGeometryUpdating=YES; releaseMouse(nowSec()); releaseScroll(nowSec()); releaseKeyboard(YES); }
+    // Only explicit rotation waits for releases, with the same bounded input
+    // deadline. Read-only refreshes never depend on the HID queue becoming idle.
+    dispatch_block_t query=^{ @autoreleasepool {
+            NSString *error=nil;
+            if(orientation && !error) ipbDeviceControl(gDeviceIdentifier,@[@"device",@"orientation",@"set",orientation],&error);
+            NSDictionary *result=error?nil:ipbDeviceControl(gDeviceIdentifier,@[@"device",@"info",@"displays"],&error);
+            IPBDisplayInfo info={0};
+            if(result && !ipbParseDisplayInfo(result,&info)) error=@"invalid/unsupported primary display geometry";
+            dispatch_async(dispatch_get_main_queue(),^{
+                gMetadataBusy=NO;
+                if(gClosing) return;
+                if(error){ gGeometryUpdating=NO; fail(1,[NSString stringWithFormat:@"display control: %@",error]); return; }
+                publishDisplayInfo(info);
+            });
+    }};
+    if(!orientation) dispatch_group_async(gDeviceGroup,gDeviceQueue,query);
+    else dispatch_group_async(gDeviceGroup,dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{
+        // Input clipboard operations need gDeviceQueue. Waiting on that queue
+        // would form a cycle; only this bounded waiter waits for old releases.
+        if(dispatch_group_wait(gInputGroup,dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC))){
+            dispatch_async(dispatch_get_main_queue(),^{
+                gMetadataBusy=NO; gGeometryUpdating=NO;
+                if(!gClosing) fail(1,@"rotation not sent: input release did not finish within 2s");
+            });
+        }else dispatch_group_async(gDeviceGroup,gDeviceQueue,query);
+    });
+}
+static void rotateDisplay(int delta){
+    if(gClosing || atomic_load(&gFailure)) return;
+    // Accumulate explicit relative requests while the read/rotation is in flight.
+    // They have not been sent yet; nothing with uncertain completion is replayed.
+    gPendingRotation=(gPendingRotation+delta)%4;
+    if(!gPendingRotation || gMetadataBusy || gGeometryUpdating) return;
+    NSArray *names=@[@"portrait",@"landscapeLeft",@"portraitUpsideDown",@"landscapeRight"];
+    int target=(gDisplayInfo.deviceQuarter+gPendingRotation+4)&3;
+    gPendingRotation=0;
+    refreshDisplay(names[target]);
+}
+
+// Keep the video in a background view so AppKit owns the control/video stacking order.
+@interface VideoSurface : NSView @end
+@implementation VideoSurface
+- (BOOL)isFlipped { return YES; }
+- (NSView*)hitTest:(NSPoint)point { return nil; }
+@end
+// Consume panel input locally; clicks/scrolls must not become phone-coordinate input.
+@interface KeypadPanel : NSVisualEffectView @end
+@implementation KeypadPanel
+- (BOOL)isFlipped { return YES; }
+- (void)mouseDown:(NSEvent*)event {}
+- (void)scrollWheel:(NSEvent*)event {}
+@end
+@interface KeyboardNotice : NSTextField @end
+@implementation KeyboardNotice
+- (NSView*)hitTest:(NSPoint)point { return nil; }
+@end
+@interface MirrorView : NSView <NSTextInputClient,NSUserInterfaceValidations> {
+    NSButton *_keypadToggle,*_keypadClose;
+    KeypadPanel *_keypad;
+    NSTextField *_keypadTitle,*_keypadHint;
+    NSArray<NSButton*> *_keypadKeys;
+    NSMutableAttributedString *_markedText;
+    NSRange _markedSelection;
+    NSTextField *_composition;
+    NSEvent *_keyEvent;
+    BOOL _capsLock;
+    NSTextInputContext *_textContext;
+    BOOL _textContextActive;
+}
+- (void)installKeypadControl;
+- (void)cancelComposition;
+- (void)showKeyboardNotice:(NSString*)notice;
+- (void)setTextContextActive:(BOOL)active;
+@end
 @implementation MirrorView
+- (instancetype)initWithFrame:(NSRect)frame {
+    if(!(self=[super initWithFrame:frame])) return nil;
+    _keypadToggle=[NSButton buttonWithTitle:@"123" target:self action:@selector(toggleKeypad:)];
+    _keypadToggle.accessibilityLabel=@"Numeric keypad";
+    _keypadToggle.toolTip=@"Show or hide numeric keypad (⌘K)";
+    _keypadToggle.enabled=gKeyboardServiceID!=0;
+    _keypad=[[KeypadPanel alloc] initWithFrame:NSZeroRect];
+    _keypad.material=NSVisualEffectMaterialHUDWindow;
+    _keypad.blendingMode=NSVisualEffectBlendingModeWithinWindow;
+    _keypad.state=NSVisualEffectStateActive;
+    _keypad.appearance=[NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
+    _keypad.wantsLayer=YES; _keypad.layer.cornerRadius=12; _keypad.hidden=YES;
+    _keypadTitle=[NSTextField labelWithString:@"Numeric keypad"];
+    [_keypad addSubview:_keypadTitle];
+    _keypadHint=[NSTextField labelWithString:@"Sends keys to iPhone"];
+    _keypadHint.textColor=NSColor.secondaryLabelColor;
+    [_keypad addSubview:_keypadHint];
+    _keypadClose=[NSButton buttonWithTitle:@"×" target:self action:@selector(toggleKeypad:)];
+    _keypadClose.accessibilityLabel=@"Close numeric keypad";
+    [_keypad addSubview:_keypadClose];
+    NSArray *titles=@[@"1",@"2",@"3",@"4",@"5",@"6",@"7",@"8",@"9",@"⌫",@"0",@"↵"];
+    const uint32_t usages[]={0x1e,0x1f,0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x2a,0x27,0x28};
+    NSMutableArray *keys=[NSMutableArray array];
+    for(unsigned i=0;i<titles.count;i++){
+        NSButton *button=[NSButton buttonWithTitle:titles[i] target:self action:@selector(keypadPress:)];
+        button.tag=usages[i]; button.enabled=gKeyboardServiceID!=0;
+        if(i==9) button.accessibilityLabel=@"Backspace";
+        if(i==11) button.accessibilityLabel=@"Return";
+        [_keypad addSubview:button]; [keys addObject:button];
+    }
+    _keypadKeys=keys;
+    [self addSubview:_keypad];
+    _markedText=[[NSMutableAttributedString alloc] initWithString:@""];
+    _composition=[[KeyboardNotice alloc] initWithFrame:NSZeroRect]; _composition.hidden=YES;
+    _composition.editable=NO; _composition.selectable=NO; _composition.bezeled=NO;
+    _composition.textColor=NSColor.whiteColor; _composition.backgroundColor=NSColor.blackColor;
+    _composition.drawsBackground=YES; _composition.font=[NSFont systemFontOfSize:16];
+    [self addSubview:_composition];
+    _capsLock=(NSEvent.modifierFlags&NSEventModifierFlagCapsLock)!=0;
+    return self;
+}
+- (void)installKeypadControl {
+    // Keep the entry point in window chrome, away from phone status/buttons.
+    _keypadToggle.frame=NSMakeRect(0,0,60,24);
+    NSTitlebarAccessoryViewController *control=[NSTitlebarAccessoryViewController new];
+    control.view=_keypadToggle; control.layoutAttribute=NSLayoutAttributeRight;
+    [self.window addTitlebarAccessoryViewController:control];
+}
+- (void)toggleKeypad:(id)sender {
+    if(!gKeyboardServiceID) return;
+    releaseMouse(nowSec()); releaseScroll(nowSec());
+    _keypad.hidden=!_keypad.hidden;
+    _keypadToggle.state=_keypad.hidden?NSControlStateValueOff:NSControlStateValueOn;
+    [self.window makeFirstResponder:self];
+}
+- (void)sendKeypadUsage:(uint32_t)usage {
+    if(!gReady || gClosing || atomic_load(&gFailure) || !gKeyboardServiceID) return;
+    if(gSubmitted>=Capacity-4){ requestClose(@"event capacity reached"); return; }
+    double t=nowSec(); releaseMouse(t); releaseScroll(t);
+    releaseKeyboard(NO); gKeyboardTouched=YES;
+    submitEvent((Event){.kind=KeyKeyboard,.generation=atomic_load(&gGeneration),
+        .submit=t,.keyboardUsage=usage,.keyboardEpoch=atomic_load(&gKeyboardEpoch)},Pending);
+}
+- (void)keypadPress:(NSButton*)button {
+    [self sendKeypadUsage:(uint32_t)button.tag];
+    [self.window makeFirstResponder:self];
+}
+- (BOOL)canSendKeyboard {
+    if(!gReady || gClosing || gGeometryUpdating || atomic_load(&gFailure) || !gKeyboardServiceID) return NO;
+    if(gSubmitted>=Capacity-4){ requestClose(@"event capacity reached"); return NO; }
+    return YES;
+}
+- (void)updateModifiers:(NSEventModifierFlags)flags {
+    for(uint32_t u=0xe0;u<=0xe7;u++) ipbKeyboardSet(&gKeyboardHeld,u,false);
+    if(flags&NSEventModifierFlagControl) ipbKeyboardSet(&gKeyboardHeld,0xe0,true);
+    if(flags&NSEventModifierFlagShift) ipbKeyboardSet(&gKeyboardHeld,0xe1,true);
+    if(flags&NSEventModifierFlagOption) ipbKeyboardSet(&gKeyboardHeld,0xe2,true);
+    if(flags&NSEventModifierFlagCommand) ipbKeyboardSet(&gKeyboardHeld,0xe3,true);
+}
+- (void)queueHeldKeys:(uint32_t)repeatUsage {
+    double t=nowSec(); releaseMouse(t); releaseScroll(t); gKeyboardTouched=YES;
+    submitEvent((Event){.kind=KeyboardState,.generation=atomic_load(&gGeneration),
+        .keyboardEpoch=atomic_load(&gKeyboardEpoch),.keyboardState=gKeyboardHeld,
+        .keyboardUsage=repeatUsage,.submit=t},Pending);
+}
+- (void)forwardKey:(NSEvent*)event {
+    if(![self canSendKeyboard]) return;
+    uint32_t usage=ipbKeyboardUsage(event.keyCode);
+    if(!usage){ NSBeep(); return; }
+    BOOL repeat=event.isARepeat && ipbKeyboardHas(gKeyboardHeld,usage);
+    [self updateModifiers:event.modifierFlags]; ipbKeyboardSet(&gKeyboardHeld,usage,true);
+    [self queueHeldKeys:repeat?usage:0];
+}
+- (void)keyDown:(NSEvent*)event {
+    if(![self canSendKeyboard]) return;
+    if(![self hasMarkedText]){ _composition.stringValue=@""; _composition.hidden=YES; }
+    if(event.keyCode==49 && (event.modifierFlags&(NSEventModifierFlagCommand|NSEventModifierFlagControl|NSEventModifierFlagOption))==NSEventModifierFlagControl){
+        if(!event.isARepeat) [self nextInputSource:nil]; return;
+    }
+    if(event.modifierFlags&(NSEventModifierFlagCommand|NSEventModifierFlagControl)) { [self forwardKey:event]; return; }
+    _keyEvent=event;
+    if(![self.inputContext handleEvent:event]) [self forwardKey:event];
+    _keyEvent=nil;
+}
+- (void)keyUp:(NSEvent*)event {
+    uint32_t usage=ipbKeyboardUsage(event.keyCode);
+    if(![self canSendKeyboard] || !ipbKeyboardHas(gKeyboardHeld,usage)) return;
+    [self updateModifiers:event.modifierFlags]; ipbKeyboardSet(&gKeyboardHeld,usage,false);
+    [self queueHeldKeys:0];
+}
+- (void)flagsChanged:(NSEvent*)event {
+    if(![self canSendKeyboard] || [self hasMarkedText]) return;
+    if(event.keyCode==57){
+        BOOL caps=(event.modifierFlags&NSEventModifierFlagCapsLock)!=0;
+        if(caps!=_capsLock){ _capsLock=caps; [self sendKeypadUsage:0x39]; }
+        return;
+    }
+    IPBKeyboardState previous=gKeyboardHeld;
+    [self updateModifiers:event.modifierFlags];
+    if(memcmp(&previous,&gKeyboardHeld,sizeof previous)) [self queueHeldKeys:0];
+}
+- (void)queueClipboard:(Kind)kind text:(NSString*)text {
+    if(![self canSendKeyboard]) return;
+    NSData *payload=kind==PasteText?[text dataUsingEncoding:NSUTF8StringEncoding]:nil;
+    if(kind==PasteText && text && !payload.length){ NSBeep(); return; }
+    if(payload.length>IPBDevicePayloadLimit){ NSBeep(); return; }
+    [self cancelComposition];
+    releaseMouse(nowSec()); releaseScroll(nowSec()); releaseKeyboard(NO);
+    pthread_mutex_lock(&gLock);
+    if(gTextPayloadBytes+payload.length>IPBDevicePayloadLimit){ pthread_mutex_unlock(&gLock); NSBeep(); return; }
+    gTextPayloads[gSubmitted]=payload; gTextPayloadBytes+=payload.length;
+    pthread_mutex_unlock(&gLock);
+    gKeyboardTouched=YES;
+    submitEvent((Event){.kind=kind,.generation=atomic_load(&gGeneration),
+        .keyboardEpoch=atomic_load(&gKeyboardEpoch),.hostClipboardCount=NSPasteboard.generalPasteboard.changeCount,
+        .pasteFromHost=kind==PasteText && !text,.submit=nowSec()},Pending);
+}
+- (void)paste:(id)sender { [self queueClipboard:PasteText text:nil]; }
+- (void)copy:(id)sender { [self queueClipboard:CopyText text:nil]; }
+- (void)cut:(id)sender { [self queueClipboard:CutText text:nil]; }
+- (void)selectAll:(id)sender {
+    NSEvent *event=[NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint
+        modifierFlags:NSEventModifierFlagCommand timestamp:0 windowNumber:self.window.windowNumber context:nil
+        characters:@"a" charactersIgnoringModifiers:@"a" isARepeat:NO keyCode:0];
+    [self forwardKey:event];
+    event=[NSEvent keyEventWithType:NSEventTypeKeyUp location:NSZeroPoint modifierFlags:0 timestamp:0
+        windowNumber:self.window.windowNumber context:nil characters:@"a" charactersIgnoringModifiers:@"a" isARepeat:NO keyCode:0];
+    [self keyUp:event];
+}
+- (void)selectInputSource:(NSMenuItem*)item {
+    [self cancelComposition]; releaseKeyboard(YES);
+    self.inputContext.selectedKeyboardInputSource=item.representedObject;
+    [self.window makeFirstResponder:self];
+    NSString *selected=self.inputContext.selectedKeyboardInputSource;
+    [self showKeyboardNotice:selected?[NSString stringWithFormat:@"Input method: %@",[NSTextInputContext localizedNameForInputSource:selected] ?: selected]:@"Input method unavailable"];
+}
+- (void)nextInputSource:(id)sender {
+    NSArray *sources=self.inputContext.keyboardInputSources;
+    NSUInteger index=[sources indexOfObject:self.inputContext.selectedKeyboardInputSource];
+    if(!sources.count) return;
+    NSMenuItem *item=[NSMenuItem new];
+    item.representedObject=sources[index==NSNotFound?0:(index+1)%sources.count];
+    [self selectInputSource:item];
+}
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
+    if(item.action==@selector(selectInputSource:)){
+        NSMenuItem *menuItem=(NSMenuItem*)item;
+        menuItem.state=[menuItem.representedObject isEqual:self.inputContext.selectedKeyboardInputSource]?NSControlStateValueOn:NSControlStateValueOff;
+    }
+    return [self canSendKeyboard];
+}
+- (void)insertText:(id)value replacementRange:(NSRange)range {
+    NSString *text=[value isKindOfClass:NSAttributedString.class]?[value string]:value;
+    if(![text isKindOfClass:NSString.class] || !text.length) return;
+    BOOL composed=[self hasMarkedText];
+    [self unmarkText];
+    if(!composed && _keyEvent && text.length==1 && [text characterAtIndex:0]<128){ [self forwardKey:_keyEvent]; }
+    else [self queueClipboard:PasteText text:text];
+}
+- (void)doCommandBySelector:(SEL)selector {
+    if(_keyEvent && ![self hasMarkedText]) [self forwardKey:_keyEvent];
+}
+- (void)setMarkedText:(id)value selectedRange:(NSRange)selection replacementRange:(NSRange)range {
+    NSAttributedString *text=[value isKindOfClass:NSAttributedString.class]?value:
+        [[NSAttributedString alloc] initWithString:[value isKindOfClass:NSString.class]?value:@""];
+    if(text.length>65536){ [self cancelComposition]; NSBeep(); return; }
+    releaseKeyboard(NO);
+    [_markedText setAttributedString:text];
+    _markedSelection=NSMakeRange(MIN(selection.location,text.length),MIN(selection.length,text.length-MIN(selection.location,text.length)));
+    _composition.stringValue=text.string; _composition.hidden=!text.length;
+}
+- (void)unmarkText { [_markedText setAttributedString:[[NSAttributedString alloc] initWithString:@""]]; _markedSelection=NSMakeRange(0,0); _composition.stringValue=@""; _composition.hidden=YES; }
+- (void)cancelComposition { [self unmarkText]; [self.inputContext discardMarkedText]; }
+- (void)showKeyboardNotice:(NSString*)notice {
+    if([self hasMarkedText]) return;
+    _composition.stringValue=notice; _composition.hidden=NO;
+    __weak MirrorView *view=self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+        MirrorView *strongView=view;
+        if(strongView && ![strongView hasMarkedText] && [strongView->_composition.stringValue isEqualToString:notice])
+            strongView->_composition.hidden=YES;
+    });
+}
+- (BOOL)hasMarkedText { return _markedText.length>0; }
+- (NSRange)markedRange { return [self hasMarkedText]?NSMakeRange(0,_markedText.length):NSMakeRange(NSNotFound,0); }
+- (NSRange)selectedRange { return _markedSelection; }
+- (NSArray*)validAttributesForMarkedText { return @[NSUnderlineStyleAttributeName,NSForegroundColorAttributeName]; }
+- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range actualRange:(NSRangePointer)actual {
+    if(range.location>_markedText.length) return nil;
+    range.length=MIN(range.length,_markedText.length-range.location);
+    if(actual) *actual=range; return [_markedText attributedSubstringFromRange:range];
+}
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actual {
+    if(actual) *actual=NSMakeRange(MIN(range.location,_markedText.length),0);
+    return [self.window convertRectToScreen:[self convertRect:_composition.frame toView:nil]];
+}
+- (NSUInteger)characterIndexForPoint:(NSPoint)point { return NSNotFound; }
+- (NSTextInputContext*)inputContext {
+    if(!_textContext) _textContext=[[NSTextInputContext alloc] initWithClient:self];
+    return _textContext;
+}
+- (void)setTextContextActive:(BOOL)active {
+    if(active==_textContextActive) return;
+    _textContextActive=active;
+    if(active) [self.inputContext activate]; else [self.inputContext deactivate];
+}
+- (BOOL)becomeFirstResponder {
+    BOOL accepted=[super becomeFirstResponder];
+    if(accepted && self.window.isKeyWindow) [self setTextContextActive:YES];
+    return accepted;
+}
+- (BOOL)resignFirstResponder { [self cancelComposition]; [self setTextContextActive:NO]; releaseKeyboard(YES); return [super resignFirstResponder]; }
 - (BOOL)isFlipped { return YES; }
 - (BOOL)acceptsFirstResponder { return YES; }
 - (void)layout {
@@ -1124,16 +1668,35 @@ static void saveScreenshot(void){
         AVMakeRectWithAspectRatioInsideRect(gVideoSize,self.bounds):self.bounds;
     gContentClip.frame=content;
     if(gVideoSize.width>0 && gVideoSize.height>0){
-        CGFloat sx=content.size.width/gVideoSize.width,sy=content.size.height/gVideoSize.height;
+        CGFloat sx=content.size.width/gVideoSize.width,sy=sx;
+        gNativeClip.affineTransform=CGAffineTransformIdentity;
+        gNativeClip.bounds=CGRectMake(0,0,gContentRect.size.width*sx,gContentRect.size.height*sy);
+        gNativeClip.position=CGPointMake(content.size.width/2,content.size.height/2);
+        gNativeClip.affineTransform=CGAffineTransformMakeRotation(-gPresentationQuarter*M_PI_2);
         gDisplay.frame=CGRectMake(-gContentRect.origin.x*sx,-gContentRect.origin.y*sy,
                                  gFrameSize.width*sx,gFrameSize.height*sy);
     }else gDisplay.frame=gContentClip.bounds;
     gDisplay.contentsScale=self.window.backingScaleFactor;
     [CATransaction commit];
+    CGFloat width=MAX(1,MIN(232,self.bounds.size.width-24));
+    CGFloat height=MAX(1,MIN(300,self.bounds.size.height-58));
+    _keypad.frame=NSMakeRect(MAX(0,self.bounds.size.width-width-12),MAX(0,self.bounds.size.height-height-12),width,height);
+    _composition.frame=NSMakeRect(12,MAX(8,self.bounds.size.height-34),MAX(1,self.bounds.size.width-24),26);
+    CGFloat sx=width/232,sy=height/300;
+    _keypadTitle.frame=NSMakeRect(12*sx,12*sy,174*sx,20*sy);
+    _keypadTitle.font=[NSFont systemFontOfSize:MAX(10,14*MIN(sx,sy)) weight:NSFontWeightMedium];
+    _keypadClose.frame=NSMakeRect(194*sx,8*sy,28*sx,26*sy);
+    _keypadHint.frame=NSMakeRect(12*sx,274*sy,208*sx,18*sy);
+    _keypadHint.font=[NSFont systemFontOfSize:MAX(9,11*MIN(sx,sy))];
+    for(unsigned i=0;i<_keypadKeys.count;i++){
+        NSButton *button=_keypadKeys[i];
+        button.frame=NSMakeRect((12+(i%3)*72)*sx,(42+(i/3)*57)*sy,64*sx,49*sy);
+        button.font=[NSFont systemFontOfSize:MAX(10,24*MIN(sx,sy))];
+    }
 }
 - (void)viewDidChangeBackingProperties { [super viewDidChangeBackingProperties]; [self setNeedsLayout:YES]; }
-- (BOOL)mapEvent:(NSEvent*)event x:(double*)x y:(double*)y {
-    if(gVideoSize.width<=0 || gVideoSize.height<=0) return NO;
+- (BOOL)mapEvent:(NSEvent*)event x:(double*)x y:(double*)y pointer:(BOOL)pointer {
+    if(gGeometryUpdating || gVideoSize.width<=0 || gVideoSize.height<=0) return NO;
     // Stay in the view's own (flipped, points) space. Backing conversion is NOT
     // used on purpose: -convertPointToBacking:/-convertRectToBacking: map into the
     // unflipped backing store, which negates y on a flipped view (measured: view
@@ -1142,12 +1705,17 @@ static void saveScreenshot(void){
     // anyway, so working in points is both correct and Retina-independent.
     NSRect bounds=self.bounds;
     NSPoint point=[self convertPoint:event.locationInWindow fromView:nil];
+    if(!_keypad.hidden && NSPointInRect(point,_keypad.frame)) return NO;
     NSRect content=AVMakeRectWithAspectRatioInsideRect(gVideoSize,bounds);
     if(content.size.width<=0 || content.size.height<=0 || !NSPointInRect(point,content)){
         pthread_mutex_lock(&gLock); gBlackBars++; pthread_mutex_unlock(&gLock); return NO;
     }
     *x=(point.x-content.origin.x)/content.size.width;
     *y=(point.y-content.origin.y)/content.size.height; // flipped view: top-left is (0,0)
+    if(!pointer){
+        CGPoint native=ipbRotateUnit(CGPointMake(*x,*y),-gPresentationQuarter);
+        *x=native.x; *y=native.y;
+    }
     return YES;
 }
 - (BOOL)performKeyEquivalent:(NSEvent*)event {
@@ -1155,8 +1723,22 @@ static void saveScreenshot(void){
         (NSEventModifierFlagCommand|NSEventModifierFlagShift|NSEventModifierFlagControl|NSEventModifierFlagOption);
     NSString *key=event.charactersIgnoringModifiers.lowercaseString;
     NSEventModifierFlags command=NSEventModifierFlagCommand,shiftCommand=command|NSEventModifierFlagShift;
+    if(flags==command && ([key isEqualToString:@"w"] || [key isEqualToString:@"q"])){
+        if(!event.isARepeat){
+            if([key isEqualToString:@"q"]) [NSApp terminate:nil]; else [self.window performClose:nil];
+        }
+        return YES;
+    }
+    if(flags==command && ([key isEqualToString:@"v"] || [key isEqualToString:@"c"] || [key isEqualToString:@"x"] || [key isEqualToString:@"a"])){
+        if(event.isARepeat) return YES;
+        if([key isEqualToString:@"v"]) [self paste:nil];
+        else if([key isEqualToString:@"c"]) [self copy:nil];
+        else if([key isEqualToString:@"x"]) [self cut:nil];
+        else [self forwardKey:event];
+        return YES;
+    }
     Kind kind=KeyHome;
-    enum { DeviceKey, Screenshot, ZoomToFit, ActualSize } action=DeviceKey;
+    enum { DeviceKey, Screenshot, ZoomToFit, ActualSize, RotateLeft, RotateRight, ToggleKeypad } action=DeviceKey;
     // Device Hub bindings captured in the M4 brief (Xcode 27 beta 6).
     if(flags==shiftCommand && [key isEqualToString:@"h"]) kind=KeyHome;
     else if(flags==(shiftCommand|NSEventModifierFlagControl) && [key isEqualToString:@"h"]) kind=KeyRecents;
@@ -1176,9 +1758,13 @@ static void saveScreenshot(void){
     // read at action_sender.m:1675). Treat hold values as path-specific and
     // measured, not as transferable between the two.
     else if(flags==command && [key isEqualToString:@"l"]) kind=KeyLock;
+    else if(flags==command && [key isEqualToString:@"k"]) action=ToggleKeypad;
     else if(flags==shiftCommand && [key isEqualToString:@"s"]) action=Screenshot;
     else if(flags==command && [key isEqualToString:@"0"]) action=ZoomToFit;
     else if(flags==command && [key isEqualToString:@"1"]) action=ActualSize;
+    else if(flags==command && key.length==1 && [key characterAtIndex:0]==NSLeftArrowFunctionKey) action=RotateLeft;
+    else if(flags==command && key.length==1 && [key characterAtIndex:0]==NSRightArrowFunctionKey) action=RotateRight;
+    else if(flags&command){ [self forwardKey:event]; return YES; }
     else return [super performKeyEquivalent:event];
     double t=nowSec();
     if(event.isARepeat || !gReady || gClosing || atomic_load(&gFailure)) return YES;
@@ -1186,6 +1772,7 @@ static void saveScreenshot(void){
     // Main producer clears pressed immediately: subsequent drag/up cannot revive
     // the old gesture. FIFO worker completes this UP + barrier before the key.
     releaseMouse(t); releaseScroll(t);
+    releaseKeyboard(NO);
     if(action==DeviceKey) submit(kind,0,atomic_load(&gGeneration),0,0,t);
     else if(!gLocalShortcutPending){
         gLocalShortcutPending=YES;
@@ -1196,6 +1783,8 @@ static void saveScreenshot(void){
             gLocalShortcutPending=NO;
             if(!gReady || gClosing || atomic_load(&gFailure) || generation!=atomic_load(&gGeneration)) return;
             if(action==Screenshot) saveScreenshot();
+            else if(action==ToggleKeypad) [self toggleKeypad:nil];
+            else if(action==RotateLeft || action==RotateRight) rotateDisplay(action==RotateLeft?1:-1);
             else resizeMirror(action==ActualSize);
         });
     }
@@ -1209,7 +1798,7 @@ static void saveScreenshot(void){
         .x=event.scrollingDeltaX,.y=event.scrollingDeltaY,.submit=t,.mode=Scroll,
         .appPhase=event.phase,.appMomentum=event.momentumPhase};
     double px=0,py=0;
-    input.pointerValid=[self mapEvent:event x:&px y:&py];
+    input.pointerValid=[self mapEvent:event x:&px y:&py pointer:YES];
     input.pointerX=px; input.pointerY=py;
     Result result=convertScroll(event,&input.scroll);
     if(!gScrollServiceID){ rejectScroll(input,ScrollUnavailable); return; }
@@ -1248,9 +1837,11 @@ static void saveScreenshot(void){
     double t=nowSec(),x,y; // real AppKit arrival, before conversion/submission
     if(!gReady || gClosing || gMousePressed || atomic_load(&gFailure)) return;
     if(gSubmitted>=Capacity-2){ requestClose(@"event capacity reached"); return; }
-    if(![self mapEvent:event x:&x y:&y]) return;
+    if(![self mapEvent:event x:&x y:&y pointer:NO]) return;
     releaseScroll(t);
-    gMouseMode=y>=1.0-BottomEdgeFraction?BottomEdge:Touch;
+    CGPoint displayPoint=ipbRotateUnit(CGPointMake(x,y),-gDisplayInfo.contentQuarter);
+    gMouseMode=displayPoint.y>=1.0-BottomEdgeFraction?BottomEdge:Touch;
+    gMouseEdgeQuarter=gDisplayInfo.contentQuarter;
     gMousePressed=YES; gGesture++; gMouseGeneration=atomic_load(&gGeneration);
     gMouseX=x; gMouseY=y; submit(Down,gGesture,gMouseGeneration,x,y,t);
 }
@@ -1258,13 +1849,13 @@ static void saveScreenshot(void){
     double t=nowSec(),x,y;
     if(!gMousePressed || !gReady || gClosing) return;
     if(gSubmitted>=Capacity-1){ requestClose(@"event capacity reached"); return; }
-    if(![self mapEvent:event x:&x y:&y]) return;
+    if(![self mapEvent:event x:&x y:&y pointer:NO]) return;
     gMouseX=x; gMouseY=y; submit(Move,gGesture,gMouseGeneration,x,y,t);
 }
 - (void)mouseUp:(NSEvent*)event {
     double t=nowSec(),x,y;
     if(!gMousePressed) return;
-    if([self mapEvent:event x:&x y:&y]){ gMouseX=x; gMouseY=y; }
+    if([self mapEvent:event x:&x y:&y pointer:NO]){ gMouseX=x; gMouseY=y; }
     // An outside UP is rejected as a position, then ends at the last valid point.
     releaseMouse(t);
 }
@@ -1275,8 +1866,10 @@ static void saveScreenshot(void){
 - (void)windowDidChangeScreen:(NSNotification*)n {
     if(gVideoSize.width>0 && gVideoSize.height>0) fitWindow(gVideoSize,YES);
 }
-- (void)windowDidResignKey:(NSNotification*)n { releaseMouse(nowSec()); releaseScroll(nowSec()); }
-- (void)applicationDidResignActive:(NSNotification*)n { releaseMouse(nowSec()); releaseScroll(nowSec()); }
+- (void)windowDidBecomeKey:(NSNotification*)n { [(MirrorView*)gWindow.contentView setTextContextActive:YES]; }
+- (void)windowDidResignKey:(NSNotification*)n { releaseMouse(nowSec()); releaseScroll(nowSec()); releaseKeyboard(YES); [(MirrorView*)gWindow.contentView cancelComposition]; [(MirrorView*)gWindow.contentView setTextContextActive:NO]; }
+- (void)applicationDidBecomeActive:(NSNotification*)n { if(gWindow.isKeyWindow) [(MirrorView*)gWindow.contentView setTextContextActive:YES]; }
+- (void)applicationDidResignActive:(NSNotification*)n { releaseMouse(nowSec()); releaseScroll(nowSec()); releaseKeyboard(YES); [(MirrorView*)gWindow.contentView cancelComposition]; [(MirrorView*)gWindow.contentView setTextContextActive:NO]; }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)app {
     requestClose(@"application quit"); return NSTerminateCancel;
 }
@@ -1292,18 +1885,54 @@ static void createWindow(void){
     MirrorView *view=[[MirrorView alloc] initWithFrame:NSMakeRect(0,0,420,840)];
     view.wantsLayer=YES; view.layer.backgroundColor=NSColor.blackColor.CGColor;
     view.layer.masksToBounds=YES;
+    VideoSurface *video=[[VideoSurface alloc] initWithFrame:view.bounds];
+    video.autoresizingMask=NSViewWidthSizable|NSViewHeightSizable; video.wantsLayer=YES;
+    [view addSubview:video positioned:NSWindowBelow relativeTo:nil];
     // Clip at the same aspect-fit rectangle mapEvent uses, including during resize.
     gContentClip=[CALayer layer]; gContentClip.masksToBounds=YES;
-    [view.layer addSublayer:gContentClip];
+    [video.layer addSublayer:gContentClip];
+    gNativeClip=[CALayer layer]; gNativeClip.masksToBounds=YES;
+    [gContentClip addSublayer:gNativeClip];
     gDisplay=[AVSampleBufferDisplayLayer layer];
     gDisplay.videoGravity=AVLayerVideoGravityResize; // explicit raw-frame geometry owns the aspect ratio
-    [gContentClip addSublayer:gDisplay]; gWindow.contentView=view;
+    [gNativeClip addSublayer:gDisplay]; gWindow.contentView=view;
+    [view installKeypadControl];
+    __weak MirrorView *weakView=view;
+    gKeyboardNotice=^(NSString *notice){ [weakView showKeyboardNotice:notice]; };
+    NSMenu *menu=[NSMenu new];
+    NSMenuItem *application=[NSMenuItem new]; [menu addItem:application];
+    NSMenu *appMenu=[NSMenu new]; application.submenu=appMenu;
+    [appMenu addItemWithTitle:@"Quit ipb mirror" action:@selector(terminate:) keyEquivalent:@"q"].target=NSApp;
+    NSMenuItem *edit=[NSMenuItem new]; edit.title=@"Edit"; [menu addItem:edit];
+    NSMenu *editMenu=[[NSMenu alloc] initWithTitle:@"Edit"]; edit.submenu=editMenu;
+    NSArray *titles=@[@"Cut",@"Copy",@"Paste",@"Select All"];
+    NSArray *selectors=@[@"cut:",@"copy:",@"paste:",@"selectAll:"];
+    NSArray *keys=@[@"x",@"c",@"v",@"a"];
+    for(unsigned i=0;i<titles.count;i++){
+        NSMenuItem *item=[editMenu addItemWithTitle:titles[i] action:NSSelectorFromString(selectors[i]) keyEquivalent:keys[i]];
+        item.target=view;
+    }
+    [editMenu addItem:NSMenuItem.separatorItem];
+    NSMenuItem *inputItem=[editMenu addItemWithTitle:@"Input Method" action:nil keyEquivalent:@""];
+    NSMenu *inputMenu=[[NSMenu alloc] initWithTitle:@"Input Method"]; inputItem.submenu=inputMenu;
+    for(NSString *source in view.inputContext.keyboardInputSources){
+        NSMenuItem *item=[inputMenu addItemWithTitle:[NSTextInputContext localizedNameForInputSource:source] ?: source
+            action:@selector(selectInputSource:) keyEquivalent:@""];
+        item.representedObject=source; item.target=view;
+    }
+    NSMenuItem *next=[editMenu addItemWithTitle:@"Next Input Method" action:@selector(nextInputSource:) keyEquivalent:@" "];
+    next.keyEquivalentModifierMask=NSEventModifierFlagControl; next.target=view;
+    NSMenuItem *windowItem=[NSMenuItem new]; windowItem.title=@"Window"; [menu addItem:windowItem];
+    NSMenu *windowMenu=[[NSMenu alloc] initWithTitle:@"Window"]; windowItem.submenu=windowMenu;
+    [windowMenu addItemWithTitle:@"Close" action:@selector(performClose:) keyEquivalent:@"w"].target=gWindow;
+    NSApp.mainMenu=menu;
     [view setNeedsLayout:YES]; [gWindow center]; fitWindow(CGSizeMake(420,840),NO); [gWindow makeKeyAndOrderFront:nil];
     [gWindow makeFirstResponder:view]; [NSApp activateIgnoringOtherApps:YES];
 }
 static void applyContentGeometry(CGSize frameSize,CGRect crop){
-    if(!CGSizeEqualToSize(gFrameSize,frameSize) || !CGRectEqualToRect(gContentRect,crop)){
-        gFrameSize=frameSize; gContentRect=crop; gVideoSize=crop.size;
+    if(!CGSizeEqualToSize(gFrameSize,frameSize) || !CGRectEqualToRect(gContentRect,crop) || gPresentationQuarter!=gDisplayInfo.deviceQuarter){
+        gFrameSize=frameSize; gContentRect=crop; gPresentationQuarter=gDisplayInfo.deviceQuarter;
+        gVideoSize=(gPresentationQuarter&1)?CGSizeMake(crop.size.height,crop.size.width):crop.size;
         fitWindow(gVideoSize,YES);
     }
 }
@@ -1365,7 +1994,8 @@ static void presentLatest(void){
 
 static void usage(void){
     fprintf(stderr,"usage: ipb-mirror <coredevice-uuid> <utun> <hostIP> <deviceIP> <productType-or-empty> [--service-id ID] [--seconds S] [--csv PATH]\n"
-        "Defaults: touchscreen descriptor discovery, 300 seconds; maximum 3600 seconds / 8192 input events. Summary on stderr; event CSV only with --csv PATH (overwrites PATH). Needs a GUI login session.\n");
+        "Defaults: touchscreen descriptor discovery, 300 seconds; maximum 3600 seconds / 8192 input events. Summary on stderr; event CSV only with --csv PATH (overwrites PATH). Needs a GUI login session.\n"
+        "123 button / Cmd-K: numeric keypad (0-9, Backspace, Return); physical number keys are forwarded only while open.\n");
 }
 static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     if(argc<6){ usage(); DIE(2,"missing arguments"); }
@@ -1392,6 +2022,13 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
         if(gCSVFD<0) DIE(8,"open CSV %s: %s",csvPath,strerror(errno));
     }
     uuid_t deviceUUID; if(uuid_parse(dev,deviceUUID)) DIE(2,"invalid CoreDevice UUID");
+    gDeviceIdentifier=[NSString stringWithUTF8String:dev];
+    NSString *displayError=nil;
+    NSDictionary *displayResult=ipbDeviceControl(gDeviceIdentifier,@[@"device",@"info",@"displays"],&displayError);
+    if(!displayResult || !ipbParseDisplayInfo(displayResult,&gDisplayInfo))
+        DIE(1,"display metadata: %s",(displayError ?: @"invalid/unsupported primary display geometry").UTF8String);
+    gDeviceQueue=dispatch_queue_create("ipb.mirror.device-control",DISPATCH_QUEUE_SERIAL);
+    gDeviceGroup=dispatch_group_create();
     if(!dlopen("/Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/CoreDevice",RTLD_NOW)) DIE(2,"CoreDevice dlopen: %s",dlerror());
     if(!dlopen("/System/Library/PrivateFrameworks/AVConference.framework/Versions/A/AVConference",RTLD_NOW)) DIE(2,"AVConference dlopen: %s",dlerror());
     _coredevice_xpc_add_bundle([NSBundle bundleWithPath:@"/Library/Developer/PrivateFrameworks/CoreDevice.framework"]);
@@ -1495,6 +2132,10 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
 
     gInputQueue=dispatch_queue_create("ipb.mirror.input",DISPATCH_QUEUE_SERIAL);
     gInputGroup=dispatch_group_create();
+    ipb_bounded_sender_init(&gInputSender);
+    ipb_bounded_sender_init(&gButtonSender);
+    ipb_bounded_sender_init(&gDigitizerSender);
+    gSendersInitialized=YES;
     dispatch_group_async(gInputGroup,gInputQueue,^{
         if(openInput(dev,"com.apple.coredevice.feature.remote.universalhidservice",&gInput,&gInputFD)) return;
         discoverService(); // scroll ID is discovered even with --service-id
@@ -1513,17 +2154,22 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     // M4 brief: AX menu capture, Device Hub in Xcode 27 beta 6, iPhone 13 Pro.
     // hardwareGestureControls.actionButton / .sideButton use ConditionalKeyboardShortcut;
     // neither menu item appears with the 13 Pro. Revisit on corresponding hardware.
-    LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⌘L=Lock/Wake, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size (key repeat ignored).");
-    LOGE("Siri (⇧⌥⌘H): not implemented; usage-code evidence missing. Recording (⇧⌘R): not implemented; capture/recording behavior evidence missing. Action Button / Camera Control: usage-code evidence and corresponding local hardware missing.");
+    LOGE("Keyboard: ordinary keys/modifiers/repeat; Mac IME commits use text paste. ⌘A=Select All, ⌘C=Copy to Mac, ⌘X=Cut to Mac, ⌘V=Paste Mac text, ⌘W=Close, ⌘Q=Quit.");
+    LOGE("Shortcuts: ⇧⌘H=Home, ⌃⇧⌘H=App Switcher, ⌘↑=Volume+, ⌘↓=Volume−, ⌘L=Lock/Wake, ⌘K=Numeric keypad, ⇧⌘S=Screenshot, ⌘0=Zoom to Fit, ⌘1=Actual Size, ⌘←/⌘→=Rotate Left/Right (shortcut repeat ignored).");
+    LOGE("Siri (⇧⌥⌘H): not implemented; full encoding/behavior unverified. Recording (⇧⌘R): not implemented; capture/recording behavior evidence missing. Action Button / Camera Control: usage-code evidence and corresponding local hardware missing.");
     armWatchdog(watchdog,runSeconds+10);
     double deadline=nowSec()+runSeconds;
+    NSTimer *displayTimer=[NSTimer timerWithTimeInterval:1 repeats:YES block:^(NSTimer *t){ refreshDisplay(nil); }];
+    [[NSRunLoop mainRunLoop] addTimer:displayTimer forMode:NSRunLoopCommonModes];
     NSTimer *timer=[NSTimer timerWithTimeInterval:1.0/120 repeats:YES block:^(NSTimer *t){
         @try {
             if(atomic_load(&gFailure)) requestClose(@"connection/stream failure");
             if(nowSec()>=deadline) requestClose(@"run duration reached");
             if(gSubmitted>=Capacity-1) requestClose(@"8192-event oracle allocation limit reached");
-            pthread_mutex_lock(&gLock); double last=gLastFrame; pthread_mutex_unlock(&gLock);
-            if(nowSec()-last>12){ fail(7,@"no media frames for 12s"); requestClose(@"media stall"); }
+            pthread_mutex_lock(&gLock); double last=gLastFrame; BOOL received=gFrames>0; pthread_mutex_unlock(&gLock);
+            // Device screens can stop publishing while static, then resume on input.
+            // Explicit media/connection errors still fail; silence only bounds first frame.
+            if(!received && nowSec()-last>12){ fail(7,@"no initial media frame within 12s"); requestClose(@"first frame timeout"); }
             if(!gClosing) presentLatest();
             if(gClosing){
                 [NSApp stop:nil];
@@ -1536,6 +2182,7 @@ static int runMirror(int argc,char **argv,dispatch_source_t watchdog){
     [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
     [NSApp run];
     [timer invalidate];
+    [displayTimer invalidate];
     requestClose(@"application stopped");
     return atomic_load(&gFailure);
 }
@@ -1544,10 +2191,29 @@ static void shutdownMirror(void){
     // UP is already on the ordered input chain. Keep every private call bounded
     // by the independent shutdown watchdog, including stop/cancel.
     armWatchdog(gWatchdog,10);
-    if(gInputGroup && dispatch_group_wait(gInputGroup,dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC)))
+    if(gDeviceGroup && dispatch_group_wait(gDeviceGroup,dispatch_time(DISPATCH_TIME_NOW,7*NSEC_PER_SEC)))
+        fail(9,@"device-control drain exceeded shutdown deadline");
+    uint64_t senderDeadline=ipb_bounded_now_ns()+5ull*NSEC_PER_SEC;
+    // Clipboard completion publishes on main. Keep servicing that callback while
+    // closing; producers already reject new input. A blocking group wait deadlocks it.
+    while(gInputGroup && dispatch_group_wait(gInputGroup,DISPATCH_TIME_NOW) && ipb_bounded_now_ns()<senderDeadline)
+        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.005]];
+    if(gInputGroup && dispatch_group_wait(gInputGroup,DISPATCH_TIME_NOW))
         fail(9,@"input drain exceeded 5s; device release is NOT guaranteed");
+    // requestClose() has already queued the ordered UP. Do not close admission
+    // until that worker has had its bounded chance to submit the release.
     pthread_mutex_lock(&gLock);
     gStopping=YES; gCollect=NO;
+    pthread_mutex_unlock(&gLock);
+    bool inputIdle=true,buttonIdle=true,digitizerIdle=true;
+    if(gSendersInitialized){
+        inputIdle=ipb_bounded_sender_close(&gInputSender,senderDeadline);
+        buttonIdle=ipb_bounded_sender_close(&gButtonSender,senderDeadline);
+        digitizerIdle=ipb_bounded_sender_close(&gDigitizerSender,senderDeadline);
+    }
+    if(!inputIdle || !buttonIdle || !digitizerIdle)
+        fail(9,@"HID sender drain exceeded shutdown deadline; device release is NOT guaranteed");
+    pthread_mutex_lock(&gLock);
     if(gLatest){ CFRelease(gLatest); gLatest=NULL; }
     if(gScreenshotFrame){ CVPixelBufferRelease(gScreenshotFrame); gScreenshotFrame=NULL; }
     pthread_mutex_unlock(&gLock);
@@ -1558,14 +2224,14 @@ static void shutdownMirror(void){
     if(gInputGroup && !dispatch_group_wait(gInputGroup,DISPATCH_TIME_NOW)){
         dispatch_group_async(gInputGroup,gInputQueue,^{
             pthread_mutex_lock(&gLock); gInputLive=NO; pthread_mutex_unlock(&gLock);
-            if(gButton) xpc_remote_connection_cancel(gButton);
-            if(gDigitizer) xpc_remote_connection_cancel(gDigitizer);
-            if(gButtonFD>=0){ close(gButtonFD); gButtonFD=-1; }
-            if(gDigitizerFD>=0){ close(gDigitizerFD); gDigitizerFD=-1; }
-            if(gInput) xpc_remote_connection_cancel(gInput);
-            if(gInputFD>=0){ close(gInputFD); gInputFD=-1; }
+            if(buttonIdle && gButton) xpc_remote_connection_cancel(gButton);
+            if(digitizerIdle && gDigitizer) xpc_remote_connection_cancel(gDigitizer);
+            if(buttonIdle && gButtonFD>=0){ close(gButtonFD); gButtonFD=-1; }
+            if(digitizerIdle && gDigitizerFD>=0){ close(gDigitizerFD); gDigitizerFD=-1; }
+            if(inputIdle && gInput) xpc_remote_connection_cancel(gInput);
+            if(inputIdle && gInputFD>=0){ close(gInputFD); gInputFD=-1; }
         });
-        if(dispatch_group_wait(gInputGroup,dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC))) fail(9,@"input cancellation exceeded 2s");
+        if(dispatch_group_wait(gInputGroup,ipb_bounded_dispatch_deadline(senderDeadline))) fail(9,@"input cancellation exceeded shutdown deadline");
     }
     if(gMediaRemote) xpc_remote_connection_cancel(gMediaRemote);
     if(gMediaService) xpc_connection_cancel(gMediaService);

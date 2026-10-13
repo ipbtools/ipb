@@ -9,13 +9,22 @@ live JPEG screen stream (`ipb stream`) and an interactive mirror window (`ipb mi
 `xcrun devicectl` for everything Apple already exposes: install, launch, files, clipboard,
 location, screenshots.
 
-The interaction path is verified, and the CLI uses DeviceHub's own async descriptor-discovery path
-to resolve the touchscreen service when `UHID_SERVICE_ID=auto`.
+`ipb ui` reads an application's accessibility graph, numerical element frames and state over
+the DevicesApp raw DTX service. It uses an optional host Python backend; it installs nothing
+on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
+
+The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
+service when `UHID_SERVICE_ID=auto`. Feature validation is host/device specific; the current
+macOS 27 + Xcode 27 full gate for these branch changes remains open. See
+[current verification scope](docs/verification.md#open-items--current-state-living-section).
+
+[Install and update](#installation-channels) · [Commands](#usage) · [UI tree](docs/ui.md) ·
+[Mirror](docs/mirror.md) · [Documentation map](docs/README.md)
 
 ## Requirements
 
 - A host whose installed CoreDevice package is 636.x or newer. This ships with Xcode 27 beta (`XcodeSystemResources.pkg`); it is what puts `UniversalHIDService`, the `HIDServiceID` helpers, and the embedded `UniversalHID.framework` into `/Library/Developer/PrivateFrameworks`.
-- Xcode 27 beta on the host. Its minimum macOS is 26.4, so macOS 26.4+ hosts qualify as well as macOS 27 beta hosts. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
+- macOS 27 + Xcode 27 beta on the host (the supported target matrix). macOS 26.5.1 has separate development verification records; those do not expand the supported release matrix. The link step needs the beta SDK's private-framework stubs, and the beta's iOS DDI is what installs the device-side HID daemon (`dtuhidd`).
 - A connected iOS 27+ device visible to `xcrun devicectl`, with the Xcode 27 beta DDI mounted. iOS 26 is no longer a supported target (dropped 2026-09-20, no device available to verify against). On iOS 26 the `touchscreenGesture` service (`0x501`) was absent, so `pointer`, `abs-pointer`, `scroll-report`, `scroll-gesture` and the mirror's scroll wheel never worked there. See `docs/verification.md`.
 - GitHub-hosted code should be treated as beta/private-ABI research, because Apple may change these interfaces between seeds.
 
@@ -29,18 +38,47 @@ export DEVELOPER_DIR=/path/to/Xcode-beta.app/Contents/Developer
 
 Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefer.
 
-## Install (Homebrew, stage 1 distribution)
+## Installation channels
 
-The tap `ipbtools/homebrew-ipb` carries the same formula as `Formula/ipb.rb` here; it builds from source, so the machine needs Xcode 27 beta selected for the build and its CoreDevice package for runtime:
+This README describes the alignment work submitted in [PR #1](https://github.com/ipbtools/ipb/pull/1),
+with the research history retained on `codex/devicehub-alignment`. As checked on 2026-10-12, `ipb ui`, the Bilibili text fix and the new mirror keyboard/clipboard work are
+on that branch; they are not on `main`. There is no stable GitHub release. A [disposable branch-test prerelease](https://github.com/ipbtools/ipb/releases/tag/release-test-v0.2.0-20261012155616) provides a downloadable binary and has passed the real release/upload/public-download flow. PR CI produces temporary test packages; see [download and verification instructions](docs/releasing.md#pr-test-packages). `VERSION=0.2.0` alone does not identify these branch changes.
+
+| Channel | What it installs | Update path |
+| --- | --- | --- |
+| Homebrew HEAD | Default branch `main`; currently lacks the new UI and mirror additions | Use `brew reinstall --HEAD ipbtools/ipb/ipb`; host-only `ipb update` needs the fix in `main` |
+| Branch-test Release | Explicit `release-test-*` branch tag, published as a disposable prerelease | Download another test release manually; no stable tap update |
+| PR CI test package | Precompiled macOS 27 ARM64 development build, with exact commit metadata | Download a newer Actions artifact; requires existing Apple runtime components |
+| Development source | The selected source branch, including the features described here | Run `bin/ipb update` in that checkout |
+| `make install PREFIX=...` | A local copy of the selected checkout | Pull/build the checkout, then repeat `make install` with the same prefix |
+
+### Homebrew HEAD
+
+The tap builds from source. Select Xcode 27 beta for the build and install its CoreDevice
+package for runtime. A fully qualified formula name trusts only that formula:
 
 ```sh
-brew tap ipbtools/ipb
-brew trust ipbtools/ipb      # current Homebrew refuses third-party taps until trusted
-brew install --HEAD ipb      # builds from source; ~10 s once Xcode 27 beta's CoreDevice package is present
-ipb version                  # ipb 0.1.0 (macOS ..., CoreDevice 642.15)
+brew install --HEAD ipbtools/ipb/ipb
+ipb version                  # source VERSION plus macOS/CoreDevice versions
 ipb doctor                   # layered self-check, names the next step on failure
 ipb devices                  # then: ipb screenshot before.png; ipb tap 0.15 0.12; ipb home
 ```
+
+### Development source and local installation
+
+To install the features documented by this branch, with Xcode 27 beta selected:
+
+```sh
+git clone --branch codex/devicehub-alignment https://github.com/ipbtools/ipb.git
+cd ipb
+make install PREFIX="$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+ipb help                     # confirm `ui` and mirror clipboard commands are present
+```
+
+For an existing checkout, pull its selected branch and repeat `make install` with the same
+prefix. `command -v ipb` shows which copy your shell runs; a Homebrew copy and a manual copy
+can coexist and contain different code.
 
 ### Shell completion
 
@@ -68,13 +106,42 @@ autoload -Uz compinit && compinit
 
 Only zsh is provided; bash has no completion.
 
-`ipb update` refreshes a Homebrew install or a source checkout in place. On a Homebrew install it
+### Updating the running copy
+
+In this development branch, `ipb update` is a host-only command: it does not enumerate/select phones and needs no `-s`,
+regardless of how many devices are attached. It refreshes the running Homebrew install or
+source checkout. A manual-prefix install returns exit 2 with its exact reinstall prefix;
+it does not update another Homebrew copy. Source updates follow the checkout's configured
+branch, while Homebrew follows the formula's `main` branch. On a Homebrew install it
 compares the installed `HEAD-<sha>` against the remote HEAD and reinstalls only when they differ:
 `brew upgrade --fetch-HEAD` cannot be used, because it compares against a cached clone it does not
 refresh and answers "already installed" when the remote has moved. An install predating this fix
-runs the old wrapper and will report a false success once; `brew reinstall ipb` lands the new one.
+runs the old wrapper; after the fix reaches `main`, use `brew reinstall --HEAD ipbtools/ipb/ipb`
+to replace it. Reinstalling current `main` does not obtain development-branch features.
 
-`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`, `libexec/ipb-helper`, `libexec/ipb-video`, `libexec/ipb-mirror`, `share/ipb/VERSION`, `share/ipb/smoke_matrix.sh`, `share/zsh/site-functions/_ipb`.
+`make install PREFIX=/some/dir` produces the same layout without Homebrew: `bin/ipb`,
+the helpers in `libexec/` (including the optional AX backend), `share/ipb/VERSION`,
+`share/ipb/requirements-ax.txt`, `share/ipb/smoke_matrix.sh`, and `share/zsh/site-functions/_ipb`.
+
+### Application elements (`ipb ui`)
+
+```sh
+ipb -s <device> ui
+ipb -s <device> ui --json
+```
+
+Returns the application's actual AX child graph, text, logical-point rectangles and state.
+JSON includes `children`, `parentId` and `depth`; the text output is indented by depth.
+It needs an optional Python 3.11+ / pymobiledevice3 11.10.2 environment on the Mac,
+an existing USB pairing and Developer Mode. It starts no XCTest session or phone app.
+
+AX can merge text and omit backing containers: the tested Settings page gives AX 13 nodes
+versus XCTest 176. `ipb` preserves the graph returned by the service. Description-first text
+reads avoid the reproduced Bilibili rich-Label encoding failure. Other read failures remain
+explicit; timeout recovery on a fresh connection is not implemented.
+
+See [the UI guide](docs/ui.md) for setup, JSON fields, text policy, bounds and the AX/XCTest
+comparison. Availability depends on the [installation channel](#installation-channels).
 
 ## Build
 
@@ -102,6 +169,9 @@ bin/ipb tap 0.5 0.5
 bin/ipb launch com.apple.Preferences
 bin/ipb open https://www.apple.com
 bin/ipb clipboard set "你好 🚀" && bin/ipb clipboard get
+bin/ipb text "你好 🚀"             # focus a text field first; replaces the device clipboard
+bin/ipb displays --json
+bin/ipb capabilities --json
 bin/ipb apps | bin/ipb ps | bin/ipb lock-state | bin/ipb orientation
 bin/ipb push local.txt /Documents/x.txt --app <bundle-id>
 bin/ipb long 0.615 0.675 1.2
@@ -144,8 +214,9 @@ export DEVICE_ID=<coredevice-uuid>           # the default for this shell
 A selector is matched most-specific-first — whole UUID, then UUID prefix, then a case-insensitive
 substring of the device name or marketing model. `xcrun devicectl --device` accepts none of these
 shorthands, so `ipb` resolves them itself against `devicectl list devices --json-output`; a full
-UUID is passed straight through and costs no enumeration. Anything that matches nothing, or more
-than one device, exits 3 and lists what is attached. `ipb devices` prints the same list, and
+UUID is passed straight through and costs no enumeration. For device commands, a selector that matches nothing or more
+than one device exits 3 and lists what is attached. Host-only `help`, `version`, `update`
+and `service-ids` bypass device selection. `ipb devices` prints the same list, and
 `ipb device` prints the UUID the other commands would use.
 
 Device identity is the CoreDevice UUID, not the UDID: the 642.x `devicectl list devices` table view
@@ -167,6 +238,24 @@ HIDCTL_TIMEOUT_S=30                  # watchdog for a single helper run
 `UHID_SERVICE_ID` defaults to `auto`: the wrapper calls `connectedServiceDescriptors()` and selects the descriptor whose product is `CoreDevice touchscreen(nil)`. If discovery fails the command exits 3 unless `UHID_SERVICE_FALLBACK` is set.
 
 Exit codes from the helper: 0 ok, 1 a dispatched operation or the remote connection reported failure, 2 usage or local error, 3 CoreDeviceService refused the service socket (the CoreDevice error is printed), 4 the device tunnel is not connected, 5 watchdog timeout. On 4 the wrapper warms the tunnel once with `devicectl device info details` and retries; nothing has been sent to the device at that point.
+
+### Literal text and device metadata
+
+`ipb text <text>` copies the exact UTF-8 argument to the device clipboard, then sends the captured
+Command+V held-key sequence. It is separate from `key`, whose output depends on the phone's input
+method. Focus an editable field first. The command replaces the device clipboard; it does not
+restore it or enable continuous clipboard sharing. Discovery fails before a clipboard change;
+copy failure prevents paste. A failed paste is not replayed. Exit 0 means copy and paste submission
+succeeded, **not** that the focused application accepted the text. Verify the resulting field.
+Chinese, emoji, spaces and punctuation were verified in iOS 27 Settings search with Pinyin active.
+iOS may ask the focused app to allow pasting from `dtpasteboardd`; `text` does not answer that prompt.
+Secure fields and applications that reject paste are not covered by that result.
+
+`ipb displays --json` and `ipb capabilities --json` return a `schemaVersion: 1` envelope with the
+resolved `deviceIdentifier`. Displays preserves Apple's `displays`, `orientation`, `backlightState`;
+capabilities preserves the advertised entries, sorted by `featureIdentifier`. Select the explicit
+primary display; the first entry need not be the phone screen. Query failure is an error, not an
+empty capability list. An advertised feature is not a guarantee that its next operation will work.
 
 ### Live screen stream: `ipb stream`
 
@@ -196,78 +285,31 @@ falling behind.
 reached within it, the command exits 8 rather than reporting success with fewer frames.
 
 Exit codes for `ipb stream`: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down, 5 negotiation
-rejected, 6 stream did not start or the media server died, 7 no frames within the watchdog window,
+rejected, 6 stream/connection failure, 7 no initial output within the first-frame budget,
 8 output failed / the consumer did not drain stdout / `--count` not reached, 9 a watchdog expired
 (the stage — setup, collection, or shutdown — is printed before exit). When the consumer is slower
 than the device, frames are **dropped, not queued**; the count is reported on exit.
 
 ### Interactive mirror: `ipb mirror`
 
-One window displays the device screen and accepts mouse control, without DeviceHub, injection
-into any Apple process, or any special entitlement.
-
 ```sh
-bin/ipb mirror [--seconds S] [--csv PATH]
-bin/ipb mirror --help
+ipb -s <device> mirror
+ipb mirror --help
 ```
 
-Click, hold, drag, and scroll directly on the screen; trackpad and wheel scrolling both drive the
-device's own scroll path (`0x501`, iOS 27 only). The shortcuts match DeviceHub:
+A GUI window displays the phone and accepts mouse, keyboard and text clipboard input.
+Click the phone view to focus it. Mac input-method composition stays on the Mac and sends
+committed Unicode text by clipboard paste; iOS may show its normal paste permission prompt.
+Paste/IME commits replace the iPhone text clipboard; continuous clipboard sync is not provided.
 
-| Shortcut | Action |
-| --- | --- |
-| ⇧⌘H | Home |
-| ⌃⇧⌘H | App Switcher |
-| ⌘L | Lock, or wake a dark screen — the same side-button press |
-| ⌘↑ / ⌘↓ | Volume up / down |
-| ⇧⌘S | Save the latest decoded frame as a PNG in `~/Pictures` |
-| ⌘0 | Zoom to fit |
-| ⌘1 | Actual size (falls back to fit if it exceeds the available screen) |
+Common shortcuts: **⇧⌘H** Home, **⌃⇧⌘H** App Switcher, **⌘L** lock/wake,
+**⌘C / ⌘X / ⌘V** text Copy/Cut/Paste, **⌘K** numeric keypad and **⌘W** close.
+A desktop GUI login session is required. Secure-field/lockscreen keyboard acceptance and
+physical trackpad parity remain unverified.
 
-Key repeat is ignored, so holding a shortcut sends one press.
-
-**Requires a GUI login session**, just like `ipb stream`: in-process decoding needs
-`CVDisplayLink`. It works with SIP enabled and needs no entitlement; plain ssh is unsupported.
-
-While a mirror session runs, `ipb` renews the CoreDevice tunnel in the background (a `devicectl`
-call every few seconds). The tunnel is a lease, not a link: it drops about 10 seconds after the last
-`devicectl device ...` call, and HID traffic does not renew it, which used to freeze the mirror
-about 10 seconds into use. See `docs/verification.md` (2026-09-14) — the keepalive is a workaround
-and is marked `TODO(tunnel-keepalive)` in `bin/ipb`.
-
-The default run lasts 300 seconds; `--seconds` accepts values greater than 0 and at most 3600.
-The existing 8192-input-event cap also ends the run. Statistics retain their existing fields and
-go to **stderr**. No CSV is produced by default; `--csv PATH` writes the event header and rows to
-that file (overwriting it; its parent directory must exist). CSV open/write failures exit 8.
-`IPB_MIRROR_HELPER` overrides the helper; otherwise `libexec/ipb-mirror` is preferred over
-`build/ipb-mirror`. The source is `Sources/mirror.m`. The helper's existing `--service-id ID`
-option is also passed through for a known touchscreen ID; descriptor discovery remains the default.
-
-Decoded frames carry encoder padding for 16-pixel alignment (on the iPhone 13 Pro, 1184×2576
-against a 1170×2532 screen). The mirror crops it rather than compensating for it, so the window's
-aspect ratio matches the phone's and a click lands where it is drawn; see the 2026-09-09 record in
-[docs/verification.md](docs/verification.md).
-
-Not implemented: Siri (⇧⌥⌘H), screen recording (⇧⌘R), Action Button, and Camera Control. Siri and
-the hardware buttons lack usage-code evidence; recording lacks capture/recording behaviour
-evidence. The local 13 Pro also lacks Action Button and Camera Control hardware.
-
-Exit codes: 0 success, **1 input/connection failure**, 2 usage/local setup, 3 service socket or
-descriptor discovery failure, 4 tunnel/interface/bind failure, 5 negotiation failure,
-6 media/decoder/display failure, 7 no media frames for 12 seconds, **8 local I/O failure**
-(including CSV output, descriptor capture, or screenshot shutdown drain), 9 setup/run/shutdown
-watchdog or input-drain timeout, 130 SIGINT, 143 SIGTERM. Unlike `stream`, mirror has input
-failure code 1 and no `--count` contract. Sent input is never automatically replayed.
-
-Supported `service-id` roles:
-
-```sh
-bin/ipb service-id touchscreen
-bin/ipb service-id gesture
-bin/ipb service-id keyboard
-bin/ipb service-id buttons
-bin/ipb service-id avp
-```
+See [the mirror guide](docs/mirror.md) for all shortcuts, input behavior, geometry,
+keepalive, limits and exit codes. These keyboard/clipboard additions follow the
+[development installation channel](#installation-channels).
 
 ## First run: `ipb doctor`
 
@@ -277,10 +319,12 @@ bin/ipb service-id avp
 
 ```sh
 scripts/smoke_matrix.sh . build/smoke            # host-only, discovery, and non-destructive reports
-SMOKE_INTERACTIVE=1 TAP_XY="0.15 0.12" scripts/smoke_matrix.sh . build/smoke   # adds home, tap, recents, swipe, scroll, long, key
+SMOKE_INTERACTIVE=1 TAP_XY="0.15 0.12" scripts/smoke_matrix.sh . build/smoke   # adds home, tap, recents, swipe, scroll, long, key, text
 ```
 
-Every step must exit 0 and, where stated, print the expected output; the script exits non-zero otherwise. Screenshots before and after each interactive step land in the output directory; identical consecutive frames are reported as warnings because a system alert can legitimately freeze the screen.
+Every step must exit 0 and, where stated, print the expected output; the script exits non-zero otherwise. Interactive steps require an explicitly unlocked phone and save screenshots in the output directory. Unexplained unchanged frames fail; declared no-ops carry their reason. Inspect the images for the intended effect, since a pixel change alone is not semantic proof.
+
+The text fixture uses the iOS 27 Settings search field in portrait. Adjust its coordinates for the target layout. It replaces the device clipboard with synthetic Unicode text and waits up to 30 seconds for field OCR; handle any iOS paste prompt normally during that interval. The gate never answers the prompt itself and stops before clearing the field if text is absent. Inspect the saved image for exact emoji and punctuation, which OCR does not certify.
 
 ## Feature matrix: ipb vs adb vs idb vs devicectl
 
@@ -292,14 +336,14 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Select a device | `-s <serial>`, `$ANDROID_SERIAL` | `-s <uuid\|prefix\|name>`, `DEVICE_ID` | `--udid <udid>` | `--device <uuid>` |
 | Tap / swipe / long press | `input tap/swipe` | `ipb tap/swipe/long` (own) | no | no |
 | Scroll | `input swipe` | `ipb scroll` (drag) and `ipb scroll-gesture` (trackpad phases, iOS 27; own) | no | no |
-| Key / text | `input keyevent/text` | `ipb key` (HID usages, own); Unicode via `ipb clipboard set` + paste | no | no |
+| Key / text | `input keyevent/text` | `ipb key` (HID usages); `ipb text` (clipboard + paste, Settings Unicode verified; replaces clipboard) | no | no |
 | Home / App Switcher | `keyevent HOME/APP_SWITCH` | `ipb home` / `ipb recents` (own) | no | no |
 | Lock / wake screen | `input keyevent POWER` | `ipb power` (aliases `lock`, `wake`; own, 0.4 s hold) | no | no |
 | Screenshot | `screencap` | `ipb screenshot` (devicectl) | yes | `capture screenshot` |
 | Screen recording | `screenrecord` | `ipb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
 | Live screen stream | scrcpy (an on-device server) | `ipb stream` (own, JPEG frames) | no | no |
 | Interactive mirror | scrcpy | `ipb mirror` (own) | no | Device Hub, GUI only |
-| UI hierarchy | `uiautomator dump` | no (captions only via accessibility, no frames) | `ui describe-all` (simulator) | no |
+| UI hierarchy | `uiautomator dump` | `ipb ui` ([development branch](#installation-channels)): actual AX tree, text, frames and state; coverage differs from XCTest ([guide](docs/ui.md)) | `ui describe-all` (simulator) | no |
 | Install / uninstall | `install` / `uninstall` | `ipb install` / `ipb uninstall` (devicectl) | yes | `install app` / `uninstall app` |
 | Launch / kill / ps | `am start` / `am force-stop` / `ps` | `ipb launch` / `ipb kill <pid>` / `ipb ps` (devicectl) | launch / terminate | `process launch/signal`, `info processes` |
 | Open URL / deep link | `am start -a VIEW -d` | `ipb open <url>` (devicectl) | `open` | `process openURL` |
@@ -335,46 +379,59 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 - `power` / `lock` / `wake`: CoreDevice HID button service, consumer usage `0x0c`/`0x30` held 0.4 s (the side button's own duration gate is 0.29 s; 0.7 s opens Siri)
 - `screenshot`: `devicectl device capture screenshot`, using the copy shipped in the CoreDevice package
 - `stream` and `mirror`: the device's own AVConference media path over the CoreDevice tunnel, decoded in process; `mirror` sends input over the same UniversalHID services as the commands above
+- `ui`: an existing-paired USB userspace RSD plus DevicesApp raw DTX; optional host Python dependency
 
 `CoreDevice.framework` exposes `HIDKeyboard` and `HIDPointer` protocols, but on the verified Xcode 27 beta 2 build their implementations are `UniversalHIDKeyboard` / `UniversalHIDPointer` adapters backed by the UniversalHID service, not separate `feature.remote.hid.keyboard` or `feature.remote.hid.pointer` sockets.
 
 ## Verified Scope
 
-Every claim in this README rests on a dated record in [docs/verification.md](docs/verification.md),
+Feature verification is recorded in [docs/verification.md](docs/verification.md),
 which names the host, the device, the CoreDevice and DDI builds, and the artefacts. The oldest
 records are against an iPhone 13 Pro on iOS 27.0 with Xcode 27 beta 2 (CoreDevice 636.3); the
-compatibility matrix at the top of that file is the current state.
+living open-items section at the top of that file names the current validation boundaries.
 
 The smoke gate is what keeps this honest: `scripts/smoke_matrix.sh` exercises service discovery,
 device selection, one report per HID feature, and — with `SMOKE_INTERACTIVE=1` — home, tap,
 recents, swipe, scroll, long press and a key, with a screenshot before and after each step.
+Run it in a GUI login session, including the noninteractive subset. Startup failures are failures,
+not a headless success. Pixel checks detect stale/no-op results; inspect the screenshots for the
+expected UI state before accepting a run. See [docs/devicehub-alignment.md](docs/devicehub-alignment.md)
+for the current comparison and verification boundary.
 
 ## Known limitations
 
 These are boundaries a user hits in normal use, not theoretical ones. Each links to a dated record;
 the living open-items list is at the head of [docs/verification.md](docs/verification.md).
 
-- **The device must be unlocked.** A locked device refuses the HID path with `RemotePairingError`
-  1016 (`unlockRequired`). Xcode's own Device Hub gets past this with an escrowed remote-unlock
-  keypair held in `remotepairingd` and gated by Apple-private entitlements, so it is a structural
-  boundary for any third-party tool, not something ipb can fix.
-- **System-presented dialogs do not respond to taps.** Permission prompts and similar
-  system UI ignore our digitizer reports, while ordinary app UI works normally. Not root-caused.
+- **Use an unlocked device.** The recorded locked-device failure is `RemotePairingError` 1016
+  (`unlockRequired`). Shipped symbols point to an escrowed remote-unlock keypair and private
+  entitlements in Apple's path. A controlled locked-device A/B is still needed before treating
+  that mechanism as the proven cause or a permanent impossibility for every third-party tool.
+- **Permission-prompt handling remains unverified.** On 2026-09-21, both ipb and Device Hub
+  dismissed the same SpringBoard “Remove App” confirmation with Cancel. The older blanket claim
+  that all system dialogs ignore ipb is withdrawn; the original permission prompt was not recreated.
 - **The long-running paths hold the CoreDevice tunnel by proxy.** `ipb mirror` and `ipb stream`
-  keep a resident `devicectl` subscription alive because the tunnel is a ~10 s lease and taking a
+  keep a resident `devicectl` subscription alive because the tunnel has an idle lease and taking a
   usage assertion directly needs an entitlement. If the mirror is killed abnormally the
   subscription is swept on exit, but a hard `SIGKILL` can leave it running for the grace period.
 - **`ipb screenrecord` is unsupported on the tested iOS 27.0 device** (devicectl reports error
   1001).
-- **The raw probe verbs are probes.** `nav-report`, `dock-report`, `pointer-report`,
+- **The raw probe verbs are probes.** `nav-report`, `dock-report`, `pointer` / `pointer-report`,
   `scroll-report`, `scroll-event`, `vendor-defined` and `uhid-swipe-report` are accepted by the
   service and return 0, but no device effect has ever been demonstrated for any of them.
 - **Everything here rides private Apple ABI** and can break on any Xcode beta seed.
 
 ## License and notice
 
-MIT (see `LICENSE`). ipb talks to undocumented Apple interfaces (CoreDevice, RemoteXPC, the developer disk image's HID daemon) and redistributes no Apple components; the CoreDevice package and the disk image come from Xcode on the user's machine. Apple may change these interfaces between releases. A future Python client built on pymobiledevice3 (GPL-3.0) will live in a separate repository so this one stays MIT.
+MIT (see `LICENSE`). ipb talks to undocumented Apple interfaces (CoreDevice, RemoteXPC, the developer disk image's HID daemon) and redistributes no Apple components; the CoreDevice package and the disk image come from Xcode on the user's machine. Apple may change these interfaces between releases. The optional AX backend requires separately installed
+[pymobiledevice3 (GPL-3.0)](https://github.com/doronz88/pymobiledevice3/blob/master/LICENSE).
+The current installer does not bundle that dependency. The Xcode-free client remains a
+distribution plan, distinct from the optional AX backend.
 
 See [docs/protocol.md](docs/protocol.md) for the current protocol map, symbol evidence, and known gaps.
 
-See `AGENTS.md` for the four-stage roadmap (macOS 27 → macOS 26 → Xcode-free hosts) and [docs/standalone-distribution.md](docs/standalone-distribution.md) for the adb-style distribution plan and [docs/research/](docs/research/) for the 2026-09-07 landscape research (adb capability boundary, agent frameworks, peer iOS tools) and the direction review.
+See [the documentation map](docs/README.md) for current guides and research. `AGENTS.md`
+records the roadmap; older platform rows are historical, while the current supported target
+is macOS 27 + Xcode 27 + iOS 27+. [Standalone distribution](docs/standalone-distribution.md)
+describes the Xcode-free direction; [research](docs/research/) contains capability and peer-tool
+comparisons plus independent direction reviews.

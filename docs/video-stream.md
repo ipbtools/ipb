@@ -87,10 +87,10 @@ ipb stream --dir DIR [--count N] [--fps F] [--seconds S]
 ipb stream --stdout            # repeated [uint32 BE length][jpeg bytes] on stdout
 ```
 
-Frames are native-resolution baseline JPEG. Only distinct frames are written (a static screen yields
-~1/s, a changing screen ~40-57/s). Exit codes: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down,
-5 negotiation rejected, 6 stream did not start or the media server died, 7 no frames within the
-watchdog window, 8 output failed / consumer did not drain stdout / `--count` not reached,
+Frames are native-resolution baseline JPEG. Only distinct frames are written; a static screen may
+produce no output for extended periods, while changing-screen rates depend on host and content. Exit codes: 0 ok, 2 usage/setup, 3 service refused, 4 tunnel down,
+5 negotiation rejected, 6 stream/connection failure, 7 no initial output within the first-frame
+budget, 8 output failed / consumer did not drain stdout / `--count` not reached,
 9 a watchdog expired (the stage is printed first). See "Design (as shipped)" below for the
 ingress/writer split that makes a slow consumer drop frames instead of accumulating latency.
 
@@ -105,9 +105,9 @@ that path DOES require the `allow-conferencing` entitlement (sign with `Sources/
 and only works where AMFI honours it (this dev Mac: SIP off + `amfi_get_out_of_my_way=1`). It exists as a
 fallback/oracle, not the shipping path.
 
-Not yet verified on a stock, SIP-enabled Mac: dlopening the private frameworks and in-process AppleAVD
-decode should not need SIP-off, but that has not been proven on such a machine. See
-`docs/research/entitlement-astra-2026-09-08.md`.
+The earlier SIP-enabled verification gap was closed by the macOS 27 + SIP-on / iPhone 12 mini
+record in `docs/verification.md` (2026-09-08). The research review predates that run; current code
+changes still require their own matrix gate.
 
 ## Standalone path found: raw XPC + plain UDP socket + ObjC AVCVideoStream (2026-09-08, gpt-6-astra source review)
 
@@ -203,11 +203,66 @@ on the wire a consumer cannot pace playback correctly, which is why a live view 
 from a single latest-frame slot to `AVSampleBufferDisplayLayer`, using immediate presentation
 on an independent sample container. Absolute touch input runs through a separate serial queue
 with persistent service connections, bounded pending events, and no automatic replay.
+Each connection now retains exclusive ownership until its synchronous sender actually returns, even
+after the caller times out. Shutdown drains the queued release before closing admission, then waits
+for active owners with one shared deadline. It never cancels a connection underneath an active send.
+Report timeouts remain fatal because delivery is unknown; a synthesized UP is not guaranteed cleanup.
 Shortcuts match DeviceHub (Home, App Switcher, volume, screenshot, fit, actual size); see
 [README.md](../README.md#interactive-mirror-ipb-mirror) and the existing M1/M2/M3/M4 runtime
 records in [verification.md](verification.md). Statistics go to stderr; event CSV is produced
 only with `--csv PATH`, which overwrites the specified file. The probe remains at
 `Experiments/mirror/mirror_probe.m`. No device validation was repeated for this packaging change.
+
+### Numeric keypad controls for hidden input (2026-10-11)
+
+The user cannot locate passcode buttons in Device Hub's streamed authorization page and requests
+controls in ipb's mirror. A title-bar **123 / Cmd-K** control now toggles an overlay with digits, Backspace
+and Return. It sends standard keyboard HID reports through the existing discovered keyboard
+service and serial input queue. It does not estimate hidden touch coordinates, reconstruct
+the system keypad, or depend on AX/XCTest. Each click owns its down/up/barrier sequence;
+closing, focus changes and geometry changes preserve release of a successfully pressed key
+while transport remains healthy; a failed send still cannot guarantee device release.
+CSV/statistics expose only generic keyboard-event type and timing, never the usage/digit.
+The panel consumes its own clicks/scrolls and leaves the video/touch geometry unchanged.
+The live 13 Pro Calculator accepts all ten panel digits, Backspace, physical numeric input
+and Return (`7 + 2` becomes `9`). Panel clicks/scrolls do not leak into phone touch input;
+normal phone clicks after closing the panel are verified. The noninteractive local smoke
+gate passes. Tests use supplementary macOS 26.5.1 / Xcode 27 B6, not the supported matrix;
+password-sheet/lockscreen acceptance requires a human-operated validation, and the supported
+macOS 27 + Xcode 27 matrix gate remains separate.
+
+During bench runs the existing one-second display metadata refresh intermittently exceeded
+its five-second `devicectl` bound and exited the mirror with code 1, including runs with no
+keyboard events and with Device Hub closed. A subsequent standalone display query succeeds.
+The cause is open; do not attribute this to keypad input or silently use stale orientation.
+
+Rejected alternatives for this input control: guessing hidden keypad rectangles can silently
+hit the wrong digit; per-key CLI subprocesses duplicate transport and expose usages in argv/logs;
+automatic password-page detection has no product-ready, verified page classifier.
+
+### Keyboard, host composition and text clipboard (2026-10-12)
+
+Mirror now forwards ordinary key down/up, held modifiers, repeat and other Command chords
+on the existing keyboard service/input FIFO. The numeric panel and existing local shortcuts
+remain reserved, including Command-W/Q for close/quit. Focus loss, geometry updates and close
+invalidate unsent keyboard intent and release held usages while the transport remains healthy.
+
+An owned NSTextInputContext/NSTextInputClient handles enabled Mac input methods, selected in
+Edit → Input Method or Control-Space. Marked text stays local with a footer preview; composed
+or Unicode commits use bounded UTF-8 pasteboard transfer plus the existing paste chord.
+Copy/Cut require a changed device clipboard and retrieve text without replacing a different
+newer Mac clipboard. Paste reads Mac text at the FIFO head so Copy → Paste is ordered.
+No selected text is nonfatal. Transfers share device-control cancellation/deadlines; the
+rotation drain waits outside that queue to avoid a clipboard/input dependency cycle.
+Text and key usages never enter argv/event diagnostics. Rich text/images, continuous sync
+and remote-document reconversion are outside the implementation.
+
+The local 13 Pro Settings-search run verifies Shift punctuation, Unicode paste/Copy/Cut,
+native Mac Chinese composition and committed `测试`, Backspace repeat and caret movement.
+Panel/Home/normal close and final Command-W exit 0 pass. Host regressions and installed
+noninteractive smoke pass on supplementary macOS 26.5.1 / Xcode 27 B6 / iOS 27.0. This
+does not close secure-input acceptance or the supported macOS 27 full gate. iOS may still
+present an ordinary paste permission prompt; the product does not answer it automatically.
 
 ### The decoded frame is not the screen: encoder padding
 
@@ -231,14 +286,15 @@ axis) before it is accepted:
 
 | order | source | what it is |
 | --- | --- | --- |
+| 0 | `live-primary-display` | explicit primary display nativeSize from bounded `devicectl device info displays` JSON; orientation and scale are separate fields |
 | 1 | `builtin-table` | 44 productType entries (iPhone 6s .. 17 Pro Max / Air / 17e) compiled into `Sources/mirror.m` |
 | 2 | `xcode-lookup` | at runtime: `device_traits.db` maps productType to a product description, then that description's CoreSimulator profile gives `capabilities/displays[0]` |
 | 3 | `detected` | union of the non-black extent over the first frames, with a sanity floor |
 | 4 | `full-frame` | give up and use the whole frame |
 
 `bin/ipb` passes `hardwareProperties.productType` from the devicectl JSON it already fetches, so the
-helper never shells out. The chosen source is printed at startup, e.g.
-`content: frame=1184x2576 rect=(0,0 1170x2532) source=builtin-table productType=iPhone14,2`.
+product-type fallback needs no extra lookup process. The helper also runs one bounded display query at startup and at most one background query per second. The chosen source is printed at startup, e.g.
+`content: frame=1184x2576 rect=(0,0 1170x2532) source=live-primary-display productType=iPhone14,2`.
 
 Both tables come from Xcode, so a device newer than the built-in table still resolves correctly as
 long as the host's Xcode knows it. **`DeviceTraits.ArtworkDeviceSubtype` is not a pixel height** —
@@ -248,6 +304,29 @@ trustworthy. Landscape is handled by transposing the candidate before the range 
 The content rect drives all three consumers: the display layer is scaled and offset so the content
 fills the view and the padding is clipped, touch coordinates normalise over the content, and
 `Cmd-Shift-S` saves the cropped image (1170x2532, edge pixels are image data, not padding).
+
+### Live orientation geometry (2026-09-22)
+
+`display_geometry.h` separates primary native size, device direction and display content direction.
+The native crop is clipped before rotating its layer. Device quarter turns rotate the preview;
+ordinary touches apply the inverse transform, while AbsolutePointer remains in presentation space.
+An orientation update ends any old gesture, drains the input group, then publishes new geometry.
+Cmd-Left/Right submits an absolute device orientation after that drain. Unsent relative requests
+are coalesced while a query is busy; an uncertain sent operation is never retried.
+
+The display query uses a serial queue, Apple timeout 5 s and host deadline 6 s; close kills the
+active child. The existing notification-observer tunnel keepalive is unchanged. This is polling,
+not frame-synchronous metadata: an external rotation may be observed one refresh later. The
+`devicectl --stream` probe emitted human updates but no structured JSON snapshots before timeout,
+so parsing that console stream was rejected. Unsupported/malformed primary geometry fails
+explicitly instead of silently assuming portrait. Native axes other than `rot0` are unverified.
+
+Bottom-edge membership is evaluated in content coordinates at Down and frozen for the gesture.
+Portrait content retains its verified Indigo path. Rotated content uses captured 58 B UHID
+native-space touch reports with locked + directional flags through UP; see `protocol.md`.
+300 ms landscape edge gestures returned Home on the device; approximately 6 ms CUA synthetic
+sequences did not. The sender preserves real event timing and does not invent intermediate events.
+Saved screenshots remain native cropped pixels, independent of the host's preview rotation.
 
 ## Acceptance
 
@@ -283,10 +362,13 @@ Still open:
   connections on a separate serial input queue. End-to-end input-to-display latency remains unmeasured.
 - **Slight frame loss remains**, comparable to what DeviceHub itself shows on the same device
   (user-observed, 2026-09-08). Believed to be link-level rather than client-side; not measured.
-- **Two 15 s captures stopped at t+5.81 s and still exited 0.** Not reproduced across five later
-  runs (20 s, 30 s, with a rotation), all of which ran full duration. Cause unknown. Related: the
-  12 s hard-stall guard ends a run and still returns 0 when frames stop mid-capture — whether a
-  stall should be a failure is an open contract decision.
+- **Idle-content timeout was reproduced and fixed (2026-09-21).** On an isolated Settings screen,
+  both stream and mirror falsely exited 7 after silence. Stream previously measured distinct output,
+  conflating deduplication with progress; decoded frames can also cease while idle. The first-frame
+  deadline remains 12 s, but after a valid image silence alone no longer ends a finite session.
+  Both clients stayed alive through a 22 s idle interval and resumed after Home. Explicit media stop,
+  server death and RemoteXPC errors fail; writer drain and outer stage watchdogs remain bounded.
+  A silent failure with no callback is still indistinguishable from idle until new content arrives.
 - **Watchdog budgets are unvalidated** (45 s setup, 5 s margins). No cold-start data.
 - **Exit 9 has no natural reproduction.** Reachable by inspection at three arming sites; triggering
   it needs fault injection that blocks one call while leaving the watchdog queue live.

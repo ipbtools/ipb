@@ -46,7 +46,7 @@ device selection
   device                print the UUID the other commands would use
   doctor                layered self-check: install, Apple stack, device, DDI, HID services
   version               ipb, macOS and CoreDevice versions
-  update                update ipb in place (Homebrew install or git checkout)
+  update                host-only update of this Homebrew install or git checkout
 
 input
   tap <x> <y>                                  a touch, down and up
@@ -60,18 +60,20 @@ input
   power [hold_seconds]                         side button: locks a lit screen, wakes a dark one
   lock | wake                                  the same press, under the name you want
   key <usage_or_name> [hold_seconds] [service_id]        one keyboard key
+  text <text>                                   replace device clipboard and paste into focused field
   key-down <usage_or_name> [service_id]        hold a key (paired with key-up)
   key-up [usage_or_name] [service_id]          release it, or all keys
   button <usage_page> <usage_code> [hold_seconds]        a hardware button by HID usage
-  pointer <dx> <dy> [button_mask] [service_id] relative mouse movement (iOS 27 only)
-  abs-pointer <x> <y> [buttons] [service_id]   place the cursor (iOS 27 only)
+  pointer <dx> <dy> [button_mask] [service_id] relative pointer probe; effect unverified
+  abs-pointer <x> <y> [buttons] [service_id]   absolute pointer probe (iOS 27 only)
 
 screen
   screenshot <path>                            (devicectl)
   screenrecord <path> [seconds]                (devicectl; unsupported on the tested iOS 27.0)
   stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout
                                                live JPEG frames, no DeviceHub
-  mirror [--seconds S] [--csv PATH]            live screen plus mouse and keyboard (needs a GUI session)
+  mirror [--seconds S] [--csv PATH]            live screen, mouse, keyboard and text clipboard (GUI)
+  ui [--json] [--pid PID | --point X Y]        read the application's AX tree, frames and state (USB)
 
 apps and processes (devicectl)
   apps                                         installed apps
@@ -88,6 +90,8 @@ files (devicectl)
 
 system (devicectl)
   info | lock-state                            device details, passcode/lock state
+  displays [--json]                            live displays, orientation and backlight
+  capabilities [--json]                        advertised CoreDevice features (not session guarantees)
   clipboard get | clipboard set <text>         device pasteboard
   location <lat> <lon> | location clear        simulate location
   orientation [portrait|landscapeLeft|landscapeRight|portraitUpsideDown]
@@ -389,6 +393,82 @@ run_scroll() {
 
 run_vendor() {
   run_helper env "${quiet_env[@]}" "$BIN" "$DEVICE" "$ACTION" "$VENDOR_FEATURE" 0 "$@"
+}
+
+query_metadata() {
+  local kind="$1" format="$2" json rc=0
+  json="$(mktemp -t ipb-metadata)"
+  local verb=displays
+  [[ "$kind" == capabilities ]] && verb=details
+  devicectl device info "$verb" --device "$DEVICE" --timeout 30 --json-output "$json" --quiet >/dev/null || rc=$?
+  if (( rc )); then rm -f "$json"; return $rc; fi
+  python3 - "$json" "$kind" "$format" "$DEVICE" <<'PY' || rc=$?
+import json, sys
+try:
+    result = json.load(open(sys.argv[1]))['result']
+    kind, fmt, device = sys.argv[2:]
+    if kind == 'displays':
+        fields = ('displays', 'orientation', 'backlightState')
+        output = {k: result[k] for k in fields}
+        if not isinstance(output['displays'], list) or not isinstance(output['orientation'], dict):
+            raise ValueError('invalid display metadata')
+    else:
+        entries = result['capabilities']
+        if not isinstance(entries, list) or any(not isinstance(e.get('featureIdentifier'), str) for e in entries):
+            raise ValueError('invalid capability metadata')
+        output = {'capabilities': sorted(entries, key=lambda e: e['featureIdentifier'])}
+    if fmt == '--json':
+        print(json.dumps({'schemaVersion': 1, 'deviceIdentifier': device, **output}, ensure_ascii=False, indent=2))
+    elif kind == 'capabilities':
+        for entry in output['capabilities']:
+            print(entry['featureIdentifier'] + '\t' + entry.get('name', ''))
+    else:
+        print(json.dumps(output, ensure_ascii=False, indent=2))
+except (OSError, KeyError, TypeError, ValueError) as error:
+    print('ipb: invalid device metadata: ' + str(error), file=sys.stderr)
+    sys.exit(1)
+PY
+  rm -f "$json"
+  return $rc
+}
+
+query_ui() {
+  local script="$ROOT/Sources/ipb_ax.py" interpreter="${IPB_AX_PYTHON:-}"
+  if [[ -z "$interpreter" ]]; then
+    interpreter="${XDG_DATA_HOME:-$HOME/.local/share}/ipb/ax-venv/bin/python"
+    [[ -x "$interpreter" ]] || interpreter=python3
+  fi
+  command -v "$interpreter" >/dev/null 2>&1 || { print -u2 "ipb: IPB_AX_PYTHON must name a Python executable"; return 2; }
+  [[ -r "$ROOT/libexec/ipb-ax.py" ]] && script="$ROOT/libexec/ipb-ax.py"
+  [[ -r "$script" ]] || { print -u2 "ipb: AX helper is missing; rebuild/install ipb"; return 2; }
+  if [[ "$*" == *--help* || "$*" == '-h' ]]; then
+    "$interpreter" "$script" "$@"
+    return $?
+  fi
+  DEVICE="$(resolve_device)" || return 3
+  local json udid rc=0
+  json="$(mktemp -t ipb-ui-device)"
+  devicectl list devices --timeout 10 --json-output "$json" --quiet >/dev/null || rc=$?
+  if (( rc )); then rm -f "$json"; return 3; fi
+  udid="$(python3 - "$json" "$DEVICE" <<'PY'
+import json, sys
+try:
+    devices = json.load(open(sys.argv[1]))['result']['devices']
+    matches = [d for d in devices if d.get('identifier') == sys.argv[2]]
+    if len(matches) != 1:
+        raise ValueError('selected device is absent or ambiguous')
+    udid = matches[0]['hardwareProperties']['udid']
+    if not isinstance(udid, str) or not udid:
+        raise ValueError('selected device has no USB identifier')
+    print(udid)
+except (KeyError, ValueError, TypeError, OSError) as error:
+    print('ipb: cannot resolve AX device: ' + str(error), file=sys.stderr)
+    sys.exit(3)
+PY
+  )" || rc=$?
+  rm -f "$json"
+  (( rc == 0 )) || return $rc
+  PYTHONDONTWRITEBYTECODE=1 IPB_AX_DEVICE_ID="$DEVICE" IPB_AX_UDID="$udid" "$interpreter" "$script" "$@"
 }
 
 descriptor_output() {
@@ -741,11 +821,14 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror) DEVICE="" ;;
+  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror|ui|update) DEVICE="" ;;
   *) DEVICE="$(resolve_device)" || exit 3 ;;
 esac
 
 case "$cmd" in
+  ui)
+    query_ui "$@"
+    ;;
   tap|click)
     [[ $# -eq 2 ]] || { usage; exit 2; }
     service_id="$(resolve_uhid_service_id)"
@@ -840,7 +923,7 @@ case "$cmd" in
     keepalive_budget=$(( keepalive_budget + 30 ))
     (( keepalive_budget > 3630 )) && keepalive_budget=3630
 
-    "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$product_type" "$@" &
+    IPB_DEVICECTL_PATH="$DEVICECTL" "$MBIN" "$DEVICE" "$utun" "$hostip" "$devip" "$product_type" "$@" &
     MIRROR_HELPER_PID=$!
     start_tunnel_keepalive "$keepalive_budget"
     trap 'shutdown_mirror' INT TERM
@@ -874,35 +957,54 @@ case "$cmd" in
       git -C "$ROOT" pull --ff-only || { print -u2 "ipb: git pull failed (local changes?); resolve and re-run"; exit 1; }
       make -C "$ROOT" || { print -u2 "ipb: build failed"; exit 1; }
       print -r -- "ipb: updated to $(cat "$IPB_VERSION_FILE" 2>/dev/null || print -r -- unknown)"
-    elif command -v brew >/dev/null 2>&1 && brew list --formula ipb >/dev/null 2>&1; then
+    elif command -v brew >/dev/null 2>&1 && brew list --formula ipb >/dev/null 2>&1 &&
+         brew_root="$(brew --prefix ipb 2>/dev/null)" && [[ "${brew_root:A}" == "$ROOT" ]]; then
       print -r -- "ipb: Homebrew install; updating tap and formula"
       brew update || true
-      installed="$(brew list --versions ipb 2>/dev/null | awk '{print $2}')"   # HEAD-<sha>
-      head_url="$(brew info --json=v2 ipb 2>/dev/null | python3 -c \
-        'import json,sys; print(json.load(sys.stdin)["formulae"][0]["urls"]["head"]["url"])' 2>/dev/null)"
-      remote=""
-      [[ -n "$head_url" ]] && remote="$(git ls-remote "$head_url" HEAD 2>/dev/null | awk 'NR==1 {print substr($1, 1, 7)}')"
-      if [[ -n "$remote" && "$installed" == "HEAD-$remote" ]]; then
-        print -r -- "ipb: already at the latest HEAD ($installed)"
-        exit 0
+      installed="$(brew list --versions ipb 2>/dev/null | awk '{print $2}')"
+      formula_info="$(brew info --json=v2 ipb 2>/dev/null || true)"
+      if [[ "$installed" == HEAD-* ]]; then
+        head_url="$(print -r -- "$formula_info" | python3 -c \
+          'import json,sys; print(json.load(sys.stdin)["formulae"][0]["urls"]["head"]["url"])' 2>/dev/null)"
+        remote=""
+        [[ -n "$head_url" ]] && remote="$(git ls-remote "$head_url" HEAD 2>/dev/null | awk 'NR==1 {print substr($1, 1, 7)}')"
+        if [[ -n "$remote" && "$installed" == "HEAD-$remote" ]]; then
+          print -r -- "ipb: already at the latest HEAD ($installed)"
+          exit 0
+        fi
+        # brew upgrade --fetch-HEAD can compare against a stale cached clone. Compare the
+        # live remote SHA and reinstall only this formula when its main branch has moved.
+        brew reinstall ipb || { print -u2 "ipb: brew reinstall failed"; exit 1; }
+        updated="$(brew list --versions ipb 2>/dev/null | awk '{print $2}')"
+        if [[ -n "$remote" && "$updated" != "HEAD-$remote" ]]; then
+          print -u2 -- "ipb: reinstall finished at ${updated:-unknown}, but the remote HEAD is $remote"
+          exit 1
+        fi
+      else
+        stable="$(print -r -- "$formula_info" | python3 -c \
+          'import json,sys; print(json.load(sys.stdin)["formulae"][0].get("versions",{}).get("stable") or "")' 2>/dev/null)"
+        if [[ -z "$installed" || -z "$stable" ]]; then
+          print -u2 -- "ipb: could not determine the installed and current stable Homebrew versions"
+          exit 1
+        fi
+        if [[ "$installed" == "$stable" ]]; then
+          print -r -- "ipb: already at the latest stable release ($installed)"
+          exit 0
+        fi
+        brew upgrade ipb || { print -u2 "ipb: brew upgrade failed"; exit 1; }
+        updated="$(brew list --versions ipb 2>/dev/null | awk '{print $2}')"
+        if [[ "$updated" != "$stable" ]]; then
+          print -u2 -- "ipb: upgrade finished at ${updated:-unknown}, but the formula stable version is $stable"
+          exit 1
+        fi
       fi
-      # Neither of Homebrew 6.0.22's own answers can be trusted for a HEAD formula:
-      # `brew outdated --fetch-HEAD` calls it outdated unconditionally, and
-      # `brew upgrade --fetch-HEAD` answers "HEAD-<sha> already installed" by comparing against a
-      # cached clone it did not refresh, so it refuses even when the remote has moved. The sha
-      # comparison above is the real signal, and a reinstall is the only path that rebuilds from
-      # a fresh fetch.
-      brew reinstall ipb || { print -u2 "ipb: brew reinstall failed"; exit 1; }
-      updated="$(brew list --versions ipb 2>/dev/null | awk '{print $2}')"
-      if [[ -n "$remote" && "$updated" != "HEAD-$remote" ]]; then
-        print -u2 "ipb: reinstall finished at ${updated:-unknown}, but the remote HEAD is $remote"
-        exit 1
-      fi
-      print -r -- "ipb: updated ${installed:-unknown} -> ${updated:-unknown} ($(command ipb version 2>/dev/null || true))"
+      brew_prefix="$(brew --prefix ipb 2>/dev/null || true)"
+      brew_ipb="${brew_prefix}/bin/ipb"
+      print -r -- "ipb: updated ${installed:-unknown} -> ${updated:-unknown} $("$brew_ipb" version 2>/dev/null || true)"
     else
-      print -u2 "ipb: not a git checkout and not a Homebrew install; update manually"
-      print -u2 "  brew:   brew update && brew upgrade --fetch-HEAD ipb"
-      print -u2 "  source: git -C <checkout> pull && make -C <checkout>"
+      print -u2 "ipb: manual install at $ROOT; update manually from its source checkout"
+      print -u2 "  git -C <checkout> pull --ff-only"
+      print -u2 "  make -C <checkout> install PREFIX=\"$ROOT\""
       exit 2
     fi
     ;;
@@ -950,6 +1052,20 @@ case "$cmd" in
     usage_code="$(keyboard_usage "$1")"
     service_id="$(resolve_service_id "${3:-keyboard}")"
     run_uhid cd_key "$service_id" "$usage_code" "${2:-0.08}"
+    ;;
+  text)
+    [[ $# -eq 1 && -n "$1" ]] || { print -u2 'usage: ipb text <non-empty text>'; exit 2; }
+    # Discover before changing the clipboard. Copy exactly once, then submit the
+    # captured Command+V sequence. No automatic retry of a partially sent paste.
+    service_id="$(resolve_service_id keyboard)"
+    print -rn -- "$1" | devicectl device pasteboard copy --device "$DEVICE" --timeout 30 --quiet || {
+      print -u2 'ipb text: clipboard write failed; paste was not sent'; exit 1;
+    }
+    run_uhid cd_paste "$service_id" || {
+      paste_rc=$?
+      print -u2 'ipb text: clipboard was written, but paste failed; do not blindly retry'; exit $paste_rc;
+    }
+    print -u2 'ipb text: paste submitted; clipboard replaced. Verify the focused field to confirm insertion.'
     ;;
   key-down|keyboard-down)
     [[ $# -ge 1 && $# -le 2 ]] || { usage; exit 2; }
@@ -1043,6 +1159,10 @@ case "$cmd" in
   apps)        devicectl device info apps --device "$DEVICE" "$@" ;;
   ps)          devicectl device info processes --device "$DEVICE" "$@" ;;
   info)        devicectl device info details --device "$DEVICE" "$@" ;;
+  displays|capabilities)
+    [[ $# -eq 0 || ( $# -eq 1 && "$1" == --json ) ]] || { usage; exit 2; }
+    query_metadata "$cmd" "${1:-}"
+    ;;
   lock-state)  devicectl device info lockState --device "$DEVICE" "$@" ;;
   install)
     [[ $# -eq 1 ]] || { usage; exit 2; }

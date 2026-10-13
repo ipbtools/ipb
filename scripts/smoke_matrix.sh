@@ -1,13 +1,31 @@
 #!/usr/bin/env zsh
 # Smoke gate for ipb. Exits non-zero if any step fails.
-# usage: [DEVICE_ID=<uuid>] [SMOKE_INTERACTIVE=1] [TAP_XY="0.15 0.12"] [LONG_XY="0.15 0.12"] smoke_matrix.sh <repo_root> <out_dir>
+# usage: [DEVICE_ID=<uuid>] [SMOKE_INTERACTIVE=1] [SMOKE_AX=1] smoke_matrix.sh <repo_root> <out_dir>
+# SMOKE_AX_ONLY=1 runs only the new read-only AX gate; it is not the full HID/media gate.
+# Interactive iOS 27 fixture: Settings list/search; KEY_XY and KEY_CLOSE_XY override search coordinates.
+# Inspect screenshots: a material pixel change is still not semantic proof.
 set -uo pipefail
 ROOT="${1:?repo root}"; OUT="${2:?out dir}"; mkdir -p "$OUT"
 CTL="$ROOT/bin/ipb"
 log="$OUT/smoke.log"; : > "$log"
 failures=0
+SCRIPT_DIR="${0:A:h}"
+PNG_DIGEST="$ROOT/scripts/png_pixels_digest.py"
+[[ -r "$PNG_DIGEST" ]] || PNG_DIGEST="$SCRIPT_DIR/png_pixels_digest.py"
+ASSERTIONS="$ROOT/scripts/smoke_assertions.zsh"
+[[ -r "$ASSERTIONS" ]] || ASSERTIONS="$SCRIPT_DIR/smoke_assertions.zsh"
+if [[ ! -r "$ASSERTIONS" || ! -r "$PNG_DIGEST" ]]; then
+  print -u2 "smoke gate missing installed assertion helper or pixel decoder"
+  exit 1
+fi
+source "$ASSERTIONS" || exit 1
+COMPLETION_DIR="${SMOKE_COMPLETIONS_DIR:-$ROOT/completions}"
+[[ -d "$COMPLETION_DIR" ]] || COMPLETION_DIR="$SCRIPT_DIR/../zsh/site-functions"
 TAP_XY="${TAP_XY:-0.15 0.12}"     # first home-screen icon on an iPhone 12 mini / 13 Pro grid
 LONG_XY="${LONG_XY:-$TAP_XY}"
+KEY_XY="${KEY_XY:-0.5 0.935}"  # iOS 27 Settings search field; verify on the target layout
+KEY_CLOSE_XY="${KEY_CLOSE_XY:-0.915 0.569}" # search cancel beside the focused field
+TEXT_CLEAR_XY="${TEXT_CLEAR_XY:-0.763 0.569}" # clear focused Settings search
 
 fail() { failures=$((failures + 1)); printf 'FAIL: %s\n' "$*" | tee -a "$log"; }
 
@@ -39,11 +57,61 @@ shot() {
   fi
 }
 
+verify_literal_text() {
+  local checker="$ROOT/scripts/assert_search_text.swift"
+  [[ -r "$checker" ]] || checker="$SCRIPT_DIR/assert_search_text.swift"
+  # This interactive fixture may need the operator to allow the synthetic paste.
+  # Never answer a permission dialog by coordinate or silently skip the check.
+  local deadline=$(( SECONDS + 30 ))
+  print -u2 'Waiting up to 30s for focused text; if iOS shows a paste prompt, handle it normally.'
+  while true; do
+    swift "$checker" "$OUT/14_literal_text.png" 'ipb-中文 A1' && return 0
+    (( SECONDS >= deadline )) && return 1
+    sleep 1
+    "$CTL" screenshot "$OUT/14_literal_text.png" || return 1
+  done
+}
+
 echo "host: $(sw_vers -productVersion) $(sw_vers -buildVersion)  DEVICE_ID=${DEVICE_ID:-auto}" | tee -a "$log"
+if [[ "${SMOKE_AX:-0}" == 1 || "${SMOKE_AX_ONLY:-0}" == 1 ]]; then
+  run "AX JSON" -- "$CTL" ui --json
+  print -r -- "$LAST_OUT" > "$OUT/ui.json"
+  run "AX graph contract" -- python3 - "$OUT/ui.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d['schemaVersion'] == 1 and d['atomic'] is False and d['rootStable'] is True
+assert d['scope'] == 'application-accessibility' and d['coordinateSpace'] == 'device-logical-points'
+nodes = d['nodes']; by_id = {n['id']: n for n in nodes}
+assert len(nodes) == d['nodeCount'] == len(by_id) and nodes
+roots = [n for n in nodes if n['parentId'] is None]; assert len(roots) == 1
+assert roots[0]['depth'] == 0 and any('frame' in n for n in nodes)
+visited = set(); pending = [roots[0]['id']]
+while pending:
+    ident = pending.pop(); assert ident not in visited; visited.add(ident)
+    node = by_id[ident]
+    for child in node['children']:
+        assert child in by_id and by_id[child]['parentId'] == ident
+        assert by_id[child]['depth'] == node['depth'] + 1
+    pending.extend(node['children'])
+assert len(visited) == len(nodes)
+assert d['cleanup']['connectionClosed'] and d['cleanup']['tunnelClosed']
+assert d['cleanup']['subscriptionStop'] in ('acknowledged', 'connection-closed-before-ack')
+PY
+  if [[ "${SMOKE_AX_ONLY:-0}" == 1 ]]; then
+    (( failures == 0 )) || { echo "AX SMOKE FAILED"; exit 1; }
+    echo "AX SMOKE PASSED (HID/media gate not run)"; exit 0
+  fi
+fi
 # The completion is user documentation the shell executes; a syntax error in it is silent
 # until someone presses Tab. Loading it here is host-only and costs nothing.
-run "zsh completion loads" -- zsh -c "fpath=($ROOT/completions \$fpath); autoload -Uz compinit; compinit -u -d \$(mktemp -t ipbzcd); autoload -Uz _ipb; functions _ipb >/dev/null"
+run "zsh completion loads" -- zsh -c 'fpath=("$1" $fpath); autoload -Uz _ipb; autoload +X _ipb' -- "$COMPLETION_DIR"
 run "service-ids (host only)" --expect '^mainTouchscreen +0x101' -- "$CTL" service-ids
+run "displays JSON" -- "$CTL" displays --json
+print -r -- "$LAST_OUT" > "$OUT/displays.json"
+run "primary display contract" -- python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["schemaVersion"]==1; p=[v for v in d["displays"] if v.get("primary")]; assert len(p)==1 and len(p[0]["nativeSize"])==2; assert all(n>0 for n in p[0]["nativeSize"]); assert d["orientation"]["currentDeviceOrientation"]' "$OUT/displays.json"
+run "capabilities JSON" -- "$CTL" capabilities --json
+print -r -- "$LAST_OUT" > "$OUT/capabilities.json"
+run "capability contract" -- python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["schemaVersion"]==1; assert any(v["featureIdentifier"]=="com.apple.coredevice.feature.getdisplayinfo" for v in d["capabilities"])' "$OUT/capabilities.json"
 run "descriptors" --expect 'connected descriptors count=[1-9]' -- "$CTL" descriptors
 # Capability expectations come from the device OS: iOS 27 exposes five HID services (adds
 # touchscreenGesture 0x501), iOS 26 exposes four. Derived from the descriptors step that just ran,
@@ -87,23 +155,32 @@ run "service-id avp"         --expect '^0x500$' -- "$CTL" service-id avp
 # regression test: removing `exec` so the tunnel keepalive could be reaped made the wrapper defer its
 # trap until the helper returned, so `kill <ipb pid>` did nothing for up to --seconds; and the
 # keepalive was backgrounded through the devicectl() shell function, so $! was a subshell and killing
-# it orphaned the real devicectl. Both are fixed; this keeps them fixed. Needs a GUI session, so it
-# reports SKIP rather than failing where mirror cannot start.
+# it orphaned the real devicectl. Both are fixed; this keeps them fixed. Startup failures are gate
+# failures; this is a GUI-session gate, including in noninteractive mode.
 mirror_signal_test() {
   local out="$OUT/mirror_kill.log"
   # DEVICE_ID is honoured from the environment; do not pass -s here (in zsh an unquoted
   # ${VAR:+-s "$VAR"} expands to ONE word and bin/ipb would reject it as an unknown command).
   "$CTL" mirror --seconds 60 >"$out" 2>&1 &
   local wrapper=$!
-  local i
-  for i in $(seq 1 20); do sleep 0.5; pgrep -x 'ipb-mirror' >/dev/null && break; done
-  if ! kill -0 $wrapper 2>/dev/null || ! pgrep -x 'ipb-mirror' >/dev/null; then
-    echo "SKIP: mirror kill test (mirror did not start): $(head -2 "$out" | tr '\n' ' ')" | tee -a "$log"
-    kill $wrapper 2>/dev/null; return 0
+  local i helper_pid=""
+  for i in $(seq 1 20); do
+    helper_pid="$(pgrep -P "$wrapper" -x 'ipb-mirror' | head -1)"
+    [[ -n "$helper_pid" ]] && break
+    sleep 0.5
+  done
+  if ! kill -0 $wrapper 2>/dev/null || [[ -z "$helper_pid" ]]; then
+    local startup_reason="$(head -2 "$out" | tr '\n' ' ')"
+    [[ -n "$startup_reason" ]] || startup_reason="unknown startup failure"
+    local startup_rc=0
+    if kill -0 "$wrapper" 2>/dev/null; then kill -TERM "$wrapper" 2>/dev/null; fi
+    wait "$wrapper" 2>/dev/null || startup_rc=$?
+    fail "mirror startup failed (rc=$startup_rc): $startup_reason"
+    return 0
   fi
   # Record THIS session's keepalive before signalling. A global pgrep would also match a keepalive
   # belonging to another session or left over from an earlier run, and report a false failure.
-  local keepalive_pids=$(pgrep -P $wrapper 2>/dev/null | tr '\n' ' ')
+  local keepalive_pids=$(pgrep -P "$wrapper" 2>/dev/null | grep -v -x "$helper_pid" | tr '\n' ' ')
   local start=$(date +%s)
   kill -TERM $wrapper 2>/dev/null
   for i in $(seq 1 24); do kill -0 $wrapper 2>/dev/null || break; sleep 0.5; done
@@ -116,7 +193,7 @@ mirror_signal_test() {
   # The helper drains on SIGTERM before exiting, so allow a bounded grace rather than asserting
   # immediately; only a helper that outlives it is an orphan.
   local i
-  for i in $(seq 1 20); do pgrep -x 'ipb-mirror' >/dev/null || break; sleep 0.5; done
+  for i in $(seq 1 20); do kill -0 "$helper_pid" 2>/dev/null || break; sleep 0.5; done
   local pid survivors=""
   for pid in ${=keepalive_pids}; do
     if kill -0 "$pid" 2>/dev/null; then survivors="$survivors $pid"; kill -TERM "$pid" 2>/dev/null; fi
@@ -126,8 +203,8 @@ mirror_signal_test() {
   else
     echo "mirror kill: no keepalive orphan (watched: ${keepalive_pids:-none})" | tee -a "$log"
   fi
-  if pgrep -x 'ipb-mirror' >/dev/null; then
-    fail "mirror kill: mirror helper still running after session end: $(pgrep -x -l 'ipb-mirror' | head -2 | tr '\n' '; ')"
+  if kill -0 "$helper_pid" 2>/dev/null; then
+    fail "mirror kill: mirror helper still running after session end (pid:$helper_pid)"
   fi
 }
 printf '\n### mirror signal handling + orphan check\n' | tee -a "$log"
@@ -148,29 +225,58 @@ shot 01_after_nondestructive
 
 if [[ "${SMOKE_INTERACTIVE:-0}" == 1 ]]; then
   # A locked phone accepts HID reports but shows nothing; refuse to grade gestures against the lock screen.
-  if "$CTL" lock-state 2>/dev/null | grep -q 'passcodeRequired: true'; then
+  LOCK_STATE_OUT="$($CTL lock-state 2>&1)"; LOCK_STATE_RC=$?
+  if ! lock_state_is_unlocked "$LOCK_STATE_RC" "$LOCK_STATE_OUT"; then
+    if (( LOCK_STATE_RC != 0 )); then
+      fail "device lock-state check failed (rc=$LOCK_STATE_RC): ${LOCK_STATE_OUT//$'\n'/ }"
+    elif print -r -- "$LOCK_STATE_OUT" | grep -Eq '(^|[[:space:]])passcodeRequired:[[:space:]]*true([[:space:]]|$)'; then
     fail "device is locked (passcodeRequired: true); unlock it before the interactive steps"
+    else
+      fail "device lock-state is unknown; expected passcodeRequired: false"
+    fi
   else
   run "home" -- "$CTL" home; sleep 1; shot 02_home
   run "tap $TAP_XY (icon)" -- "$CTL" tap ${=TAP_XY}; sleep 1.5; shot 03_after_tap
   run "home" -- "$CTL" home; sleep 1; shot 04_home
   run "recents" -- "$CTL" recents; sleep 1.5; shot 05_after_recents
   run "home" -- "$CTL" home; sleep 1; shot 06_home
+  run "open Settings for scrollable fixture" -- "$CTL" launch com.apple.Preferences; sleep 1
+  shot 06_before_swipe
   run "swipe 0.5 0.75 -> 0.5 0.35" -- "$CTL" swipe 0.5 0.75 0.5 0.35; sleep 1; shot 07_after_swipe
-  run "home" -- "$CTL" home; sleep 1
-  run "scroll 0.5 0.75 dy=0.30" -- "$CTL" scroll 0.5 0.75 0 0.30; sleep 1; shot 08_after_scroll
+  shot 07_before_scroll
+  run "scroll Settings back toward top" -- "$CTL" scroll 0.5 0.35 0 0.30; sleep 1; shot 08_after_scroll
   run "home" -- "$CTL" home; sleep 1; shot 09_home
   run "long $LONG_XY 1.2 (icon)" -- "$CTL" long ${=LONG_XY} 1.2; sleep 1; shot 10_after_long
-  run "key escape" -- "$CTL" key escape 0.02; sleep 1; shot 11_after_escape
-  run "home" -- "$CTL" home; sleep 1; shot 12_final_home
-  # Frame-to-frame changes are reported, not enforced: a system alert (unverified app, permission
-  # prompt) can legitimately freeze the screen, and Home on the home screen is a no-op.
-  prev=""
-  for f in "$OUT"/[0-9][0-9]_*.png; do
-    h=$(md5 -q "$f")
-    [[ -n "$prev" && "$h" == "$prev" ]] && printf 'WARN: %s identical to previous frame; inspect the screenshots\n' "$(basename "$f")" | tee -a "$log"
-    prev="$h"
-  done
+  run "home dismisses context menu" -- "$CTL" home; sleep 1; shot 11_after_home
+  run "open Settings for keyboard fixture" -- "$CTL" launch com.apple.Preferences; sleep 1
+  run "focus Settings search" -- "$CTL" tap ${=KEY_XY}; sleep 1; shot 12_before_key
+  run "key a" -- "$CTL" key a 0.02; sleep 1; shot 13_after_key
+  run "clear test key" -- "$CTL" key backspace 0.02; sleep 1; shot 14_after_clear
+  run "literal Unicode text" -- "$CTL" text 'ipb-中文🙂 A1!'; sleep 1; shot 14_literal_text
+  # A paste-permission modal changes pixels too. Do not clear/close anything
+  # until the field is verified: the clear coordinate could deny that modal.
+  run "literal text in focused field" -- verify_literal_text || exit 1
+  run "clear literal test text" -- "$CTL" tap ${=TEXT_CLEAR_XY}; sleep 1; shot 14_after_text_clear
+  run "close Settings search" -- "$CTL" tap ${=KEY_CLOSE_XY}
+  run "home" -- "$CTL" home; sleep 1; shot 15_final_home
+  # Each no-op allowance has an explicit reason. Other transitions must change
+  # decoded pixels; this is a freshness check, not proof of semantic correctness.
+  check_frame_transition "nondestructive reports" "$OUT/00_before.png" "$OUT/01_after_nondestructive.png" unchanged "reports intentionally do not alter the display" || true
+  check_frame_transition "home" "$OUT/01_after_nondestructive.png" "$OUT/02_home.png" unchanged "Home on an already-home screen is a valid no-op" || true
+  check_frame_transition "tap" "$OUT/02_home.png" "$OUT/03_after_tap.png" changed "tap should leave the home baseline" || true
+  check_frame_transition "home after tap" "$OUT/03_after_tap.png" "$OUT/04_home.png" changed "return from the tapped app" || true
+  check_frame_transition "recents" "$OUT/04_home.png" "$OUT/05_after_recents.png" changed "open App Switcher" || true
+  check_frame_transition "home after recents" "$OUT/05_after_recents.png" "$OUT/06_home.png" changed "return from App Switcher" || true
+  check_frame_transition "swipe" "$OUT/06_before_swipe.png" "$OUT/07_after_swipe.png" changed "Settings list should move" || true
+  check_frame_transition "scroll" "$OUT/07_before_scroll.png" "$OUT/08_after_scroll.png" changed "Settings list should move back" || true
+  check_frame_transition "home after scroll" "$OUT/08_after_scroll.png" "$OUT/09_home.png" changed "return from Settings" || true
+  check_frame_transition "long" "$OUT/09_home.png" "$OUT/10_after_long.png" changed "long press should produce a visible result" || true
+  check_frame_transition "home after long" "$OUT/10_after_long.png" "$OUT/11_after_home.png" changed "Home dismisses the context menu" || true
+  check_frame_transition "key a" "$OUT/12_before_key.png" "$OUT/13_after_key.png" changed "search query and results should change" || true
+  check_frame_transition "clear key" "$OUT/13_after_key.png" "$OUT/14_after_clear.png" changed "clear query restores search suggestions" || true
+  check_frame_transition "literal text" "$OUT/14_after_clear.png" "$OUT/14_literal_text.png" changed "focused search contains literal Unicode text; inspect exact content" || true
+  check_frame_transition "clear literal text" "$OUT/14_literal_text.png" "$OUT/14_after_text_clear.png" changed "clear query restores suggestions" || true
+  check_frame_transition "final home" "$OUT/14_after_clear.png" "$OUT/15_final_home.png" changed "return from Settings search" || true
   fi
 fi
 
