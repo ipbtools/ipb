@@ -6,18 +6,24 @@
 
 ### Distribution and documentation scope (checked 2026-10-13)
 
-**v0.3.0 release preparation:** The user now explicitly requests a Release containing
-PR#2's deep AX and element operations, stable Homebrew update and local installation.
-The selected implementation is merged main6b84247; source behavior is unchanged by this
-version/documentation bump. Repeat candidate native build/host/package/Homebrew checks,
-review and publish the draft, then merge the verified stable tap formula. Existing
-13Pro source/installed/forwarded AX and Calculator action controls remain scoped evidence.
-The full supported native host/device gate stays open; this is a v0.3.0 publication
-exception, not a new supported matrix entry. Local macOS26.5.1 uses the same tag's source
-build in its existing manual prefix; the stable prebuilt formula's macOS27 guard stays.
-Current release links: [v0.3.0](https://github.com/ipbtools/ipb/releases/tag/v0.3.0),
-[release process](releasing.md). Exact final workflow/asset/install references are retained
-outside Git in `~/.local/state/ipb/20261013-v0.3.0-release/`.
+**v0.3.0 publication complete:** Standard Latest Release identifies tag/source
+`59d850254c5d6c3417e113b07776ce2d80d20816`.
+[Candidate38402750792](https://github.com/ipbtools/ipb/actions/runs/38402750792) passes
+native build,59AX/host checks, package/hashes/startup and real Homebrew install/test.
+An independent public archive/sidecar and all14 payload hashes match. Stable tap
+[PR#4](https://github.com/ipbtools/homebrew-ipb/pull/4) merges at
+`44f342ca42a17c8137aeac1dd9ccf762c1ebb8a8`; its verified formula matches the Release asset.
+[Tap38405812331](https://github.com/ipbtools/homebrew-ipb/actions/runs/38405812331) passes
+public metadata/tag/main/payload and actual precompiled installation. Release and package
+checks are distinct from the still-open full supported native device gate.
+
+Local macOS26.5.1 uses source-built Homebrew HEAD at the same release commit, with
+pmd11.10.2 in the optional AX environment. Settings deep/full-state138 and guarded
+Calculator pressThree12→3 are independently observed; default and Homebrew entries read
+clean deep output. The existing `~/.local/bin/ipb` now resolves to the Homebrew entry,
+so ownership/update semantics are consistent. Stable prebuilt macOS27 guard is retained.
+Backups and exact verification references remain outside Git at
+`~/.local/state/ipb/20261013-v0.3.0-release/`.
 
 **Previous v0.2.0 process:**
 
@@ -7238,3 +7244,31 @@ manual install from the exact release tag and configure the optional pinned AX e
 Do not weaken the guard or silently change the support matrix. A checksum-verified old
 v0.2.0 helper declares minOS27 and starts its host-only service-ID path on26.5.1; this
 limited observation does not prove full binary compatibility or warrant a guard change.
+
+
+## 2026-10-13 — v0.3.0 publication, API limit fix and local installation
+
+Standard Latest v0.3.0 identifies source59d850254c5d6c3417e113b07776ce2d80d20816;
+its formal candidate and public package checks complete with the scoped acceptance
+boundary recorded above. The local default and Homebrew source install report0.3.0;
+optional Python3.12/pmd11.10.2 setup is complete. The installed tag reads Settings138
+with all-native state and known closed cleanup; independent tree/screenshot shows
+Calculator12→3 after one guarded pressThree. The phone is returned to Settings.
+The default~/.local/bin/ipb points to the Homebrew source entry, backed up before
+replacement; later `ipb update` follows that existing HEAD channel. Ten nonnative
+installed payload hashes match the formal archive; locally built native binaries
+have a different compiler environment and are not claimed byte-identical.
+
+**Confirmed publication-flow problem:** Preparing the stable formula for the published
+tag failed in tap run38404185751 before asset validation with GitHub HTTP403 “rate limit
+exceeded”. The shared runner used anonymous API metadata requests. The minimal fix uses
+the workflow's existing token only for api.github.com metadata, without changing token
+permissions or authenticating public asset downloads. Tap PR#3 records the repair;
+nine validator regressions include authenticated/tokenless requests and withholding
+credentials from other hosts. Real rerun38405812331 succeeds through public assets,
+tag/main and all payload hashes plus precompiled Homebrew install/test. Stable tap
+PR#4 and its CI38406647091 pass; the merged formula matches the release formula asset.
+Raw logs, downloads, checksums, receipts, screenshots and rollback files remain outside
+Git under the local release handoff above. Full native macOS27 device acceptance,
+prior Automation Mode dependence on a fresh phone and previous broader-page/action
+research limits remain open; this publication does not close them.

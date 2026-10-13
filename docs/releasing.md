@@ -21,6 +21,20 @@ A macOS26.5.1 source install has supplementary device controls; it does not expa
 precompiled formula's platform guard. For that host, build the exact release tag locally
 and update the existing manual prefix; optional AX Python setup remains separate.
 
+The Release is published as standard Latest at source
+`59d850254c5d6c3417e113b07776ce2d80d20816`.
+[Candidate run38402750792](https://github.com/ipbtools/ipb/actions/runs/38402750792)
+passes native build,59AX/host checks, archive/startup and real precompiled Homebrew tests.
+An independent public download matches its sidecar and all14 payload hashes.
+[Tap run38405812331](https://github.com/ipbtools/homebrew-ipb/actions/runs/38405812331)
+passes public metadata/tag/main/payload checks and real installation.
+[Tap PR#4](https://github.com/ipbtools/homebrew-ipb/pull/4) merged at
+`44f342ca42a17c8137aeac1dd9ccf762c1ebb8a8`; its formula is byte-identical to the Release asset.
+The local macOS26.5.1 host has a tested source-built Homebrew HEAD at the same tagged
+commit and the pinned AX environment. Its existing `~/.local/bin/ipb` now resolves to
+Homebrew, so `ipb update` uses the HEAD updater. The previous manual files are backed up
+outside Git. This remains supplemental host/device evidence, not prebuilt macOS26 support.
+
 ## Previous v0.2.0 release
 
 The previous formal [v0.2.0 release](https://github.com/ipbtools/ipb/releases/tag/v0.2.0) is published
