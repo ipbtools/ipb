@@ -12,14 +12,14 @@ native AX attributes. The current archive decoder also rejects that valid respon
 at its 100-level UID/container nesting limit.
 
 Keep the existing paired USB userspace RSD, raw DTX channel zero, one outstanding
-read and cleanup path. Default `ui` requests the native descendant snapshot with
+read and cleanup path. `ui --deep` requests the native descendant snapshot with
 numeric label/frame/traits/identifier/value and class/bundle attributes. Preserve
 its actual ordered child edges and every path occurrence of a repeated handle;
 output IDs remain snapshot-local. Supplement the ordinary accessible elements
 through the existing Description-first reads to retain state and role fields.
 Structural elements have only the fields actually returned by the snapshot.
 
-Retain JSON schema 1's field types and text output. Change `hierarchySource` and
+Retain JSON schema 1's field types and text output. For deep output, change `hierarchySource` and
 `attributePolicy` to describe the new sources; add native class/bundle metadata.
 Navigation/reported-parent handle references are emitted only when a single output
 node resolves them; ambiguity is reported explicitly. No XCUIElementType synthesis.
@@ -45,7 +45,10 @@ user guide and verification current state plus an append-only dated record.
 
 ## Status and open questions
 
-Implementation and product validation are in progress. Research evidence is local
+Implementation and product validation are in progress. The main Bilibili login/numeric
+keyboard page still reads 40 ordinary nodes, while deep+state reads fail geometry/root
+stability or handle-set reconciliation. Cause remains open. Keep ordinary AXChildren as
+the default and require `--deep` explicitly; deep failures never silently fall back. Research evidence is local
 at `/private/tmp/ipb-ax-snapshot-20261013` and retained on research branch
 `codex/communication-capabilities-20261013` (`03f5ce8`). Matching iOS 27 / 24A437
 framework disassembly and live controls prove the required numeric option and
@@ -53,6 +56,6 @@ deep trees; they do not prove universal app coverage or XCTest parity.
 
 ## Rejected alternatives
 
+- Replacing the default before overlay validation: regresses a currently readable Bilibili page.
 - Silent shallow fallback: hides nil/truncated native snapshots and changes coverage unnoticed.
 - Global handle deduplication: deletes real repeated paths and their parent edges.
-- Raising Python's recursion limit: conflates UIKit depth with archive wrappers and retains recursive resource risk.
