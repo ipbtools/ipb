@@ -3525,7 +3525,9 @@ no requirement demonstrated here to start XCTest or change Automation Mode.
 ### Captured request and hierarchy
 
 Use the existing raw AX remote service / DTX channel0 and one outstanding read.
-This is a decoded secure keyed archive, not JSON on the wire:
+This is a decoded secure keyed archive, not JSON on the wire. The following is the
+five-attribute research control; the product adds native5003/5004/3003, so its exact
+list is `[2001,2003,2004,5019,2006,5003,5004,3003]` (Sources/ipb_ax.py SNAPSHOT_ATTRS).
 
 ```text
 AXPTranslatorRequest {

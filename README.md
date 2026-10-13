@@ -9,7 +9,7 @@ live JPEG screen stream (`ipb stream`) and an interactive mirror window (`ipb mi
 `xcrun devicectl` for everything Apple already exposes: install, launch, files, clipboard,
 location, screenshots.
 
-On this development branch, `ipb ui --deep` reads an application's native deep accessibility tree,
+In this source revision, `ipb ui --deep` reads an application's native deep accessibility tree,
 numerical element frames and state over the DevicesApp raw DTX service. Stable `v0.2.0`
 and default `ipb ui` retain the ordinary AXChildren graph. It uses an optional host Python
 backend; it installs nothing on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
@@ -364,7 +364,7 @@ Physical devices only. "own" means ipb implements the feature itself over the Co
 | Screen recording | `screenrecord` | `ipb screenrecord` (devicectl; the tested iOS 27.0 device reports "Screen Recording" unsupported, error 1001) | yes | `capture screen-record` |
 | Live screen stream | scrcpy (an on-device server) | `ipb stream` (own, JPEG frames) | no | no |
 | Interactive mirror | scrcpy | `ipb mirror` (own) | no | Device Hub, GUI only |
-| UI hierarchy | `uiautomator dump` | `ipb ui` ([development branch](#installation-channels)): actual AX tree, text, frames and state; coverage differs from XCTest ([guide](docs/ui.md)) | `ui describe-all` (simulator) | no |
+| UI hierarchy | `uiautomator dump` | `ipb ui`: actual AX tree, text, frames and state; optional `--deep` in this source revision; coverage differs from XCTest ([guide](docs/ui.md)) | `ui describe-all` (simulator) | no |
 | Install / uninstall | `install` / `uninstall` | `ipb install` / `ipb uninstall` (devicectl) | yes | `install app` / `uninstall app` |
 | Launch / kill / ps | `am start` / `am force-stop` / `ps` | `ipb launch` / `ipb kill <pid>` / `ipb ps` (devicectl) | launch / terminate | `process launch/signal`, `info processes` |
 | Open URL / deep link | `am start -a VIEW -d` | `ipb open <url>` (devicectl) | `open` | `process openURL` |

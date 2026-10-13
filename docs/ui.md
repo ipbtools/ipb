@@ -1,8 +1,9 @@
 # Application elements with `ipb ui`
 
-The `codex/ax-deep-snapshot` development branch adds `ipb ui --deep` to read an application's native
+This source revision provides `ipb ui --deep` to read an application's native
 deep accessibility snapshot, numerical element frames and state over DevicesApp raw DTX.
-Default `ipb ui`, stable `v0.2.0` and current `main` retain the ordinary AXChildren graph.
+Default `ipb ui` retains the ordinary AXChildren graph. Released `v0.2.0` does not include
+`--deep`; use a source revision containing this feature.
 See the [installation channels](../README.md#installation-channels) for stable and `--HEAD`
 packages.
 
@@ -78,8 +79,13 @@ an atomic generation for all descendants. Cleanup reports the known close-before
 case separately from acknowledged teardown.
 
 Without `--deep`, the existing AXChildren tree and Description-first policy remain.
-Bilibili login/numeric-keyboard main reads succeed while deep+state reconciliation
-can fail on root/geometry/handle changes; the cause remains open. This is why deep
+Bilibili login/numeric-keyboard reads can fail on root/geometry/handle changes in both
+ordinary and deep modes. Deep additionally reconciles ordinary state with native geometry.
+A paired control identified one frame conflict on an invisible carousel caption behind the
+login overlay: its horizontal position moved between reads. Two native-only snapshots on
+that page agreed, but other missing-handle/root changes remain unexplained.
+Root errors name the changed component; reconciliation errors include the first missing
+handle/count or both frames. They do not guarantee that a retry will succeed. This is why deep
 reads are opt-in. They fail explicitly rather than silently returning shallow data.
 
 For `ui`, exit 2 means usage/Python/dependency failure, 3 means device selection or

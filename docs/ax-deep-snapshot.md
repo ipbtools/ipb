@@ -45,17 +45,34 @@ user guide and verification current state plus an append-only dated record.
 
 ## Status and open questions
 
-Implementation is complete on this local branch. Both hosts build and pass complete host
-regressions; final28 AX tests pass. Source/installed ordinary+deep AX gates and installed
-noninteractive smoke pass on the local13Pro; Calculator JSON/text deep reads pass.
-Installed Bilibili visible-title default25/depth1 and deep94/depth19 both pass with
-matching title and native frame; the previous Label timeout does not recur.
-Mac-M2 (macOS27/Xcode27) reads the same138-record Settings tree through owned USB forwarding.
-Its native CoreDevice cannot discover this13Pro (error1000), so full supported native/interactive
-acceptance remains open. The main Bilibili login/numeric
-keyboard page reads40/41 ordinary nodes, while deep+state reads fail geometry/root
-stability or handle-set reconciliation. Cause remains open. Keep ordinary AXChildren as
-the default and require `--deep` explicitly; deep failures never silently fall back.
+Implementation is on PR #2, reviewed at `748e2c5`. Actual returned Opus 5.5
+review and follow-up find no blocker with opt-in and strict reconciliation.
+The review adds discriminating nil/root/handle/frame diagnostics and seven
+regressions: all 35 AX tests pass locally and on Mac-M2; local `make check-host`
+passes. Source and isolated installed AX-only gates pass on the allocated 13 Pro.
+Original native build/noninteractive smoke results remain in their dated record;
+this review does not claim a new full gate.
+
+Fresh iOS 27.0 / 24A437 controls on local macOS 26.5.1 give Settings 13 ordinary
+nodes versus 138 deep records / 135 handles / depth 20, Calculator 24 versus
+45 / depth 16, and Bilibili 9.14.0 visible-title video 21 versus 89 / depth 19.
+Settings and video each pass three pairs; Calculator is one pair. Video title
+text and rectangle match in all three pairs. Counts are page/version scoped.
+Mac-M2 (macOS 27.2 / Xcode 27) passes 35 tests and reads the same 138-record
+Settings tree through an owned USB forward, with connection/tunnel closed.
+Native discovery still lacks this 13 Pro: the full supported native HID/media,
+CLI selection and interactive gate remains open.
+
+Known, not fixed: the empty Bilibili login/numeric-keyboard page changes
+intermittently during serial reads. Ordinary and deep root-children checks can
+fail; deep additionally reports missing handles or frame conflicts. Successful
+deep controls return 168 records / depth 18. Paired controls narrow one frame
+failure to an invisible background-carousel UILabel moving horizontally, not
+the cause of every root/handle change. Two native-only snapshots agree at 168
+records/handle set (77/73 ms); this does not prove atomicity or warrant changing
+state/output semantics. Keep ordinary AXChildren default and deep opt-in;
+a fresh read can recover, without a guarantee. Native-only output and remaining
+handle-lifetime research are follow-up work, not hidden fallbacks.
 
 Research evidence is local
 at `/private/tmp/ipb-ax-snapshot-20261013` and retained on research branch
