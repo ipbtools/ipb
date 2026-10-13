@@ -130,6 +130,14 @@ silently converted to a shallow tree. The latest request renews13Pro testing; ea
 comparison counts remain historical. macOS27/Xcode27 build and USB-forwarded AX verification
 now pass, but the native supported-host gate remains open.
 
+**PR#2 adoption gate exception:** The user explicitly answered “允许本次按 AX 验证合入（推荐）”.
+This adoption uses the completed13Pro source/installed/forwarded AX device controls and
+macOS27 CI as the gate. [CI38399110072](https://github.com/ipbtools/ipb/actions/runs/38399110072)
+passes all native build,59AX/host regressions, package/hash and real Homebrew install/test
+steps; artifact11813912182 is369366B. The exception is limited to PR#2 merge, preserves
+segmented history, and publishes no release. Full native supported-device acceptance
+and future release gates remain open.
+
 ### Remaining work, in recommended order
 
 | Item | Current evidence and root-cause status | Owner / next discriminator |
@@ -7177,3 +7185,19 @@ Automation Mode dependence on a never-automated phone, AX/XCTest type/state sema
 Bilibili's independently documented changing login background and global atomicity remain
 open. The product does not install a Runner or initialize XCTest; removing the Runner does
 not reset prior device authorization and therefore is not a fresh-device A/B.
+
+
+## 2026-10-13 — PR #2 scoped adoption authorization
+
+The user explicitly authorized “允许本次按 AX 验证合入（推荐）” after reviewing the
+completed same-page/action controls and the remaining native Mac-M2 discovery limitation.
+PR#2 may merge using those AX controls and the passing macOS27 CI/package/Homebrew gate.
+The verified source head is7c7929ba9c87a5a7df67fc4a2dbcb686e1d5f2fc;
+[run38399110072](https://github.com/ipbtools/ipb/actions/runs/38399110072) succeeds with59AX
+regressions and native build/host/package/hash/real Homebrew install tests. Artifact
+11813912182 is369366B, SHA25695e3a86bd2720ea7b8586265c22c8ff16a91aac9349eb34517d6e03852a905fd.
+This follow-up records authorization only; product source is unchanged. Preserve the
+segmented history with a merge commit. No Release or Homebrew publication is authorized
+by this exception. Full supported native HID/media/CLI-selection/interactive acceptance,
+fresh-device Automation Mode dependence and the previously listed research limits remain
+open. Final merge/CI identifiers are retained in the local handoff outside Git.

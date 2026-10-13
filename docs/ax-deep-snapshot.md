@@ -79,7 +79,9 @@ reads, hit-test and pressTwo succeed with closed connections. No production call
 The full supported macOS27/Xcode27/iOS27 native HID/media/CLI-selection and interactive gate
 remains open: fresh Mac-M2 native inventory lacks this13Pro. USB forwarding only validates
 the AX helper. Current PR checks supply the CI/package result; no release is published.
-Merge is conditional on the repository's required gate or an explicit user exception.
+The user explicitly authorized PR#2 adoption using the completed AX device controls and
+macOS27 CI as this change's gate. This exception does not close native acceptance or waive
+a future release gate. Merge preserves the segmented commit history; no release is published.
 
 Known, not fixed: Bilibili9.14.0 login/keyboard serial reconciliation intermittently detects
 changing root/handles/geometry; a moving invisible background caption explains one frame
