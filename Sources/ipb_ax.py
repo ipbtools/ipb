@@ -46,8 +46,13 @@ NATIVE_ATTRS = "UIAccessibilitySnapshotKeyAttributes"
 
 def snapshot_nodes(snapshot, root):
     """Keep native path occurrences; handles can legitimately have two parents."""
-    if not isinstance(snapshot, dict) or identity(snapshot.get(ELEMENT)) != identity(root):
-        raise ValueError("AX snapshot unavailable or root mismatch")
+    if snapshot is None:
+        raise ValueError("AX snapshot unavailable: device returned nil")
+    if not isinstance(snapshot, dict):
+        raise ValueError("invalid AX snapshot record")
+    actual_root, expected_root = identity(snapshot.get(ELEMENT)), identity(root)
+    if actual_root != expected_root:
+        raise ValueError(f"AX snapshot root mismatch: expected={expected_root} actual={actual_root}")
     nodes, by_handle = [], {}
     pending = deque([(snapshot, None, 0, frozenset())])
     while pending:
@@ -350,13 +355,17 @@ async def capture(rsd, args):
             nodes, by_handle = snapshot_nodes(native, root)
         else:
             nodes, by_handle = ordinary_nodes(seen, root)
+        missing = [key for key in seen if key not in by_handle]
+        if missing:
+            key = missing[0]
+            raise ValueError(f"AX ordinary element absent from native snapshot: pid={key[0]} "
+                             f"objectID={key[1]} missing={len(missing)}; cannot reconcile the two reads")
         for key, attrs in seen.items():
-            if key not in by_handle:
-                raise ValueError("AX ordinary element absent from native snapshot; request a new snapshot")
             fields = node_fields(attrs)
             for node in by_handle[key]:
                 if "frame" in fields and "frame" in node and fields["frame"] != node["frame"]:
-                    raise ValueError("AX frame changed during collection; request a new snapshot")
+                    raise ValueError(f"AX frame mismatch during collection: pid={key[0]} objectID={key[1]} "
+                                     f"ordinary={fields['frame']} native={node['frame']}")
                 # Native snapshot owns geometry, label and native metadata. Preserve
                 # separately read Description, state and role fields on AX elements.
                 native_geometry = "frame" in node or "frameUnavailable" in node
@@ -379,8 +388,12 @@ async def capture(rsd, args):
                         node["reportedParentOutsideGraph"] = not matches
         max_depth = max(node["depth"] for node in nodes)
         last = attributes(await read(5, {"attributes": [8, 21, root_text_attribute]}, root))
-        if signature(first, root_text_attribute) != signature(last, root_text_attribute):
-            raise ValueError("AX root changed during collection; request a new snapshot")
+        before, after = signature(first, root_text_attribute), signature(last, root_text_attribute)
+        if before != after:
+            changed = ",".join(name for name, old, new in zip(("frame", "text", "children"), before, after)
+                               if old != new)
+            raise ValueError(f"AX root changed during collection: pid={root['pid']} "
+                             f"objectID={root['objectID']} changed={changed}")
         if hit_point is not None and identity(await hit(hit_point))[0] != root["pid"]:
             raise ValueError("displayed AX process changed during collection")
         if display is not None:

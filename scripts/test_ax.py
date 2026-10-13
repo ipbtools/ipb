@@ -182,8 +182,10 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                 if req["requestType"] == 1:
                     result = TOKEN
                 elif req["requestType"] == 2:
+                    if mode == "snapshot-timeout":
+                        raise TimeoutError("fixture type-2 transport timeout")
                     result = snapshot(TOKEN, [snapshot(CHILD)])
-                    if mode == "native-duplicate":
+                    if mode in ("native-duplicate", "native-parent-duplicate"):
                         result = snapshot(TOKEN, [snapshot(CHILD), snapshot(CHILD)])
                     if mode == "native-deep":
                         container = {**CHILD, "objectID": 102}
@@ -194,6 +196,10 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                         result[ipb_ax.CHILD_COUNT] = 2
                     if mode == "native-missing-element":
                         result = snapshot(TOKEN)
+                    if mode == "native-root-mismatch":
+                        result = snapshot({**TOKEN, "objectID": TOKEN["objectID"] + 1}, [snapshot(CHILD)])
+                    if mode == "native-frame-mismatch":
+                        result[ipb_ax.NATIVE_ATTRS][2003] = {"x": 1, "y": 2, "width": 31, "height": 40}
                     if mode == "native-null-frame":
                         result[ipb_ax.NATIVE_ATTRS][2003] = {"unavailable": "CGRectNull"}
                 else:
@@ -218,6 +224,10 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                             result[33] = "Changed app description"
                         if mode == "label-changed" and state["root_reads"] > 2:
                             result[3] = "Changed app label"
+                        if mode == "frame-changed" and state["root_reads"] > 1:
+                            result[21] = {"x": 1, "y": 2, "width": 375, "height": 812}
+                        if mode == "native-parent-duplicate":
+                            result[41] = CHILD
                     else:
                         result = {8: [], 21: FRAME, 27: 0}
                         if mode == "missing":
@@ -310,6 +320,46 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sum(obj == CHILD["objectID"] and 8 in fields
                              for obj, fields in state["attribute_requests"]), 1)
 
+    async def test_repeated_native_parent_handle_is_reported_ambiguous(self):
+        result, state, error = await self.run_capture("native-parent-duplicate")
+        self.assertIsNone(error)
+        root = result["nodes"][0]
+        self.assertEqual(root["reportedParentUnavailable"], "ambiguous-snapshot-handle")
+        self.assertNotIn("reportedParentId", root)
+
+    async def test_native_root_mismatch_reports_both_handles(self):
+        result, state, error = await self.run_capture("native-root-mismatch")
+        self.assertIsNone(result)
+        self.assertRegex(str(error), r"snapshot root mismatch: expected=\(42, \d+\) actual=\(42, \d+\)")
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_nil_native_snapshot_reports_device_unavailable(self):
+        result, state, error = await self.run_capture("native-nil")
+        self.assertIsNone(result)
+        self.assertIn("AX snapshot unavailable: device returned nil", str(error))
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_missing_ordinary_snapshot_handle_reports_identity_and_count(self):
+        result, state, error = await self.run_capture("native-missing-element")
+        self.assertIsNone(result)
+        self.assertIn(f"AX ordinary element absent from native snapshot: pid=42 objectID={CHILD['objectID']} missing=1", str(error))
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_native_frame_mismatch_reports_identity_and_coordinates(self):
+        result, state, error = await self.run_capture("native-frame-mismatch")
+        self.assertIsNone(result)
+        self.assertIn("AX frame mismatch during collection: pid=42 objectID=", str(error))
+        self.assertIn("ordinary={'x': 0, 'y': 0, 'width': 375, 'height': 812}", str(error))
+        self.assertIn("native={'x': 1, 'y': 2, 'width': 31, 'height': 40}", str(error))
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_native_snapshot_timeout_reports_attribute_and_cleans_up(self):
+        result, state, error = await self.run_capture("snapshot-timeout")
+        self.assertIsNone(result)
+        self.assertIsInstance(error, TimeoutError)
+        self.assertRegex(str(error), r"AX request type=2 pid=42 objectID=\d+ attribute=52 timed out")
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
     async def test_invalid_native_snapshot_never_falls_back(self):
         for mode in ("native-nil", "native-truncated", "native-missing-element", "wrong-attribute"):
             with self.subTest(mode=mode):
@@ -321,7 +371,8 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_changed_root_does_not_emit_partial_tree(self):
         result, state, error = await self.run_capture("changed")
         self.assertIsNone(result)
-        self.assertRegex(str(error), "root changed")
+        self.assertIn("root changed during collection: pid=42 objectID=", str(error))
+        self.assertIn("changed=children", str(error))
         self.assertTrue(state["closed"] and state["dtx_closed"])
 
     async def test_description_avoids_stalled_label_without_renaming_it(self):
@@ -353,13 +404,19 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_changed_root_description_does_not_emit_partial_tree(self):
         result, state, error = await self.run_capture("description-changed")
         self.assertIsNone(result)
-        self.assertRegex(str(error), "root changed")
+        self.assertIn("changed=text", str(error))
         self.assertTrue(state["closed"] and state["dtx_closed"])
 
     async def test_changed_root_label_without_description_still_fails(self):
         result, state, error = await self.run_capture("label-changed")
         self.assertIsNone(result)
-        self.assertRegex(str(error), "root changed")
+        self.assertIn("changed=text", str(error))
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_changed_root_frame_reports_frame_category(self):
+        result, state, error = await self.run_capture("frame-changed")
+        self.assertIsNone(result)
+        self.assertIn("changed=frame", str(error))
         self.assertTrue(state["closed"] and state["dtx_closed"])
 
     async def test_missing_child_list_fails_and_cleans_up(self):
