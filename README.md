@@ -12,13 +12,13 @@ location, screenshots.
 In this source revision, `ipb ui --deep` reads an application's native deep accessibility tree,
 numerical element frames and state over the DevicesApp raw DTX service. `ui hit-test` reads
 the actual element at a point; `ui press --identifier ID` resolves and presses a fresh element
-once. `--deep --full-state` adds structural state/role reads. Stable `v0.2.0`
-and default `ipb ui` retain the ordinary AXChildren graph. It uses an optional host Python
+once. `--deep --full-state` adds structural state/role reads. These additions ship in
+`v0.3.0`; default `ipb ui` retains the ordinary AXChildren graph. It uses an optional host Python
 backend; it installs nothing on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
 
 The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
-service when `UHID_SERVICE_ID=auto`. The formal `v0.2.0` release is published as a simple
-validation release after host/package and Homebrew checks. The full supported physical-device
+service when `UHID_SERVICE_ID=auto`. `v0.3.0` ships the deep AX and element-operation additions after AX device controls,
+host/package and Homebrew checks. The full supported physical-device
 gate remains open; this release does not claim full device acceptance. See
 [current verification scope](docs/verification.md#open-items--current-state-living-section).
 For `ui press`, exit **6** means failure after submission: the diagnostic preserves accepted,
@@ -46,15 +46,17 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 ## Installation channels
 
-The alignment changes are on `main` after [PR #1](https://github.com/ipbtools/ipb/pull/1) merged
-at `ac19b3fd4144b1b270ea1526af2cbbfcce884bfb`. The formal [v0.2.0 release](https://github.com/ipbtools/ipb/releases/tag/v0.2.0)
-is published with the native package and stable formula verified. The supported physical-device
-gate remains open; this simple validation release does not claim full device acceptance. See
+[v0.3.0](https://github.com/ipbtools/ipb/releases/tag/v0.3.0) includes
+[PR #2](https://github.com/ipbtools/ipb/pull/2): native deep AX, structural state,
+point hit testing and guarded identifier press. Stable installs use the precompiled
+macOS 27 ARM64 package; source/HEAD installs build locally. The supported physical-device
+gate remains open; the maintainer authorized this release using the scoped AX device
+controls and host/package/Homebrew verification. It does not claim full acceptance. See
 [release verification](docs/releasing.md#current-channels).
 
 | Channel | What it installs | Update path |
 | --- | --- | --- |
-| Stable Homebrew | Pinned prebuilt `v0.2.0` archive | `ipb update` or `brew upgrade ipbtools/ipb/ipb` |
+| Stable Homebrew | Pinned prebuilt `v0.3.0` archive | `ipb update` or `brew upgrade ipbtools/ipb/ipb` |
 | Homebrew HEAD | Source from `main`, including the merged UI and mirror additions | `brew install --HEAD ipbtools/ipb/ipb`; `ipb update` keeps it current |
 | Release archive | Selected version with checksum/build metadata | Download a newer Release; keep bin/libexec/share together |
 | PR CI test package | Temporary precompiled development package | Download a newer Actions artifact |

@@ -2,8 +2,29 @@
 
 ## Current channels
 
-The formal [v0.2.0 release](https://github.com/ipbtools/ipb/releases/tag/v0.2.0) is published
-as a standard release (not draft or prerelease) and marked latest. Its tagged source commit is
+[v0.3.0](https://github.com/ipbtools/ipb/releases/tag/v0.3.0) contains the merged
+[deep AX and element-operation PR #2](https://github.com/ipbtools/ipb/pull/2):
+`ui --deep`, `--deep --full-state`, read-only point hit testing and guarded one-shot
+identifier press. Same-page 13 Pro/XCTest controls and native action effects are
+recorded in [verification](verification.md#2026-10-13--13-pro-same-page-xctest-comparison-structural-state-and-element-press).
+AX visibility/focus are distinct from XCTest semantics; press is Calculator-validated,
+with fresh-device prior Automation Mode dependence unresolved. No Runner is started
+or installed by the product. See [UI guide](ui.md).
+
+The maintainer explicitly requested this new Release, stable Homebrew update and local
+installation after reviewing the scoped AX/device and CI results. This v0.3.0 publication
+decision retains the full native macOS27/Xcode27/iOS27 gate as open. It authorizes release
+after the candidate build/host/package/Homebrew checks; it does not waive future gates
+or claim complete device acceptance. Formal stable binaries remain macOS27 ARM64 only.
+
+A macOS26.5.1 source install has supplementary device controls; it does not expand the
+precompiled formula's platform guard. For that host, build the exact release tag locally
+and update the existing manual prefix; optional AX Python setup remains separate.
+
+## Previous v0.2.0 release
+
+The previous formal [v0.2.0 release](https://github.com/ipbtools/ipb/releases/tag/v0.2.0) is published
+as a standard release (not draft or prerelease) and was marked latest when published. Its tagged source commit is
 `ac19b3fd4144b1b270ea1526af2cbbfcce884bfb`; main CI
 passed in [run 38338717398](https://github.com/ipbtools/ipb/actions/runs/38338717398), and the
 formal native build/package workflow passed in [run 38338803091](https://github.com/ipbtools/ipb/actions/runs/38338803091)
@@ -26,7 +47,7 @@ process evidence below; its deleted release URL is intentionally not linked.
 For this `v0.2.0` simple validation release, the maintainer authorized publication after host,
 package and Homebrew verification without a new physical-device run. The supported macOS 27 +
 Xcode 27 + iOS 27+ physical gate remains open, and this release does not claim full device
-acceptance. This is a current-release exception; the general future release gate below is
+acceptance. This was a v0.2.0-specific exception; the general future release gate below is
 unchanged.
 
 ## PR test packages
@@ -107,8 +128,8 @@ handoff and condensed verification record.
 4. Update VERSION, user guides and release notes for the reviewed version. Record an exact
    candidate SHA; complete review before selecting the commit to tag.
 
-The full supported physical matrix remains open. The explicit v0.2.0 publication decision
-is recorded above; standard Release status does not certify physical acceptance.
+The full supported physical matrix remains open. The explicit v0.2.0 and v0.3.0 publication decisions
+are recorded above; standard Release status does not certify physical acceptance.
 
 ## Prepare and publish the reviewed version
 
@@ -121,8 +142,8 @@ is recorded above; standard Release status does not certify physical acceptance.
    this repository's GITHUB_TOKEN. A published release is never overwritten.
 3. For future releases, complete the supported physical-device gate against the actual
    candidate package, inspect downloaded-copy behavior, and review the draft notes and
-   requirements. Publish only after these results are satisfactory. The v0.2.0 maintainer
-   exception is recorded under Current channels. A green candidate job alone is not
+   requirements. Publish only after these results are satisfactory. Version-specific maintainer
+   exceptions are recorded above. A green candidate job alone is not
    approval to publish. No Developer ID credential or Apple component is bundled.
 4. In [ipbtools/homebrew-ipb](https://github.com/ipbtools/homebrew-ipb), dispatch **Prepare stable Homebrew formula** with the published tag.
    That tap-owned workflow checks the public release/assets and Homebrew installation,
