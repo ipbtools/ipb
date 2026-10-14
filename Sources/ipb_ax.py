@@ -422,87 +422,49 @@ async def capture(rsd, args):
                     "cleanup": cleanup, "queryMs": round((time.monotonic() - started) * 1000, 3),
                     "deviceAPIVersion": api}
 
-        first = await node_attributes(root)
-        root_text_attribute = 33 if has_description(first) else 3
-        # Complete the ordinary graph before the native snapshot; all enrichment
-        # uses these same captured handles and fields, without descendant re-reads.
-        pending = deque([(root, first, 0)])
         seen = {}
-        while pending:
-            token, attrs, depth = pending.popleft()
-            key = identity(token)
-            if key in seen:
-                raise ValueError("AX child graph repeats an element")
-            if key[0] != root["pid"]:
-                raise ValueError("AX child belongs to another process")
-            if depth > MAX_DEPTH or len(seen) >= MAX_NODES:
-                raise ValueError("AX graph limit reached; no partial tree emitted")
-            attrs = attributes(attrs if attrs is not None else await node_attributes(token))
-            seen[key] = attrs
-            pending.extend((child, None, depth + 1) for child in attrs[8])
         if args.deep:
+            # One native observation owns the whole hierarchy and its geometry.
+            # A separate AXChildren walk samples another generation and can fail
+            # on animations/overlays even when this native snapshot is complete.
             native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
             nodes, by_handle = snapshot_nodes(native, root)
+            if identity(await app(root["pid"])) != identity(root):
+                raise ValueError("AX application root identity changed during native snapshot")
         else:
-            nodes, by_handle = ordinary_nodes(seen, root)
-        missing = [key for key in seen if key not in by_handle]
-        if missing:
-            key = missing[0]
-            raise ValueError(f"AX ordinary element absent from native snapshot: pid={key[0]} "
-                             f"objectID={key[1]} missing={len(missing)}; cannot reconcile the two reads")
-        if args.deep and getattr(args, "full_state", False):
-            # Snapshot-only backing views also support the proven AX state reads.
-            # Share each native handle's read across its repeated path records.
-            pending_native = [native]
-            supplemented = set(seen)
-            while pending_native:
-                record = pending_native.pop()
-                token = record[ELEMENT]
+            first = await node_attributes(root)
+            root_text_attribute = 33 if has_description(first) else 3
+            pending = deque([(root, first, 0)])
+            while pending:
+                token, attrs, depth = pending.popleft()
                 key = identity(token)
-                if key not in supplemented:
-                    state = await read(5, {"attributes": STATE_ATTRS}, token)
-                    if not isinstance(state, dict):
-                        raise ValueError("AX structural state attributes unavailable")
-                    fields = node_fields(state)
-                    for node in by_handle[key]:
-                        node.update({name: val for name, val in fields.items() if name not in node})
-                        node["attributeSource"] = "native-snapshot+AXAttributes"
-                    supplemented.add(key)
-                pending_native.extend(record[CHILDREN])
-        for key, attrs in seen.items():
-            fields = node_fields(attrs)
-            for node in by_handle[key]:
-                if "frame" in fields and "frame" in node and fields["frame"] != node["frame"]:
-                    raise ValueError(f"AX frame mismatch during collection: pid={key[0]} objectID={key[1]} "
-                                     f"ordinary={fields['frame']} native={node['frame']}")
-                # Native snapshot owns geometry, label and native metadata. Preserve
-                # separately read Description, state and role fields on AX elements.
-                native_geometry = "frame" in node or "frameUnavailable" in node
-                node.update({name: val for name, val in fields.items() if name not in node
-                             and not (native_geometry and name in ("frame", "frameUnavailable"))})
-                node["attributeSource"] = "native-snapshot+AXAttributes" if args.deep else "AXAttributes"
+                if key in seen:
+                    raise ValueError("AX child graph repeats an element")
+                if key[0] != root["pid"]:
+                    raise ValueError("AX child belongs to another process")
+                if depth > MAX_DEPTH or len(seen) >= MAX_NODES:
+                    raise ValueError("AX graph limit reached; no partial tree emitted")
+                attrs = attributes(attrs if attrs is not None else await node_attributes(token))
+                seen[key] = attrs
+                pending.extend((child, None, depth + 1) for child in attrs[8])
+            nodes, by_handle = ordinary_nodes(seen, root)
+            for key, attrs in seen.items():
+                node = by_handle[key][0]
                 if 9 in attrs:
                     navigation = [identity(c) for c in attrs[9]]
-                    if any(len(by_handle.get(k, [])) > 1 for k in navigation):
-                        node["navigationUnavailable"] = "ambiguous-snapshot-handle"
-                    else:
-                        node["navigationOrder"] = [by_handle[k][0]["id"] for k in navigation if k in by_handle]
-                        node["navigationOutsideGraph"] = sum(k not in by_handle for k in navigation)
+                    node["navigationOrder"] = [by_handle[k][0]["id"] for k in navigation if k in by_handle]
+                    node["navigationOutsideGraph"] = sum(k not in by_handle for k in navigation)
                 if attrs.get(41) is not None:
                     matches = by_handle.get(identity(attrs[41]), [])
-                    if len(matches) > 1:
-                        node["reportedParentUnavailable"] = "ambiguous-snapshot-handle"
-                    else:
-                        node["reportedParentId"] = matches[0]["id"] if matches else None
-                        node["reportedParentOutsideGraph"] = not matches
-        max_depth = max(node["depth"] for node in nodes)
-        last = attributes(await read(5, {"attributes": [8, 21, root_text_attribute]}, root))
-        before, after = signature(first, root_text_attribute), signature(last, root_text_attribute)
-        if before != after:
-            changed = ",".join(name for name, old, new in zip(("frame", "text", "children"), before, after)
-                               if old != new)
-            raise ValueError(f"AX root changed during collection: pid={root['pid']} "
-                             f"objectID={root['objectID']} changed={changed}")
+                    node["reportedParentId"] = matches[0]["id"] if matches else None
+                    node["reportedParentOutsideGraph"] = not matches
+            last = attributes(await read(5, {"attributes": [8, 21, root_text_attribute]}, root))
+            before, after = signature(first, root_text_attribute), signature(last, root_text_attribute)
+            if before != after:
+                changed = ",".join(name for name, old, new in zip(("frame", "text", "children"), before, after)
+                                   if old != new)
+                raise ValueError(f"AX root changed during collection: pid={root['pid']} "
+                                 f"objectID={root['objectID']} changed={changed}")
         if hit_point is not None and identity(await hit(hit_point))[0] != root["pid"]:
             raise ValueError("displayed AX process changed during collection")
         if display is not None:
@@ -511,22 +473,61 @@ async def capture(rsd, args):
                     raise ValueError("AX display changed during collection")
         if fatal:
             raise ValueError(fatal[0])
-        return {"schemaVersion": 1, "snapshotId": str(uuid.uuid4()),
-                "deviceIdentifier": args.device_id, "udid": rsd.udid,
-                "application": {"pid": root["pid"], "selection": selection},
-                "scope": "application-accessibility", "coordinateSpace": "device-logical-points",
-                "hierarchySource": "AXUserTestingSnapshot" if args.deep else "AXChildren",
-                "attributePolicy": ("native-snapshot+description-first+structural-state" if args.deep and getattr(args, "full_state", False) else
-                                    "native-snapshot+description-first" if args.deep else "description-first"),
-                "stateScope": ("all-native-handles" if args.deep and getattr(args, "full_state", False) else
-                               "native-visible+ordinary-state" if args.deep else "ordinary-accessible-elements"),
-                "ordinaryAXNodeCount": len(seen), "uniqueElementCount": len(by_handle),
-                "atomic": False, "rootStable": True,
-                "displayFrame": display,
-                "cleanup": cleanup,
-                "nodeCount": len(nodes), "maxDepth": max_depth, "nodes": nodes,
-                "queryMs": round((time.monotonic() - started) * 1000, 3),
-                "unsolicitedCount": len(unsolicited), "deviceAPIVersion": api}
+        snapshot_ms = round((time.monotonic() - started) * 1000, 3)
+        supplemental = {"status": "not-requested"}
+        if args.deep and getattr(args, "full_state", False):
+            supplemental = {"status": "complete", "scope": "all-native-handles",
+                            "attributeSource": "AXAttributes", "atomic": False,
+                            "requestedAttributes": STATE_ATTRS,
+                            "requestedElementCount": len(by_handle),
+                            "attemptedElementCount": 0, "completedElementCount": 0}
+            pending_native, supplemented = deque([native]), set()
+            state_started = time.monotonic()
+            while pending_native:
+                record = pending_native.popleft()
+                token = record[ELEMENT]
+                key = identity(token)
+                pending_native.extend(record[CHILDREN])
+                if key in supplemented:
+                    continue
+                supplemented.add(key)
+                supplemental["attemptedElementCount"] += 1
+                try:
+                    state = await read(5, {"attributes": STATE_ATTRS}, token)
+                    if not isinstance(state, dict):
+                        raise ValueError("AX supplemental state attributes unavailable")
+                    # Ignore unsolicited fields: later geometry/text never changes
+                    # the native observation, even if the device returns extra keys.
+                    fields = node_fields({key: state[key] for key in STATE_ATTRS if key in state})
+                except Exception as error:
+                    # No further requests on a failed/timed-out semantic stream.
+                    # The complete primary tree survives only if cleanup succeeds.
+                    supplemental.update(status="failed", exitCode=5 if isinstance(error, TimeoutError) else 1,
+                                        error={"type": type(error).__name__, "message": str(error) or "AX supplemental read failed",
+                                               "nodeIds": [node["id"] for node in by_handle[key]]})
+                    break
+                for node in by_handle[key]:
+                    node["supplementalAX"] = dict(fields)
+                supplemental["completedElementCount"] += 1
+            supplemental["queryMs"] = round((time.monotonic() - state_started) * 1000, 3)
+        result = {"schemaVersion": 2 if args.deep else 1, "snapshotId": str(uuid.uuid4()),
+                  "deviceIdentifier": args.device_id, "udid": rsd.udid,
+                  "application": {"pid": root["pid"], "selection": selection},
+                  "scope": "application-accessibility", "coordinateSpace": "device-logical-points",
+                  "hierarchySource": "AXUserTestingSnapshot" if args.deep else "AXChildren",
+                  "attributePolicy": "native-snapshot" if args.deep else "description-first",
+                  "stateScope": "native-snapshot" if args.deep else "ordinary-accessible-elements",
+                  "uniqueElementCount": len(by_handle), "atomic": False, "rootStable": True,
+                  "displayFrame": display, "cleanup": cleanup,
+                  "nodeCount": len(nodes), "maxDepth": max(node["depth"] for node in nodes), "nodes": nodes,
+                  "queryMs": round((time.monotonic() - started) * 1000, 3),
+                  "unsolicitedCount": len(unsolicited), "deviceAPIVersion": api}
+        if args.deep:
+            result.update(rootStabilityScope="application-identity", snapshotMs=snapshot_ms,
+                          supplementalAX=supplemental)
+        else:
+            result["ordinaryAXNodeCount"] = len(seen)
+        return result
     finally:
         try:
             if subscribed:
@@ -603,9 +604,9 @@ def main():
     selector.add_argument("--pid", type=int, help="read this application's PID explicitly")
     selector.add_argument("--point", type=unit_interval, nargs=2, default=(0.5, 0.5), metavar=("X", "Y"),
                           help="select the app by a read-only hit test at normalized X Y (default centre)")
-    parser.add_argument("--json", action="store_true", help="emit schemaVersion 1 JSON; default is a text tree")
-    parser.add_argument("--deep", action="store_true", help="read the native descendant snapshot (opt-in; overlay coverage is limited)")
-    parser.add_argument("--full-state", action="store_true", help="with --deep, also read snapshot-only node state/role (extra per-handle requests)")
+    parser.add_argument("--json", action="store_true", help="emit JSON (deep schema 2; ordinary/actions schema 1); default is a text tree")
+    parser.add_argument("--deep", action="store_true", help="read the native descendant tree and geometry without an AXChildren walk")
+    parser.add_argument("--full-state", action="store_true", help="with --deep, read state/role separately into supplementalAX (extra per-handle requests)")
     args = parser.parse_args()
     if args.full_state and (not args.deep or args.operation is not None):
         parser.error("--full-state requires a --deep dump")
@@ -668,6 +669,11 @@ def main():
             print("  " * node["depth"] + node["id"] + " " + json.dumps(text, ensure_ascii=False)
                   + " " + json.dumps(node.get("frame")))
             pending.extend(reversed(node["children"]))
+    supplemental = result.get("supplementalAX", {})
+    if supplemental.get("status") == "failed":
+        error = supplemental["error"]
+        print(f"ipb ui: supplemental AX {error['type']}: {error['message']}; complete native snapshot emitted", file=sys.stderr)
+        return supplemental["exitCode"]
     return 0
 
 

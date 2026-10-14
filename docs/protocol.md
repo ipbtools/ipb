@@ -3579,21 +3579,34 @@ host limit from the earlier nil. The product now decodes iteratively with20MiB,
 50,000-object,500,000-step and512 archive-nesting budgets. Native record traversal has
 independent512-record/depth32 bounds and rejects inconsistent children counts.
 
-`ui --deep` uses native snapshot edges and path-local IDs. Ordinary AXChildren
-reads supplement state/role/Description on accessible elements; missing native
-records or mismatched frames fail. Default deep includes native visibility; other structural
-states stay absent unless `--full-state` explicitly reads each unique handle. Ambiguous
-navigation/parent handle references are reported unavailable instead of choosing a
-path. Schema1 types and the existing text/JSON CLI remain; `hierarchySource` and
-`attributePolicy` identify the changed sources. One-request serialization, explicit
-nil/truncation failure, non-atomic output and root/PID/display checks remain.
-Ordinary AXChildren and Description-first remain the default: live Bilibili modal/
-numeric-keyboard controls succeed on main but deep+state reconciliation fails
-root/geometry/handle checks. The cause remains open; no silent fallback is added.
-A later installed visible-video-title control succeeds25/depth1 ordinary and94/depth19
-deep, with identical title and native frame. Deep2001 supplies a label without the
-previous type5 Label3 timeout; Description remains a separately returned field.
-This is a scoped positive control, not universal overlay or rich-text preservation.
+The shipped v0.3.0 implementation uses native snapshot edges and path-local IDs,
+then supplements ordinary AXChildren elements through separate reads. It rejects missing
+ordinary handles or changed overlapping frames. The recorded Bilibili modal/numeric-keyboard
+failures and successful visible-title controls below apply to that combined-read design.
+
+### Native-only observation and separate state (2026-10-14)
+
+The current source changes the host collection policy, not the private wire shapes or
+numeric attributes. `ui --deep` takes one type2/attribute52 response as the source of
+hierarchy, geometry and native fields. It no longer sends a preliminary AXChildren walk
+or requires separate root children/frames to match a later snapshot. A fresh application
+root lookup checks that the handle is unchanged; selected-PID/display checks remain.
+This only brackets application identity, not an atomic generation or stable descendants.
+
+Deep JSON schema2 preserves path occurrences and reports `attributePolicy=native-snapshot`,
+`stateScope=native-snapshot`, and `rootStabilityScope=application-identity`. It omits the
+old ordinary count/navigation relations. The default ordinary dump and actions retain
+schema1. Native child counts, PID/root/archive/graph limits and nil/truncation failures
+remain mandatory; there is no shallow fallback or partial native tree.
+
+Optional `--full-state` reads the already-proven AXP27/28/30/32/42/45/46/51 fields once
+per unique native handle after primary validation. Fields stay in node.supplementalAX;
+they neither overwrite native visibility nor imply snapshot-time state. Its separate
+summary reports requested/attempted/completed handle counts and failure context. A failed
+supplement stops semantic reads and returns nonzero. The complete native observation and
+completed supplementary fields may be emitted only after successful cleanup. A native,
+global-budget, cancellation or cleanup failure still emits no result. Runtime validation
+of this policy is recorded in verification.md; it does not establish new Apple semantics.
 
 **Proof limits:** these are real descendant snapshots on the tested pages, not an
 all-views guarantee. The later same-page13Pro XCTest controls below establish scoped

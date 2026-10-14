@@ -4,7 +4,8 @@ import argparse
 import asyncio
 import copy
 import io
-from contextlib import redirect_stderr
+import json
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 import plistlib
 import sys
@@ -210,7 +211,7 @@ class SnapshotTests(unittest.TestCase):
 
 
 class SessionTests(unittest.IsolatedAsyncioTestCase):
-    async def run_capture(self, mode, *, deep=True, full_state=False, operation="capture", pid=42, identifier="fixture-id"):
+    async def run_capture(self, mode, *, deep=False, full_state=False, operation="capture", pid=42, identifier="fixture-id"):
         state = {"requests": [], "attribute_requests": [], "structural_state_requests": [], "closed": False,
                  "dtx_closed": False, "root_reads": 0, "wire_requests": [],
                  "events": [], "display_calls": 0, "action_submissions": 0}
@@ -228,7 +229,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                 if selector == "clientNeedsAccessibility:":
                     if not args[0] and mode == "stop-error":
                         raise RuntimeError("stop refused")
-                    if not args[0] and mode == "action-stop-timeout":
+                    if not args[0] and mode in ("action-stop-timeout", "stop-timeout"):
                         raise TimeoutError("fixture subscription-stop timeout after accepted action")
                     return None
                 req = ax_archive.decode(args[0])
@@ -257,7 +258,9 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                         result = {"unexpected": True}
                 elif kind == 1:
                     state["events"].append("application-root")
-                    result = TOKEN
+                    result = ({**TOKEN, "objectID": TOKEN["objectID"] + 1}
+                              if mode == "root-identity-changed" and state["events"].count("application-root") > 1
+                              else TOKEN)
                 elif kind == 2:
                     state["events"].append("fresh-snapshot")
                     if mode == "snapshot-timeout":
@@ -282,17 +285,21 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                     if mode == "native-deep":
                         container = {**CHILD, "objectID": 102}
                         result = snapshot(TOKEN, [snapshot(container, [snapshot(CHILD)], attrs={2003: FRAME, 2025: False})])
-                    if mode in ("native-deep-state", "native-deep-known-false", "native-deep-visible-priority"):
+                    if mode in ("native-deep-state", "native-deep-known-false", "native-deep-visible-priority",
+                                "supplement-refused", "supplement-timeout", "supplement-invalid",
+                                "supplement-extra-fields"):
                         container = {**CHILD, "objectID": 102}
-                        container_attrs = {2003: FRAME, 5019: "container-id", 2025: False}
+                        container_attrs = {2001: "Native title", 2003: FRAME, 5019: "container-id", 2025: False}
                         result = snapshot(TOKEN, [snapshot(container, [snapshot(CHILD)], attrs=container_attrs)])
                     if mode == "native-structural-duplicate":
                         container = {**CHILD, "objectID": 102}
-                        container_attrs = {2003: FRAME, 5019: "container-id", 2025: False}
+                        container_attrs = {2001: "Native title", 2003: FRAME, 5019: "container-id", 2025: False}
                         result = snapshot(TOKEN, [snapshot(container, [snapshot(CHILD)], attrs=container_attrs),
                                                   snapshot(container, [snapshot(CHILD)], attrs=container_attrs)])
                     if mode == "native-nil":
                         result = None
+                    if mode == "native-child-pid-mismatch":
+                        result = snapshot(TOKEN, [snapshot({**CHILD, "pid": CHILD["pid"] + 1})])
                     if mode == "native-truncated":
                         result[ipb_ax.CHILD_COUNT] = 2
                     if mode == "native-missing-element":
@@ -338,7 +345,8 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                         if 33 not in requested:
                             result.pop(33)
                     elif token["objectID"] == 102 and mode in ("native-deep-state", "native-deep-known-false",
-                                                                  "native-deep-visible-priority", "native-structural-duplicate"):
+                                                                  "native-deep-visible-priority", "native-structural-duplicate",
+                                                                  "supplement-extra-fields"):
                         state["structural_state_requests"].append((token["objectID"], requested))
                         state["events"].append("structural-state")
                         if mode == "native-deep-known-false":
@@ -349,6 +357,10 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                                       42: "placeholder", 45: 2, 46: "XCUIElementTypeButton",
                                       51: 1}
                             result = {key: value for key, value in result.items() if key in requested}
+                    elif mode == "supplement-timeout":
+                        raise TimeoutError("fixture supplemental timeout")
+                    elif mode == "supplement-invalid":
+                        result = ["invalid supplemental record"]
                     elif token["objectID"] == CHILD["objectID"] and 3 in requested and mode in ("description", "label-timeout"):
                         raise TimeoutError("fixture stalled Label")
                     elif token["objectID"] == TOKEN["objectID"]:
@@ -389,7 +401,8 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                          "attribute": 51 if mode == "wrong-attribute" else req["attributeType"],
                          "associatedTranslationObject": req["translation"]}
                 if not (mode == "action-missing-error" and kind == 7):
-                    reply["error"] = 9 if mode == "action-refused" and kind == 7 else 0
+                    reply["error"] = (8 if mode == "supplement-refused" and kind == 5 else
+                                       9 if mode == "action-refused" and kind == 7 else 0)
                 await self.conn._services[0].packet(archive(reply))
         class Connection:
             def __init__(self, reader, writer):
@@ -400,10 +413,14 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                 pass
             async def aclose(self):
                 state["dtx_closed"] = True
+                if mode == "dtx-close-error":
+                    raise RuntimeError("fixture DTX close failed")
         class Socket:
             reader = writer = None
             async def close(self):
                 state["closed"] = True
+                if mode == "socket-close-error":
+                    raise RuntimeError("fixture socket close failed")
         class Rsd:
             peer_info = {"Services": {ipb_ax.SERVICE: {"Port": "123"}}}
             udid = "fixture"
@@ -446,249 +463,219 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                 state["press_state"] = args.press_state
                 return None, state, error
 
-    async def test_notifications_are_not_assigned_to_nodes(self):
-        result, state, error = await self.run_capture("notification")
+    async def test_default_ordinary_schema_and_description_contract_are_unchanged(self):
+        result, state, error = await self.run_capture("description")
         self.assertIsNone(error)
-        self.assertEqual(result["nodeCount"], 2)
-        self.assertGreater(result["unsolicitedCount"], 0)
-        self.assertIs(result["nodes"][1]["enabled"], False)
-        self.assertTrue(state["closed"] and state["dtx_closed"])
-
-    async def test_default_keeps_ordinary_graph_without_snapshot_request(self):
-        result, state, error = await self.run_capture("native-nil", deep=False)
-        self.assertIsNone(error)
-        self.assertEqual((result["nodeCount"], result["maxDepth"]), (2, 1))
+        self.assertEqual(result["schemaVersion"], 1)
         self.assertEqual(result["hierarchySource"], "AXChildren")
         self.assertEqual(result["attributePolicy"], "description-first")
+        self.assertEqual(result["ordinaryAXNodeCount"], 2)
+        self.assertEqual(result["nodes"][1]["description"], "Example video title")
         self.assertNotIn(2, state["requests"])
-        self.assertIs(result["nodes"][1]["enabled"], False)
 
-    async def test_native_geometry_precedence_does_not_emit_frame_and_unavailable(self):
-        result, state, error = await self.run_capture("native-null-frame")
+    async def test_unsolicited_notifications_are_not_assigned_to_ordinary_nodes(self):
+        result, state, error = await self.run_capture("notification")
         self.assertIsNone(error)
-        root = result["nodes"][0]
-        self.assertEqual(root["frameUnavailable"], "CGRectNull")
-        self.assertNotIn("frame", root)
-
-    async def test_deep_structure_and_ordinary_state_use_same_transport(self):
-        result, state, error = await self.run_capture("native-deep")
-        self.assertIsNone(error)
-        self.assertEqual((result["nodeCount"], result["maxDepth"], result["ordinaryAXNodeCount"]), (3, 2, 2))
-        self.assertEqual(result["hierarchySource"], "AXUserTestingSnapshot")
-        self.assertEqual(result["nodes"][1]["children"], ["n2"])
-        self.assertEqual(result["nodes"][2]["parentId"], "n1")
-        self.assertNotIn("enabled", result["nodes"][1])
-        self.assertEqual(result["attributePolicy"], "native-snapshot+description-first")
-        self.assertEqual(result["stateScope"], "native-visible+ordinary-state")
-        self.assertIs(result["nodes"][1]["visible"], False)
-        self.assertEqual(state["structural_state_requests"], [])
-        self.assertIs(result["nodes"][2]["enabled"], False)
-        self.assertEqual(state["requests"].count(2), 1)
-
-    async def test_structural_state_preserves_true_and_false_without_label_read(self):
-        result, state, error = await self.run_capture("native-deep-state", full_state=True)
-        self.assertIsNone(error)
-        structural = result["nodes"][1]
-        self.assertIs(structural["enabled"], True)
-        self.assertIs(structural["focused"], False)
-        self.assertIs(structural["selected"], True)
-        self.assertIs(structural["visible"], False)
-        self.assertEqual(structural["placeholder"], "placeholder")
-        self.assertEqual(structural["roleCode"], 2)
-        self.assertEqual(structural["roleDescription"], "XCUIElementTypeButton")
-        self.assertEqual(structural["subroleCode"], 1)
-        self.assertEqual(structural["attributeSource"], "native-snapshot+AXAttributes")
-        self.assertEqual(result["ordinaryAXNodeCount"], 2)
-        self.assertEqual(state["structural_state_requests"], [(102, [27, 28, 30, 32, 42, 45, 46, 51])])
-        self.assertTrue(all(3 not in requested for object_id, requested in state["attribute_requests"]
-                            if object_id == 102))
-
-    async def test_structural_known_false_does_not_synthesize_absent_semantics(self):
-        result, state, error = await self.run_capture("native-deep-known-false", full_state=True)
-        self.assertIsNone(error)
-        structural = result["nodes"][1]
-        for key in ("enabled", "focused", "selected", "visible"):
-            self.assertIs(structural[key], False)
-        for key in ("placeholder", "roleCode", "roleDescription", "subroleCode", "hint"):
-            self.assertNotIn(key, structural)
-        self.assertEqual(structural["attributeSource"], "native-snapshot+AXAttributes")
-        self.assertEqual(result["ordinaryAXNodeCount"], 2)
-        self.assertTrue(all(3 not in requested for object_id, requested in state["attribute_requests"]
-                            if object_id == 102))
-
-    async def test_repeated_structural_snapshot_handle_has_one_state_read_and_keeps_paths(self):
-        result, state, error = await self.run_capture("native-structural-duplicate", full_state=True)
-        self.assertIsNone(error)
-        self.assertEqual(result["ordinaryAXNodeCount"], 2)
-        structural = [node for node in result["nodes"] if node.get("identifier") == "container-id"]
-        self.assertEqual(len(structural), 2)
-        self.assertNotEqual(structural[0]["id"], structural[1]["id"])
-        self.assertEqual(structural[0]["parentId"], structural[1]["parentId"])
-        self.assertEqual([node["enabled"] for node in structural], [True, True])
-        self.assertEqual([node["visible"] for node in structural], [False, False])
-        self.assertEqual([node["attributeSource"] for node in structural],
-                         ["native-snapshot+AXAttributes"] * 2)
-        self.assertEqual(state["structural_state_requests"], [(102, [27, 28, 30, 32, 42, 45, 46, 51])])
-        self.assertTrue(all(3 not in requested for object_id, requested in state["attribute_requests"]
-                            if object_id == 102))
-
-    async def test_full_state_is_opt_in_and_preserves_native_paths_and_frames(self):
-        default, default_state, default_error = await self.run_capture("native-deep-state")
-        full, full_state, full_error = await self.run_capture("native-deep-state", full_state=True)
-        self.assertIsNone(default_error)
-        self.assertIsNone(full_error)
-        def structure(result):
-            return [{key: node.get(key) for key in ("id", "parentId", "depth", "children", "frame", "frameUnavailable")}
-                    for node in result["nodes"]]
-        self.assertEqual(structure(default), structure(full))
-        self.assertEqual(default["ordinaryAXNodeCount"], full["ordinaryAXNodeCount"])
-        self.assertEqual(default["nodeCount"], full["nodeCount"])
-        self.assertNotIn("enabled", default["nodes"][1])
-        self.assertNotIn("focused", default["nodes"][1])
-        self.assertIs(full["nodes"][1]["enabled"], True)
-        self.assertIs(full["nodes"][1]["focused"], False)
-        self.assertIs(default["nodes"][1]["visible"], False)
-        self.assertIs(full["nodes"][1]["visible"], False)
-        self.assertEqual(default["attributePolicy"], "native-snapshot+description-first")
-        self.assertEqual(default["stateScope"], "native-visible+ordinary-state")
-        self.assertEqual(full["attributePolicy"], "native-snapshot+description-first+structural-state")
-        self.assertEqual(full["stateScope"], "all-native-handles")
-        self.assertEqual(default_state["structural_state_requests"], [])
-        self.assertEqual(full_state["structural_state_requests"], [(102, [27, 28, 30, 32, 42, 45, 46, 51])])
-
-    async def test_full_state_does_not_override_native_snapshot_visibility(self):
-        result, state, error = await self.run_capture("native-deep-visible-priority", full_state=True)
-        self.assertIsNone(error)
-        self.assertEqual(state["structural_state_requests"], [(102, [27, 28, 30, 32, 42, 45, 46, 51])])
-        structural = result["nodes"][1]
-        self.assertIs(structural["visible"], False)
-        self.assertIs(structural["enabled"], True)
-        self.assertEqual(structural["attributeSource"], "native-snapshot+AXAttributes")
-
-    async def test_repeated_native_paths_share_one_state_read(self):
-        result, state, error = await self.run_capture("native-duplicate")
-        self.assertIsNone(error)
-        self.assertEqual((result["nodeCount"], result["uniqueElementCount"]), (3, 2))
-        self.assertEqual(result["nodes"][0]["children"], ["n1", "n2"])
-        self.assertEqual(result["nodes"][0]["navigationUnavailable"], "ambiguous-snapshot-handle")
-        self.assertNotIn("navigationOrder", result["nodes"][0])
-        self.assertTrue(all(node["enabled"] is False for node in result["nodes"][1:]))
-        self.assertEqual(sum(obj == CHILD["objectID"] and 8 in fields
-                             for obj, fields in state["attribute_requests"]), 1)
-
-    async def test_repeated_native_parent_handle_is_reported_ambiguous(self):
-        result, state, error = await self.run_capture("native-parent-duplicate")
-        self.assertIsNone(error)
-        root = result["nodes"][0]
-        self.assertEqual(root["reportedParentUnavailable"], "ambiguous-snapshot-handle")
-        self.assertNotIn("reportedParentId", root)
-
-    async def test_native_root_mismatch_reports_both_handles(self):
-        result, state, error = await self.run_capture("native-root-mismatch")
-        self.assertIsNone(result)
-        self.assertRegex(str(error), r"snapshot root mismatch: expected=\(42, \d+\) actual=\(42, \d+\)")
+        self.assertGreater(result["unsolicitedCount"], 0)
+        self.assertEqual(result["schemaVersion"], 1)
+        self.assertNotIn(2, state["requests"])
         self.assertTrue(state["closed"] and state["dtx_closed"])
 
-    async def test_nil_native_snapshot_reports_device_unavailable(self):
-        result, state, error = await self.run_capture("native-nil")
+    async def test_default_ordinary_root_signature_still_rejects_changed_children(self):
+        result, state, error = await self.run_capture("changed")
         self.assertIsNone(result)
-        self.assertIn("AX snapshot unavailable: device returned nil", str(error))
-        self.assertTrue(state["closed"] and state["dtx_closed"])
+        self.assertIn("root changed during collection", str(error))
+        self.assertIn("changed=children", str(error))
+        self.assertNotIn(2, state["requests"])
 
-    async def test_missing_ordinary_snapshot_handle_reports_identity_and_count(self):
-        result, state, error = await self.run_capture("native-missing-element")
-        self.assertIsNone(result)
-        self.assertIn(f"AX ordinary element absent from native snapshot: pid=42 objectID={CHILD['objectID']} missing=1", str(error))
-        self.assertTrue(state["closed"] and state["dtx_closed"])
-
-    async def test_native_frame_mismatch_reports_identity_and_coordinates(self):
-        result, state, error = await self.run_capture("native-frame-mismatch")
-        self.assertIsNone(result)
-        self.assertIn("AX frame mismatch during collection: pid=42 objectID=", str(error))
-        self.assertIn("ordinary={'x': 0, 'y': 0, 'width': 375, 'height': 812}", str(error))
-        self.assertIn("native={'x': 1, 'y': 2, 'width': 31, 'height': 40}", str(error))
-        self.assertTrue(state["closed"] and state["dtx_closed"])
-
-    async def test_native_snapshot_timeout_reports_attribute_and_cleans_up(self):
-        result, state, error = await self.run_capture("snapshot-timeout")
-        self.assertIsNone(result)
-        self.assertIsInstance(error, TimeoutError)
-        self.assertRegex(str(error), r"AX request type=2 pid=42 objectID=\d+ attribute=52 timed out")
-        self.assertTrue(state["closed"] and state["dtx_closed"])
-
-    async def test_invalid_native_snapshot_never_falls_back(self):
-        for mode in ("native-nil", "native-truncated", "native-missing-element", "wrong-attribute"):
+    async def test_native_deep_avoids_all_ordinary_attribute_walk_failures(self):
+        # These modes model the old ordinary walk's reachable missing children,
+        # frame drift and root-child signature failures. Native deep must not ask
+        # type 5 at all, so those unrelated failures cannot suppress its tree.
+        for mode in ("missing", "frame-changed", "changed", "native-missing-element", "native-frame-mismatch"):
             with self.subTest(mode=mode):
-                result, state, error = await self.run_capture(mode)
+                result, state, error = await self.run_capture(mode, deep=True)
+                self.assertIsNone(error)
+                self.assertEqual(result["schemaVersion"], 2)
+                self.assertEqual(result["attributePolicy"], "native-snapshot")
+                self.assertEqual(result["stateScope"], "native-snapshot")
+                self.assertEqual(result["rootStabilityScope"], "application-identity")
+                self.assertIn("snapshotMs", result)
+                self.assertNotIn("ordinaryAXNodeCount", result)
+                self.assertEqual(state["requests"].count(2), 1)
+                self.assertNotIn(5, state["requests"])
+                self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_native_deep_revalidates_root_identity_and_pid(self):
+        for mode in ("native-root-mismatch", "root-identity-changed", "native-child-pid-mismatch"):
+            with self.subTest(mode=mode):
+                result, state, error = await self.run_capture(mode, deep=True)
                 self.assertIsNone(result)
                 self.assertIsInstance(error, ValueError)
                 self.assertTrue(state["closed"] and state["dtx_closed"])
 
-    async def test_changed_root_does_not_emit_partial_tree(self):
-        result, state, error = await self.run_capture("changed")
+    async def test_native_tree_geometry_null_and_repeated_paths(self):
+        null_result, _, error = await self.run_capture("native-null-frame", deep=True)
+        self.assertIsNone(error)
+        self.assertEqual(null_result["nodes"][0]["frameUnavailable"], "CGRectNull")
+        self.assertNotIn("frame", null_result["nodes"][0])
+        result, state, error = await self.run_capture("native-duplicate", deep=True)
+        self.assertIsNone(error)
+        self.assertEqual(result["schemaVersion"], 2)
+        self.assertEqual((result["nodeCount"], result["uniqueElementCount"]), (3, 2))
+        self.assertEqual(result["nodes"][0]["children"], ["n1", "n2"])
+        self.assertEqual([node["attributeSource"] for node in result["nodes"]],
+                         ["native-snapshot"] * 3)
+        self.assertNotIn("navigationOrder", result["nodes"][0])
+        self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_native_snapshot_limits_count_and_process_identity(self):
+        for mode in ("native-truncated", "native-child-pid-mismatch"):
+            with self.subTest(mode=mode):
+                result, state, error = await self.run_capture(mode, deep=True)
+                self.assertIsNone(result)
+                self.assertIsInstance(error, ValueError)
+                self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_native_snapshot_nil_and_timeout_have_no_result(self):
+        for mode, expected in (("native-nil", "snapshot unavailable"),
+                               ("snapshot-timeout", "type=2")):
+            with self.subTest(mode=mode):
+                result, state, error = await self.run_capture(mode, deep=True)
+                self.assertIsNone(result)
+                self.assertIn(expected, str(error))
+                self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_full_state_supplement_is_per_unique_handle_and_keeps_native_fields(self):
+        result, state, error = await self.run_capture("native-deep-state", deep=True, full_state=True)
+        self.assertIsNone(error)
+        supplement = result["supplementalAX"]
+        self.assertEqual((supplement["status"], supplement["scope"]), ("complete", "all-native-handles"))
+        self.assertEqual(supplement["requestedElementCount"], 3)
+        self.assertEqual(supplement["attemptedElementCount"], 3)
+        self.assertEqual(supplement["completedElementCount"], 3)
+        self.assertEqual(result["schemaVersion"], 2)
+        container = next(node for node in result["nodes"] if node.get("identifier") == "container-id")
+        self.assertEqual(container["attributeSource"], "native-snapshot")
+        self.assertFalse(container["visible"])
+        self.assertEqual(container["supplementalAX"]["enabled"], True)
+        self.assertIs(container["supplementalAX"]["focused"], False)
+        self.assertEqual(container["supplementalAX"]["placeholder"], "placeholder")
+        self.assertEqual(container["frame"], FRAME)
+        self.assertEqual(container["label"], "Native title")
+        self.assertNotIn("enabled", container)
+        self.assertNotIn("roleDescription", container)
+        self.assertEqual(len(state["structural_state_requests"]), 1)
+        self.assertEqual(state["structural_state_requests"][0][0], 102)
+        self.assertEqual(state["requests"].count(5), 3)
+
+    async def test_supplemental_extra_geometry_and_text_do_not_pollute_native_values(self):
+        result, _, error = await self.run_capture("supplement-extra-fields", deep=True, full_state=True)
+        self.assertIsNone(error)
+        container = next(node for node in result["nodes"] if node.get("identifier") == "container-id")
+        self.assertEqual(container["frame"], FRAME)
+        self.assertEqual(container["label"], "Native title")
+        self.assertNotIn("frame", container["supplementalAX"])
+        self.assertNotIn("label", container["supplementalAX"])
+
+    async def test_native_deep_rechecks_display_when_selected_by_point(self):
+        result, state, error = await self.run_capture("display-changed", deep=True, pid=None)
         self.assertIsNone(result)
-        self.assertIn("root changed during collection: pid=42 objectID=", str(error))
-        self.assertIn("changed=children", str(error))
+        self.assertIn("display changed during collection", str(error))
+        self.assertEqual(state["requests"].count(2), 1)
+        self.assertNotIn(5, state["requests"])
         self.assertTrue(state["closed"] and state["dtx_closed"])
 
-    async def test_description_avoids_stalled_label_without_renaming_it(self):
-        result, state, error = await self.run_capture("description")
+    async def test_full_state_keeps_false_and_missing_attributes_distinct(self):
+        result, _, error = await self.run_capture("native-deep-known-false", deep=True, full_state=True)
         self.assertIsNone(error)
-        self.assertEqual(result["nodeCount"], 2)
-        self.assertEqual(result["attributePolicy"], "native-snapshot+description-first")
-        title = result["nodes"][1]
-        self.assertEqual(title["description"], "Example video title")
-        self.assertEqual(title["frame"], FRAME)
-        self.assertNotIn("label", title)
-        self.assertTrue(all(3 not in fields for _, fields in state["attribute_requests"]))
-        self.assertTrue(state["closed"] and state["dtx_closed"])
+        container = next(node for node in result["nodes"] if node.get("identifier") == "container-id")
+        supplement = container["supplementalAX"]
+        for key in ("enabled", "focused", "selected", "visible"):
+            self.assertIs(supplement[key], False)
+        for key in ("placeholder", "roleCode", "roleDescription", "subroleCode", "hint"):
+            self.assertNotIn(key, supplement)
+        self.assertEqual(container["attributeSource"], "native-snapshot")
 
-    async def test_label_is_read_when_description_has_no_text(self):
-        result, state, error = await self.run_capture("label-only")
+    async def test_duplicate_native_handles_are_supplemented_once(self):
+        result, state, error = await self.run_capture("native-structural-duplicate", deep=True, full_state=True)
         self.assertIsNone(error)
+        matches = [node for node in result["nodes"] if node.get("identifier") == "container-id"]
+        self.assertEqual(len(matches), 2)
+        self.assertNotEqual(matches[0]["id"], matches[1]["id"])
+        self.assertEqual(matches[0]["supplementalAX"], matches[1]["supplementalAX"])
+        self.assertEqual(sum(object_id == 102 for object_id, _ in state["structural_state_requests"]), 1)
+
+    async def test_supplement_failure_preserves_tree_and_stops_semantic_requests(self):
+        expected_codes = {"supplement-refused": 1, "supplement-timeout": 5, "supplement-invalid": 1}
+        for mode, code in expected_codes.items():
+            with self.subTest(mode=mode):
+                result, state, error = await self.run_capture(mode, deep=True, full_state=True)
+                self.assertIsNone(error)
+                supplement = result["supplementalAX"]
+                self.assertEqual(supplement["status"], "failed")
+                self.assertEqual(supplement["exitCode"], code)
+                self.assertGreater(supplement["attemptedElementCount"], supplement["completedElementCount"])
+                self.assertEqual(result["nodeCount"], 3)
+                self.assertEqual(len(result["nodes"]), 3)
+                self.assertTrue(all(node["attributeSource"] == "native-snapshot" for node in result["nodes"]))
+                self.assertEqual(state["requests"].count(5), supplement["attemptedElementCount"])
+                self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    async def test_main_emits_complete_json_but_returns_supplement_failure_code(self):
+        result, _, error = await self.run_capture("supplement-timeout", deep=True, full_state=True)
+        self.assertIsNone(error)
+        def fake_asyncio_run(coro):
+            coro.close()
+            return result
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch("sys.argv", ["ipb", "--deep", "--full-state", "--json"]), \
+             patch.dict("os.environ", {"IPB_AX_DEVICE_ID": "fixture", "IPB_AX_UDID": "fixture"}), \
+             patch.object(ipb_ax, "version", return_value="11.10.2"), \
+             patch.object(ipb_ax.asyncio, "run", new=fake_asyncio_run), \
+             redirect_stdout(stdout), redirect_stderr(stderr):
+            code = ipb_ax.main()
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(code, 5)
+        self.assertEqual(payload["nodeCount"], 3)
+        self.assertEqual(payload["supplementalAX"]["status"], "failed")
+        self.assertIn("complete native snapshot emitted", stderr.getvalue())
+
+    async def test_cleanup_failures_never_return_a_capture(self):
+        for mode in ("stop-error", "stop-timeout", "dtx-close-error", "socket-close-error"):
+            with self.subTest(mode=mode):
+                result, state, error = await self.run_capture(mode, deep=True)
+                self.assertIsNone(result)
+                self.assertIsNotNone(error)
+                self.assertTrue(state["closed"])
+                if mode != "socket-close-error":
+                    self.assertTrue(state["dtx_closed"])
+
+    async def test_ordinary_label_and_description_semantics_remain_separate(self):
+        result, state, error = await self.run_capture("label-only", deep=False)
+        self.assertIsNone(error)
+        self.assertEqual(result["schemaVersion"], 1)
         self.assertEqual(result["nodes"][1]["label"], "Actual label")
         self.assertEqual(result["nodes"][1]["description"], " ")
         self.assertIn((CHILD["objectID"], [3]), state["attribute_requests"])
 
-    async def test_stalled_label_still_fails_with_request_context(self):
-        result, state, error = await self.run_capture("label-timeout")
+    async def test_ordinary_label_timeout_still_fails_with_request_context(self):
+        result, state, error = await self.run_capture("label-timeout", deep=False)
         self.assertIsNone(result)
         self.assertIsInstance(error, TimeoutError)
         self.assertRegex(str(error), r"type=5 pid=42 objectID=101 attributes=\[3\] timed out")
         self.assertTrue(state["closed"] and state["dtx_closed"])
 
-    async def test_changed_root_description_does_not_emit_partial_tree(self):
-        result, state, error = await self.run_capture("description-changed")
-        self.assertIsNone(result)
-        self.assertIn("changed=text", str(error))
-        self.assertTrue(state["closed"] and state["dtx_closed"])
-
-    async def test_changed_root_label_without_description_still_fails(self):
-        result, state, error = await self.run_capture("label-changed")
-        self.assertIsNone(result)
-        self.assertIn("changed=text", str(error))
-        self.assertTrue(state["closed"] and state["dtx_closed"])
-
-    async def test_changed_root_frame_reports_frame_category(self):
-        result, state, error = await self.run_capture("frame-changed")
-        self.assertIsNone(result)
-        self.assertIn("changed=frame", str(error))
-        self.assertTrue(state["closed"] and state["dtx_closed"])
-
-    async def test_missing_child_list_fails_and_cleans_up(self):
-        result, state, error = await self.run_capture("missing")
-        self.assertIsNone(result)
-        self.assertRegex(str(error), "children unavailable")
-        self.assertTrue(state["closed"] and state["dtx_closed"])
-
-    async def test_duplicate_child_fails(self):
-        result, state, error = await self.run_capture("duplicate")
-        self.assertIsNone(result)
-        self.assertRegex(str(error), "repeats an element")
-        self.assertTrue(state["closed"] and state["dtx_closed"])
+    async def test_ordinary_missing_children_and_duplicate_child_still_fail(self):
+        for mode, message in (("missing", "children unavailable"), ("duplicate", "repeats an element")):
+            with self.subTest(mode=mode):
+                result, state, error = await self.run_capture(mode, deep=False)
+                self.assertIsNone(result)
+                self.assertIn(message, str(error))
+                self.assertTrue(state["closed"] and state["dtx_closed"])
 
     async def test_stop_failure_still_closes_transport(self):
-        result, state, error = await self.run_capture("stop-error")
+        result, state, error = await self.run_capture("stop-error", deep=False)
         self.assertIsNone(result)
         self.assertRegex(str(error), "stop refused")
         self.assertTrue(state["closed"] and state["dtx_closed"])

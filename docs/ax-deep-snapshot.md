@@ -1,6 +1,8 @@
 # Native deep snapshots for `ipb ui`
 
-Branch: `codex/ax-deep-snapshot`, based on `origin/main` (`f3a57dc`).
+Current branch: `codex/ax-native-snapshot`, based on `origin/main` (`74fb859`).
+Deep snapshots and guarded element actions shipped in v0.3.0; this change separates
+native observations from later supplementary AX reads.
 
 ## Problem and design
 
@@ -12,33 +14,39 @@ native AX attributes. The former archive decoder also rejects that valid respons
 at its 100-level UID/container nesting limit.
 
 Keep the existing paired USB userspace RSD, raw DTX channel zero, one outstanding
-read and cleanup path. `ui --deep` requests the native descendant snapshot with
-numeric label/frame/traits/identifier/value and class/bundle attributes. Preserve
-its actual ordered child edges and every path occurrence of a repeated handle;
-output IDs remain snapshot-local. Supplement the ordinary accessible elements
-through the existing Description-first reads to retain state and role fields.
-Structural elements have snapshot fields by default; additional states require explicit
-`--full-state` reads and are never synthesized.
+request and bounded cleanup. The native descendant snapshot alone supplies the deep
+hierarchy, path occurrences, text and rectangles. `ui --deep` no longer walks ordinary
+AXChildren or reconciles its separate generations with the snapshot. Preserve the
+native root/PID, child counts, graph/archive budgets and selected PID/display checks.
+Re-read the application handle to bracket the native observation; this checks identity,
+not stable descendant geometry or an atomic generation. `atomic=false` remains explicit.
+Ordinary `ui` retains its existing graph, Description-first reads and root signature checks.
 
-Retain JSON schema 1's field types and text output. For deep output, change `hierarchySource` and
-`attributePolicy` to describe the new sources; add native class/bundle metadata.
-Navigation/reported-parent handle references are emitted only when a single output
-node resolves them; ambiguity is reported explicitly. No XCUIElementType synthesis.
+Deep dumps use JSON schema 2 because supplemental state moves out of top-level node
+fields. Ordinary dumps and hit-test/press keep schema 1. Deep `attributeSource` and
+`attributePolicy` remain `native-snapshot`; optional state is stored under each node's
+`supplementalAX`. Native fields are never replaced by later values. Native-only dumps
+report `supplementalAX.status=not-requested`. `--deep --full-state` requests the existing
+state/role fields once per unique native handle, after validating the primary snapshot.
+Its separate summary records requested/completed counts and explicit failure context.
+An individual supplemental failure stops further requests and returns nonzero; a complete
+native tree may still be emitted only after successful cleanup. No request follows a
+semantic timeout. Native failure, global cancellation/timeout or cleanup failure emits no
+result. A supplementary response is a later observation, not snapshot-time or actionable
+state; missing fields remain missing.
 
-Decode keyed archives iteratively, with independent byte/object/work/nesting
-budgets and cycle rejection. Validate every native children array against its
-declared count, the root identity, PID and the existing 512-record / depth-32
-product limits. Nil, malformed/truncated snapshots or ordinary elements absent
-from the snapshot fail without fallback or partial output. Root, selected process
-and display pre/post checks remain; `atomic=false` remains explicit.
+Decode keyed archives iteratively with independent byte/object/work/nesting budgets
+and cycle rejection. Validate every native child array against its declared count and
+the 512-record/depth-32 product limits. Nil, malformed/truncated snapshots and invalid
+root/process/display checks fail without shallow fallback or a partial native tree.
 
 ## Element press and supplementary attributes
 
-Default deep includes native hint2002 and visibility2025 plus ordinary Description-first
-state. `--deep --full-state` supplements snapshot-only handles with the proven AXP
-27/28/30/32/42/45/46/51 fields once per unique handle. Native fields have precedence;
-missing values remain missing. The full-state cost is explicit and opt-in. AX focus and
-visibility do not claim XCTest semantics. Never infer XCUI types from classes/traits.
+Default deep includes native hint2002 and visibility2025. `--deep --full-state` reads
+AXP27/28/30/32/42/45/46/51 for every unique snapshot handle into a separate namespace.
+The full-state cost and failures are explicit. AX focus/visibility do not claim XCTest
+semantics; native visibility and later supplemental visibility can legitimately differ.
+Never infer XCUI types from classes/traits.
 
 `ui hit-test --point` returns the actual hit element with identity/display pre/post checks.
 `ui press --identifier` resolves the displayed app and one fresh native handle, confirms
@@ -76,20 +84,35 @@ isolated install and source/installed AX-only smoke pass. Calculator guarded pre
 independent tree/screenshots, including after owned Runner removal; Mac-M2 forwarded AX
 reads, hit-test and pressTwo succeed with closed connections. No production call uses XCTest.
 
-The full supported macOS27/Xcode27/iOS27 native HID/media/CLI-selection and interactive gate
-remains open: fresh Mac-M2 native inventory lacks this13Pro. USB forwarding only validates
-the AX helper. Current PR checks supply the CI/package result; no release is published.
-The user explicitly authorized PR#2 adoption using the completed AX device controls and
-macOS27 CI as this change's gate. This exception does not close native acceptance or waive
-a future release gate. Merge preserves the segmented commit history; no release is published.
+v0.3.0 was formally published after the user's explicit release/Homebrew request;
+its CI, package, tap install and local/forwarded AX evidence are recorded separately.
+The full supported macOS27/Xcode27/iOS27 native HID/media/CLI-selection interactive gate
+remains open because Mac-M2 native CoreDevice does not enumerate the allocated13Pro.
+Earlier gate exceptions are scoped to their completed adoption/release, not this change.
 
-Known, not fixed: Bilibili9.14.0 login/keyboard serial reconciliation intermittently detects
-changing root/handles/geometry; a moving invisible background caption explains one frame
-conflict only. Keep strict failure and opt-in, not a silent shallow fallback. The native
-Settings hierarchy changes with active reference session (171 vs inactive138), exact flag
-unlocated. Direct press on a never-automated device has not been tested; prior Automation
-Mode authorization remains a discriminator even after the Runner is removed. XCTest type
-mapping, broader action/page coverage, atomicity, token lifetime and MCP remain follow-ups.
+The current user authorizes native-only deep observations plus separate supplemental
+attributes and asks for actual13Pro Bilibili empty login-modal/numeric-keyboard controls.
+Baseline v0.3.0 intermittently fails root/handle/frame reconciliation in this state; one
+frame mismatch maps to an invisible moving carousel caption. Other root/handle causes
+remain unisolated. Reproduce baseline, compare repeated native-only/full-state reads,
+validate complete ordered edges and usable rectangles, and retain screenshots/raw data
+outside Git. Implementationdde8557 passes52AX regressions on both hosts and the complete local
+host suite. Ten interleaved13Pro target-page trials show v0.3.0deep6/10 versus native
+10/10 and separated full-state10/10; native trees have150–152 records/depth18 and all
+ten digit rectangles. Native-only mean query481ms versus old successful1578ms. The
+isolated install and source/installed Settings AX smoke pass. Three forwarded macOS27
+pairs also pass; native inventory still lacks this phone, so the full matrix stays open.
+A follow-up live close-overlay control returns native error8 after72 state reads,
+exits1 and preserves the complete170-node native tree plus explicit failed supplement.
+Fresh closed/reopened reads succeed with expected keyboard presence/absence; this
+negative branch is now device-proven. No further implementation defect is found.
+Phone restored Settings; no release/default-install change is made. Raw references:
+`~/.local/state/ipb/20261014-native-deep/`.
+
+The native Settings hierarchy changes with active reference session (171 vs inactive138),
+exact flag unlocated. Direct press on a never-automated device remains untested; prior
+Automation Mode authorization is still a discriminator. XCTest type mapping, broader
+page/action coverage, atomicity, token lifetime and MCP remain follow-ups.
 
 Raw evidence is outside Git at `~/.local/state/ipb/20261013-13pro-xctest/`; only condensed
 problems, root-cause boundaries and protocol conclusions are committed. Earlier deep
@@ -99,4 +122,6 @@ research remains on `codex/communication-capabilities-20261013` (`03f5ce8`).
 
 - Replacing the default before overlay validation: regresses a currently readable Bilibili page.
 - Silent shallow fallback: hides nil/truncated native snapshots and changes coverage unnoticed.
+- Requiring ordinary/native geometry equality: rejects a valid native tree when background
+  animation changes geometry between serial reads. Keep observations separate instead.
 - Global handle deduplication: deletes real repeated paths and their parent edges.

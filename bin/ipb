@@ -73,7 +73,7 @@ screen
   stream --dir DIR [--count N] [--fps F] [--seconds S] | --stdout
                                                live JPEG frames, no DeviceHub
   mirror [--seconds S] [--csv PATH]            live screen, mouse, keyboard and text clipboard (GUI)
-  ui [--deep [--full-state]] [--json] [--pid PID | --point X Y] read AX tree/frames/state (USB)
+  ui [--deep [--full-state]] [--json] [--pid PID | --point X Y] read AX tree/frames; --full-state adds separate state (USB)
   ui hit-test [--point X Y] [--json]           read the actual AX element at a point
   ui press --identifier ID [--json]           resolve a fresh element and press once
 

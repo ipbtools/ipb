@@ -78,20 +78,39 @@ if [[ "${SMOKE_AX:-0}" == 1 || "${SMOKE_AX_ONLY:-0}" == 1 ]]; then
   print -r -- "$LAST_OUT" > "$OUT/ui.json"
   run "AX deep JSON" -- "$CTL" ui --deep --json
   print -r -- "$LAST_OUT" > "$OUT/ui-deep.json"
-  run "AX graph contract" -- python3 - "$OUT/ui.json" "$OUT/ui-deep.json" <<'PY'
+  run "AX full-state JSON" -- "$CTL" ui --deep --full-state --json
+  print -r -- "$LAST_OUT" > "$OUT/ui-full-state.json"
+  run "AX graph contract" -- python3 - "$OUT/ui.json" "$OUT/ui-deep.json" "$OUT/ui-full-state.json" <<'PY'
 import json, sys
-for path, source, policy in zip(sys.argv[1:], ('AXChildren', 'AXUserTestingSnapshot'),
-                                 ('description-first', 'native-snapshot+description-first')):
+for index, path in enumerate(sys.argv[1:]):
+    deep = index > 0
+    source = 'AXUserTestingSnapshot' if deep else 'AXChildren'
+    policy = 'native-snapshot' if deep else 'description-first'
     d = json.load(open(path))
-    assert d['schemaVersion'] == 1 and d['atomic'] is False and d['rootStable'] is True
+    assert d['schemaVersion'] == (2 if deep else 1) and d['atomic'] is False and d['rootStable'] is True
     assert d['scope'] == 'application-accessibility' and d['coordinateSpace'] == 'device-logical-points'
     assert d['hierarchySource'] == source
     assert d['attributePolicy'] == policy
     nodes = d['nodes']; by_id = {n['id']: n for n in nodes}
     assert len(nodes) == d['nodeCount'] == len(by_id) and nodes
-    assert 0 < d['ordinaryAXNodeCount'] <= d['uniqueElementCount'] <= d['nodeCount'] <= 512
+    assert 0 < d['uniqueElementCount'] <= d['nodeCount'] <= 512
+    if deep:
+        assert 'ordinaryAXNodeCount' not in d
+        assert d['rootStabilityScope'] == 'application-identity'
+        assert 0 <= d['snapshotMs'] <= d['queryMs']
+        assert all(n['attributeSource'] == 'native-snapshot' for n in nodes)
+        supplement = d['supplementalAX']
+        if index == 1:
+            assert supplement['status'] == 'not-requested'
+            assert all('supplementalAX' not in n for n in nodes)
+        else:
+            assert supplement['status'] == 'complete' and supplement['scope'] == 'all-native-handles'
+            assert supplement['requestedElementCount'] == supplement['attemptedElementCount'] == supplement['completedElementCount'] == d['uniqueElementCount']
+            assert all(isinstance(n['supplementalAX'], dict) for n in nodes)
+    else:
+        assert d['ordinaryAXNodeCount'] == d['uniqueElementCount']
     assert d['maxDepth'] == max(n['depth'] for n in nodes) <= 32
-    assert all(n['attributeSource'] in ('AXAttributes', 'native-snapshot', 'native-snapshot+AXAttributes') for n in nodes)
+    assert all(n['attributeSource'] in ('AXAttributes', 'native-snapshot') for n in nodes)
     roots = [n for n in nodes if n['parentId'] is None]; assert len(roots) == 1
     assert roots[0]['depth'] == 0 and any('frame' in n for n in nodes)
     visited = set(); pending = [roots[0]['id']]

@@ -1,7 +1,9 @@
 # Application elements with `ipb ui`
 
 This source revision provides `ipb ui --deep` to read an application's native
-deep accessibility snapshot, numerical element frames and state over DevicesApp raw DTX.
+deep accessibility snapshot and numerical element frames over DevicesApp raw DTX.
+This development revision separates later state reads from the native observation;
+`v0.3.0` still uses the earlier ordinary/native reconciliation described in its tagged guide.
 `ui hit-test` reads the element at a point; `ui press` activates a freshly resolved identifier.
 Default `ipb ui` retains the ordinary AXChildren graph. `v0.3.0` includes the
 deep/state/action additions; earlier `v0.2.0` has only ordinary AXChildren reads.
@@ -41,64 +43,81 @@ AX coordinate space. Failed or nil hit tests fail the command, with no automatic
 
 ## Returned graph and text policy
 
-JSON schema 1 retains `snapshotId`, application PID/selection, a `nodes` array with
-snapshot-local `id`, `parentId`, ordered `children`, depth and available attributes.
-`--deep` sets `hierarchySource="AXUserTestingSnapshot"` and identifies the native descendant hierarchy.
-Repeated element handles keep distinct path records and output IDs; `nodeCount` counts
-records, while `uniqueElementCount` counts native handles. `ordinaryAXNodeCount` counts
-ordinary accessible elements whose state was supplemented. IDs are valid only within
-that output; they are not reusable action tokens.
+Ordinary dumps keep JSON schema 1 and the existing AXChildren/Description-first contract.
+Deep dumps use **schema 2**: `hierarchySource="AXUserTestingSnapshot"`,
+`attributePolicy="native-snapshot"` and `stateScope="native-snapshot"`. Each node has a
+snapshot-local `id`, `parentId`, ordered `children`, depth and actual native attributes.
+Repeated handles keep distinct path records; `nodeCount` counts records and
+`uniqueElementCount` counts handles. Deep no longer walks ordinary AXChildren, so it does
+not report `ordinaryAXNodeCount` or ordinary navigation/reported-parent relations.
+IDs are valid only within that output; they are not reusable action tokens.
 
-Native snapshot fields include label, hint, identifier, value, frame, traits and native AX
-visibility (2025). `stateScope="native-visible+ordinary-state"` describes default deep output. Frames are
-**device logical points**; traits are decimal strings preserving all 64 bits. Native
-class/type strings (5003/5004) and bundle ID (3003) retain their numeric keys under
-`nativeAttributes`. They do not define XCTest element types. Unavailable properties are
-omitted; `CGRectNull` is reported as `frameUnavailable`. Structural records may have no
-text or additional state. The text renderer shows Label, Description, Identifier, then native class text.
+Native fields include label, hint, identifier, value, frame, traits and AX visibility
+(2025). Frames use **device logical points**; traits are decimal strings preserving all
+64 bits. Native class/type strings (5003/5004) and bundle ID (3003) retain their numeric
+keys under `nativeAttributes`. These do not define XCTest element types. Unavailable
+properties are omitted; `CGRectNull` is reported as `frameUnavailable`. Structural records
+may have no text or state. The text renderer shows native Label, Identifier, then class.
 
-For `--deep`, `attributePolicy="native-snapshot+description-first"` supplements ordinary
-accessible elements with description, placeholder, role/subrole and enabled/focused/selected/visible
-fields through the previous Description-first reads. Label 3 is only requested without
-nonblank Description, avoiding the reproduced device-side rich Label encoding failure
-on Bilibili. Native snapshot label 2001 is returned directly through the snapshot; it is
-not a renamed Description. `attributeSource` distinguishes snapshot-only records from
-`native-snapshot+AXAttributes`. Native snapshot fields retain precedence. State fields
-are not invented for the extra structural records.
+`ui --deep` obtains the tree and rectangles from one native response. It does not require
+separately read ordinary handles, rectangles or root children to match that observation.
+The application root handle, selected PID and display are checked around collection.
+`rootStable=true` with `rootStabilityScope="application-identity"` describes only that
+application identity check; it does not claim stable descendant geometry. `atomic=false`
+remains explicit. `snapshotMs` is elapsed query time through validation of this primary
+observation; `queryMs` also includes optional supplementary reads. Both exclude tunnel
+startup and cleanup, and neither measures only device snapshot computation.
 
-Use `--deep --full-state` to supplement every unique snapshot-only handle with the proven
-enabled/focused/selected/visible, placeholder and role/subrole attributes. Repeated path
-records share one read. `stateScope="all-native-handles"` and
-`attributePolicy="native-snapshot+description-first+structural-state"` identify this mode;
-missing fields remain omitted and snapshot fields retain precedence. This costs one extra
-request per snapshot-only handle: the same-page Settings controls took about 3.5 s versus
-1.8 s for default deep, excluding fresh tunnel/import startup. Larger pages remain subject
-to the 30 s budget. Native AX visibility and focus are not XCTest visibility/focus; false
-values are preserved even when XCTest reports true.
+### Supplementary state
 
-Parent edges come from the actual native snapshot. Navigation order and reported AX parent
-are separate handle relations. Ambiguous references to repeated handles are omitted and
-marked `navigationUnavailable` / `reportedParentUnavailable="ambiguous-snapshot-handle"`;
-the client does not choose an arbitrary path.
+Native-only dumps report `supplementalAX.status="not-requested"`. Add
+`--deep --full-state` to read enabled/focused/selected/visible, placeholder and role/subrole
+once per unique native handle. Repeated path records share one read. Results live in
+**`node.supplementalAX`**, not the native node fields. For example:
 
-Collection is serial and bounded (512 records, depth 32, 30 s plus bounded cleanup).
+```json
+{
+  "id": "n12",
+  "visible": false,
+  "supplementalAX": {"enabled": true, "visible": true, "roleCode": 2}
+}
+```
+
+The two visibility values come from different reads and may disagree. Supplementary
+attributes are later observations with AX semantics, not snapshot-time or XCTest state.
+They cannot be used to bypass the fresh guards in `ui press`. Missing fields remain missing;
+false values stay false. No rich Label, ordinary child list or frame request is needed.
+
+The top-level `supplementalAX` summary reports `status`, `scope="all-native-handles"`,
+requested/attempted/completed unique-element counts, requested AXP attribute IDs and its
+own `queryMs`. `status="complete"` means every handle's reply was read and validated,
+not that every optional field exists or all reads share one generation. This costs one
+request per unique handle and remains subject to the 30 s command budget.
+
+On an individual supplementary request/validation error, further semantic reads stop.
+Global command timeout/cancellation is excluded from this retained-tree case. If the primary tree
+was valid and cleanup succeeds, JSON still contains that **complete native tree**, any
+completed supplementary results and `supplementalAX.status="failed"` with error type,
+message and affected snapshot node IDs. The command prints a diagnostic and exits **1**
+(or **5** for a request timeout). Consumers may use the native observation while treating
+supplementation as failed; exit 0 never hides a failed requested read. Text output also
+prints the native tree and a stderr diagnostic. There is no retry or shallow fallback.
+
+### Collection failures
+
+Collection is bounded to 512 records and depth 32, with a 30 s main budget plus
+bounded cleanup.
 The keyed archive has separate byte/object/work/nesting limits and is decoded iteratively.
-Every native child array must agree with its declared count. Nil/malformed/truncated
-snapshots, missing ordinary elements, changed geometry/roots, exhausted budgets or cleanup
-failures return nonzero without a partial tree or shallow fallback. `atomic=false` remains
-intentional: ordinary root text/frame/children, selected PID and display checks do not prove
-an atomic generation for all descendants. Cleanup reports the known close-before-stop-ack
-case separately from acknowledged teardown.
+Every native child array must agree with its declared count. Native nil/malformed/truncated
+snapshots, invalid root/PID/display checks, global timeout/cancellation or cleanup failures
+return nonzero **without JSON or a partial native tree**. Cleanup separately reports the
+known close-before-stop-ack case.
 
-Without `--deep`, the existing AXChildren tree and Description-first policy remain.
-Bilibili login/numeric-keyboard reads can fail on root/geometry/handle changes in both
-ordinary and deep modes. Deep additionally reconciles ordinary state with native geometry.
-A paired control identified one frame conflict on an invisible carousel caption behind the
-login overlay: its horizontal position moved between reads. Two native-only snapshots on
-that page agreed, but other missing-handle/root changes remain unexplained.
-Root errors name the changed component; reconciliation errors include the first missing
-handle/count or both frames. They do not guarantee that a retry will succeed. This is why deep
-reads are opt-in. They fail explicitly rather than silently returning shallow data.
+Ordinary `ui` keeps its serial root text/frame/children checks and can still fail when a
+page changes. The former deep path also required ordinary/native geometry agreement; a
+Bilibili login-modal background carousel could move between those reads and reject a valid
+snapshot. The new path separates the observations; current device verification and any
+remaining native/supplementary failures are recorded in [verification](verification.md).
 
 For `ui`, exit 2 means usage/Python/dependency failure, 3 means device selection or
 UUID-to-USB resolution failure, 5 means timeout/cancellation, and 1 means tunnel,
@@ -144,8 +163,8 @@ Fresh iPhone 13 Pro / iOS 27.0 / 24A437 same-page comparisons, each with three A
 rounds, match every ordered path: Calculator main **45/45**, History overlay **99/99**,
 Settings **171/171**. Calculator native rectangles all match. Settings has 169–170 usable
 rectangles matching exactly; the remaining AX `CGRectNull` records correspond to XCTest
-zero rectangles. They are kept unavailable rather than fabricated. `--full-state` enabled
-values match every XCTest node on both main pages. One Calculator focus value and 52 Settings
+zero rectangles. They are kept unavailable rather than fabricated. The v0.3.0 `--full-state` enabled
+values matched every XCTest node on both main pages. One Calculator focus value and 52 Settings
 visibility values differ; final batch-visible controls report 53 Settings differences and
 22 History-overlay differences, all AX false / XCTest true. These are separate semantics.
 
@@ -158,13 +177,14 @@ An active reference session changes the native Settings hierarchy: the same prod
 138 records / 135 handles / depth20 after Runner stops. The precise system flag responsible
 has not been isolated. Historical 12 mini counts (13 ordinary / 176 XCTest) and inactive
 13 Pro counts cannot be used to calculate missing nodes. Current same-page controls establish
-parity on these pages only. Default deep's mean query time with the reference active was
+parity on these pages only. The v0.3.0 combined deep/state mean query time with the reference active was
 about **1.83 s Settings / 1.18 s History**, versus **2.00 s / 1.44 s** for WDA JSON source;
 full structural state is slower. These timings exclude some startup costs and are not a
 universal benchmark.
 
-The visible-title Bilibili controls from the preceding review remain valid; its changing
-login/keyboard background can still fail strict reconciliation. Arbitrary third-party apps,
+The visible-title Bilibili controls from the preceding review remain valid for v0.3.0.
+Its combined deep/state path could fail on a changing login/keyboard background; this
+source revision separates the native snapshot from later attributes. Arbitrary third-party apps,
 WebViews, secure/rotated pages, offscreen coverage, atomicity, complete XCTest type/state
 parity, persistent sessions and MCP integration remain open. See
 [native wire/source evidence](protocol.md#devicesapp-deep-snapshot-required-attributes-and-host-decoding-2026-10-13)
