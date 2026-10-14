@@ -96,7 +96,14 @@ Baseline v0.3.0 intermittently fails root/handle/frame reconciliation in this st
 frame mismatch maps to an invisible moving carousel caption. Other root/handle causes
 remain unisolated. Reproduce baseline, compare repeated native-only/full-state reads,
 validate complete ordered edges and usable rectangles, and retain screenshots/raw data
-outside Git. Current implementation/device validation is in progress.
+outside Git. Implementationdde8557 passes52AX regressions on both hosts and the complete local
+host suite. Ten interleaved13Pro target-page trials show v0.3.0deep6/10 versus native
+10/10 and separated full-state10/10; native trees have150–152 records/depth18 and all
+ten digit rectangles. Native-only mean query481ms versus old successful1578ms. The
+isolated install and source/installed Settings AX smoke pass. Three forwarded macOS27
+pairs also pass; native inventory still lacks this phone, so the full matrix stays open.
+Phone restored Settings; no release/default-install change is made. Raw references:
+`~/.local/state/ipb/20261014-native-deep/`.
 
 The native Settings hierarchy changes with active reference session (171 vs inactive138),
 exact flag unlocated. Direct press on a never-automated device remains untested; prior

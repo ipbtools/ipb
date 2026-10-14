@@ -10,10 +10,13 @@ live JPEG screen stream (`ipb stream`) and an interactive mirror window (`ipb mi
 location, screenshots.
 
 In this source revision, `ipb ui --deep` reads an application's native deep accessibility tree,
-numerical element frames and state over the DevicesApp raw DTX service. `ui hit-test` reads
+numerical element frames over the DevicesApp raw DTX service. `ui hit-test` reads
 the actual element at a point; `ui press --identifier ID` resolves and presses a fresh element
-once. `--deep --full-state` adds structural state/role reads. These additions ship in
-`v0.3.0`; default `ipb ui` retains the ordinary AXChildren graph. It uses an optional host Python
+once. `v0.3.0` ships deep snapshots and element actions. This development revision makes
+`--deep` a native-only observation (JSON schema 2); `--deep --full-state` adds separately
+reported state/role reads under `supplementalAX`. A failed supplementary read returns
+nonzero while preserving a validated native tree after successful cleanup. Default
+`ipb ui` retains the ordinary AXChildren graph and JSON schema 1. It uses an optional host Python
 backend; it installs nothing on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
 
 The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
@@ -198,7 +201,7 @@ bin/ipb open https://www.apple.com
 bin/ipb clipboard set "你好 🚀" && bin/ipb clipboard get
 bin/ipb text "你好 🚀"             # focus a text field first; replaces the device clipboard
 bin/ipb ui --deep --json                     # native application hierarchy
-bin/ipb ui --deep --full-state --json        # extra state/role reads (slower)
+bin/ipb ui --deep --full-state --json        # separate supplementalAX state/role (slower)
 bin/ipb ui hit-test --point 0.15 0.55 --json
 bin/ipb ui press --identifier Seven --json   # Calculator; re-read to verify effect
 bin/ipb displays --json
