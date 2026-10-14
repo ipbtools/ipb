@@ -106,7 +106,9 @@ A follow-up live close-overlay control returns native error8 after72 state reads
 exits1 and preserves the complete170-node native tree plus explicit failed supplement.
 Fresh closed/reopened reads succeed with expected keyboard presence/absence; this
 negative branch is now device-proven. No further implementation defect is found.
-Phone restored Settings; no release/default-install change is made. Raw references:
+Phone restored Settings. On 2026-10-14 the maintainer subsequently authorized merge and
+v0.4.0 publication/Homebrew update, retaining the full native matrix as open. Candidate
+build/package/Homebrew checks are still required before publication. Raw references:
 `~/.local/state/ipb/20261014-native-deep/`.
 
 The native Settings hierarchy changes with active reference session (171 vs inactive138),

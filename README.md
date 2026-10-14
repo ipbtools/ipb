@@ -12,7 +12,7 @@ location, screenshots.
 In this source revision, `ipb ui --deep` reads an application's native deep accessibility tree,
 numerical element frames over the DevicesApp raw DTX service. `ui hit-test` reads
 the actual element at a point; `ui press --identifier ID` resolves and presses a fresh element
-once. `v0.3.0` ships deep snapshots and element actions. This development revision makes
+once. `v0.4.0` includes the deep snapshots and element actions introduced in v0.3.0 and makes
 `--deep` a native-only observation (JSON schema 2); `--deep --full-state` adds separately
 reported state/role reads under `supplementalAX`. A failed supplementary read returns
 nonzero while preserving a validated native tree after successful cleanup. Default
@@ -20,7 +20,7 @@ nonzero while preserving a validated native tree after successful cleanup. Defau
 backend; it installs nothing on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
 
 The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
-service when `UHID_SERVICE_ID=auto`. `v0.3.0` ships the deep AX and element-operation additions after AX device controls,
+service when `UHID_SERVICE_ID=auto`. `v0.4.0` ships the native snapshot reliability update after AX device controls,
 host/package and Homebrew checks. The full supported physical-device
 gate remains open; this release does not claim full device acceptance. See
 [current verification scope](docs/verification.md#open-items--current-state-living-section).
@@ -49,9 +49,10 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 ## Installation channels
 
-[v0.3.0](https://github.com/ipbtools/ipb/releases/tag/v0.3.0) includes
-[PR #2](https://github.com/ipbtools/ipb/pull/2): native deep AX, structural state,
-point hit testing and guarded identifier press. Stable installs use the precompiled
+[v0.4.0](https://github.com/ipbtools/ipb/releases/tag/v0.4.0) includes
+[PR #5](https://github.com/ipbtools/ipb/pull/5): native-only deep trees/rectangles and
+separate supplemental state (deep JSON schema 2), plus the deep AX, point hit testing
+and guarded identifier press introduced in v0.3.0. Stable installs use the precompiled
 macOS 27 ARM64 package; source/HEAD installs build locally. The supported physical-device
 gate remains open; the maintainer authorized this release using the scoped AX device
 controls and host/package/Homebrew verification. It does not claim full acceptance. See
@@ -59,7 +60,7 @@ controls and host/package/Homebrew verification. It does not claim full acceptan
 
 | Channel | What it installs | Update path |
 | --- | --- | --- |
-| Stable Homebrew | Pinned prebuilt `v0.3.0` archive | `ipb update` or `brew upgrade ipbtools/ipb/ipb` |
+| Stable Homebrew | Pinned prebuilt `v0.4.0` archive | `ipb update` or `brew upgrade ipbtools/ipb/ipb` |
 | Homebrew HEAD | Source from `main`, including the merged UI and mirror additions | `brew install --HEAD ipbtools/ipb/ipb`; `ipb update` keeps it current |
 | Release archive | Selected version with checksum/build metadata | Download a newer Release; keep bin/libexec/share together |
 | PR CI test package | Temporary precompiled development package | Download a newer Actions artifact |
