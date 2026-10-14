@@ -107,8 +107,9 @@ exits1 and preserves the complete170-node native tree plus explicit failed suppl
 Fresh closed/reopened reads succeed with expected keyboard presence/absence; this
 negative branch is now device-proven. No further implementation defect is found.
 Phone restored Settings. On 2026-10-14 the maintainer subsequently authorized merge and
-v0.4.0 publication/Homebrew update, retaining the full native matrix as open. Candidate
-build/package/Homebrew checks are still required before publication. Raw references:
+v0.4.0 publication/Homebrew update, retaining the full native matrix as open. Formal
+candidate build/package/Homebrew checks passed; v0.4.0 is standard Latest and the stable
+tap is updated. The unchanged tested implementation is shipped. Raw references:
 `~/.local/state/ipb/20261014-native-deep/`.
 
 The native Settings hierarchy changes with active reference session (171 vs inactive138),

@@ -4,7 +4,7 @@
 
 **Updated 2026-10-14. This section is overwritten; dated records below are append-only.**
 
-### Native deep observation update (2026-10-14, v0.4.0 preparation)
+### Native deep observation update (2026-10-14, v0.4.0 released)
 
 Merged [PR#5](https://github.com/ipbtools/ipb/pull/5) separates the complete native tree/rectangles from optional
 later AX state. Deep JSON is schema2; ordinary dumps/actions retain schema1. On the
@@ -29,12 +29,28 @@ Settings. This is not the still-unavailable full native macOS27 device gate. No 
 release or Homebrew/default installation update was made during that validation. The
 maintainer has now authorized merge and v0.4.0 publication after candidate host/package/
 Homebrew checks, retaining the full native matrix as open. VERSION and current guides
-are prepared; candidate publication/tap update are pending. Raw local references and
+now describe the published version; candidate and stable tap checks pass. Raw local references and
 exact scope are in the appended October14 records.
 
-### Distribution and documentation scope (checked 2026-10-13)
+### Distribution and documentation scope (checked 2026-10-14)
 
-**v0.3.0 publication complete:** Standard Latest Release identifies tag/source
+**v0.4.0 publication complete:** [Standard Latest Release](https://github.com/ipbtools/ipb/releases/tag/v0.4.0)
+targets `61ac445eac29f173888766446f0450af999f1eb1`.
+[Candidate38522264753](https://github.com/ipbtools/ipb/actions/runs/38522264753)
+passes native build,52AX/host regressions, package/startup/signature/hash and precompiled
+Homebrew install/test. Independent public downloads match all five candidate assets and
+14 product payload hashes. [Tap38522683524](https://github.com/ipbtools/homebrew-ipb/actions/runs/38522683524)
+passes public/tag/main/payload checks and actual installation;
+[tap PR#5](https://github.com/ipbtools/homebrew-ipb/pull/5) merged at
+`9b39d9eb0974b9418a7dd83ba01f1df1701db1ef`, with formula identical to the Release asset.
+Source/HEAD continues following main; no local product reinstall was performed in this
+publication turn. Stable prebuilt remains macOS27 ARM64. Full native supported device
+acceptance remains open under this explicitly scoped release decision. Raw references:
+`~/.local/state/ipb/20261014-v0.4.0-release/`.
+
+**Previous v0.3.0 publication:**
+
+Standard Latest Release at its publication identifies tag/source
 `59d850254c5d6c3417e113b07776ce2d80d20816`.
 [Candidate38402750792](https://github.com/ipbtools/ipb/actions/runs/38402750792) passes
 native build,59AX/host checks, package/hashes/startup and real Homebrew install/test.
@@ -7437,3 +7453,37 @@ remain pending. This authorization is scoped to v0.4.0; the full supported nativ
 macOS27/Xcode27/iOS27 HID/media/interactive gate remains open. Local/forwarded AX controls
 are not a substitute for that matrix. Raw release evidence will remain outside Git at
 `~/.local/state/ipb/20261014-v0.4.0-release/`.
+
+
+## 2026-10-14 — v0.4.0 formal Release and stable Homebrew publication
+
+PR#5 merged as cdaf77c, preserving four exploration/implementation/guide/control commits.
+Version/docs-only PR#6 merged as61ac445eac29f173888766446f0450af999f1eb1, tagged v0.4.0.
+Prep [CI38521957066](https://github.com/ipbtools/ipb/actions/runs/38521957066) and
+main [CI38522226935](https://github.com/ipbtools/ipb/actions/runs/38522226935) pass.
+Formal [candidate38522264753](https://github.com/ipbtools/ipb/actions/runs/38522264753)
+(job115714441639) passes native build,52AX/complete host checks, signing/layout/extracted
+startup/hash checks and real precompiled Homebrew install/test on macOS27.0.1/26A434,
+Xcode27.0/27A266a,CoreDevice651.19. It creates Draft assets; publication is a separate action.
+
+[Release v0.4.0](https://github.com/ipbtools/ipb/releases/tag/v0.4.0) was published as
+standard Latest at2026-10-14T06:29:40Z (release412401228). Independent downloads confirm
+all five public assets are byte-identical to the verified candidate and all14 packaged
+product hashes match BUILD_INFO. Archive SHA256:
+81a279994e052579e7ee840e61752652f6a1d2ac8594c12b49897a420107b816.
+Packaged AX backend1860ee8153fbd97172bc5e1fcd302371d231f10639bb0eda72f8c84a992f4d74
+matches the previously tested13Pro implementation; no runtime change was made after testing.
+
+[Tap prepare38522683524](https://github.com/ipbtools/homebrew-ipb/actions/runs/38522683524)
+(job115715779375) passes public release/tag/main/metadata/all-payload checks and actual
+Homebrew package install/test. [Tap PR#5](https://github.com/ipbtools/homebrew-ipb/pull/5)
+passes [CI38522952537](https://github.com/ipbtools/homebrew-ipb/actions/runs/38522952537)
+and merges at9b39d9eb0974b9418a7dd83ba01f1df1701db1ef. The fetched tap main formula is
+byte-identical to the Release formula asset. Its stable URL/version/SHA target0.4.0;
+HEAD behavior and the macOS27 ARM64 guard remain unchanged.
+
+No local product reinstall or new physical-device run is performed for this publication.
+The earlier scoped13Pro Bilibili/local/forwarded AX evidence remains valid for the unchanged
+backend. The full supported native HID/media/interactive matrix remains open; publication
+does not certify it. Raw hashes/logs/downloads/screenshots and handoff are retained outside
+Git at `~/.local/state/ipb/20261014-v0.4.0-release/`.
