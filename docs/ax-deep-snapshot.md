@@ -102,6 +102,10 @@ host suite. Ten interleaved13Pro target-page trials show v0.3.0deep6/10 versus n
 ten digit rectangles. Native-only mean query481ms versus old successful1578ms. The
 isolated install and source/installed Settings AX smoke pass. Three forwarded macOS27
 pairs also pass; native inventory still lacks this phone, so the full matrix stays open.
+A follow-up live close-overlay control returns native error8 after72 state reads,
+exits1 and preserves the complete170-node native tree plus explicit failed supplement.
+Fresh closed/reopened reads succeed with expected keyboard presence/absence; this
+negative branch is now device-proven. No further implementation defect is found.
 Phone restored Settings; no release/default-install change is made. Raw references:
 `~/.local/state/ipb/20261014-native-deep/`.
 

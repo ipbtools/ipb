@@ -15,6 +15,12 @@ closed edges and rectangles for all ten digits, the empty phone field and login 
 Query means are481ms native,1578ms old successful samples,3474ms separate full-state;
 these exclude tunnel setup/cleanup and are not universal performance claims.
 
+A later real-device transition control closes the login overlay during full-state.
+The device returns error8 at the73rd unique handle after72 completed reads; the command
+exits1, reports failed supplementation and retains all170 native nodes, closed edges
+and ten digit rectangles. Reopening the overlay/keyboard permits fresh native and
+full-state reads. This failure branch is now device-observed, not only fixture-proven.
+
 Source/isolated-install Settings ordinary/native/full-state smoke pass13/138/138.
 52 maintained AX tests and the complete host checks pass locally; the same52 tests pass
 on Mac-M2. Its USB-forwarded helper also passes three native/full-state Bilibili pairs,
@@ -7375,3 +7381,38 @@ scratch `/private/tmp/ipb-native-deep-20261014`). Remote isolated source/env/res
 `/tmp/ipb-native-deep-20261014.AL53Lp`; owned SSH control and reverse USB socket are
 closed/removed. Phone is restored to Settings. Only condensed confirmed problem/fix and
 reusable regressions are committed. Earlier dated records remain byte-identical.
+
+
+## 2026-10-14 — Live overlay transition and supplemental refusal control
+
+After the user explicitly releases13Pro for continued use, the unchanged candidate
+implementationdde8557 / AX SHA1860ee8153fbd97172bc5e1fcd302371d231f10639bb0eda72f8c84a992f4d74
+is exercised on the same local26.5.1 host, USB13Pro/iPhone14,2/iOS27.0/24A437.
+Bilibili9.14.0/build91400300 is rechecked from device metadata. No code or dependency
+change, rebuild, XCTest, phone app install or shared installation update is performed.
+
+The recommendation page returns109 records in native and full-state modes. Open the
+observed top-left Login entry: the empty phone form/numeric keyboard returns170 records,
+closed edges and frames for all ten digits. Start one normal installed
+`ui --deep --full-state --json`, then issue one observed close-button tap1.704s after
+command start. The completed command returns exit1 with a **complete170-node native
+tree**, snapshotMs499.209, supplemental statusfailed/requested170/attempted73/completed72,
+and native error8 for output node n72. Its native frame x287/y98/w48/h48 contains the
+observed close tap point (311.22,121.536); it has no label/identifier. This locates the
+refused record geometrically without inventing a semantic name or proving every error8
+means a removed view. Cleanup acknowledges stop and closes connection/tunnel.
+
+After the close, a fresh native read returns114 records, with no phone form or numeric
+keyboard; screenshot independently confirms both have gone. Reopen the form: native173
+and full-state171 records succeed, with all ten digit frames and completed supplementation.
+Dynamic counts are preserved; states are separately sampled, not claimed identical or
+atomic. Screenshots verify both closed and reopened states. The one expected failed
+supplement does not discard the native tree or poison the next fresh session. No new
+implementation defect is found. Global timeout/cancel and other failure classes retain
+their earlier proof limits; this test establishes one live supplemental-refusal branch.
+
+Phone restored Settings, screenshots checked, all one-shot processes/tunnels closed.
+Raw local controls/timestamps/JSON/screenshots are outside Git at
+`~/.local/state/ipb/20261014-native-deep-transitions/` (original scratch
+`/private/tmp/ipb-native-deep-transitions-20261014`). Full native supported-host gate
+remains open; no release/tap publication or default-mode change is made.
