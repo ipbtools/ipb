@@ -23,6 +23,7 @@ branch may be ahead of Homebrew HEAD. Check the running path with `command -v ip
 | How should Device Hub behavior be captured? | [Tracing procedure](devicehub-tracing.md) |
 | How is a reviewed version released? | [Manual release checklist](releasing.md); automation is not configured |
 | How would the tool ship without Xcode? | [Standalone distribution plan](standalone-distribution.md) |
+| Which protocol/AX findings are proven, and where do input/session gaps remain? | [Consolidated P0 findings F01–F22, business matrix and evidence index](ax-p0-research.md) |
 
 ## Evidence and earlier research
 
