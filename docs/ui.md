@@ -1,8 +1,8 @@
 # Application elements with `ipb ui`
 
-This source revision provides `ipb ui --deep` to read an application's native
+v0.4.0 provides `ipb ui --deep` to read an application's native
 deep accessibility snapshot and numerical element frames over DevicesApp raw DTX.
-This development revision separates later state reads from the native observation;
+v0.4.0 separates later state reads from the native observation;
 `v0.3.0` still uses the earlier ordinary/native reconciliation described in its tagged guide.
 `ui hit-test` reads the element at a point; `ui press` activates a freshly resolved identifier.
 Default `ipb ui` retains the ordinary AXChildren graph. `v0.3.0` includes the
@@ -184,7 +184,7 @@ universal benchmark.
 
 The visible-title Bilibili controls from the preceding review remain valid for v0.3.0.
 Its combined deep/state path could fail on a changing login/keyboard background; this
-source revision separates the native snapshot from later attributes. Arbitrary third-party apps,
+v0.4.0 separates the native snapshot from later attributes. Arbitrary third-party apps,
 WebViews, secure/rotated pages, offscreen coverage, atomicity, complete XCTest type/state
 parity, persistent sessions and MCP integration remain open. See
 [native wire/source evidence](protocol.md#devicesapp-deep-snapshot-required-attributes-and-host-decoding-2026-10-13)

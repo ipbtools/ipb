@@ -2,6 +2,25 @@
 
 ## Current channels
 
+v0.4.0 prepares the merged [PR #5](https://github.com/ipbtools/ipb/pull/5) at
+`cdaf77c089881477bc07ed70c7f2844154b6eb47`. Native deep trees and rectangles now come
+from one native snapshot; optional later state is separate. Deep JSON changes to
+schema2 (`supplementalAX`); ordinary dumps/actions remain schema1 and deep remains opt-in.
+An individual supplemental failure returns nonzero while retaining the complete validated
+native tree after successful cleanup. Global/native/cleanup failures still emit no result.
+See [UI guide](ui.md) for migration and exit behavior.
+
+The maintainer explicitly authorized merge and publication on 2026-10-14 after the
+scoped 13Pro Bilibili controls and successful [PR CI38511508466](https://github.com/ipbtools/ipb/actions/runs/38511508466).
+This v0.4.0 decision permits formal publication and Homebrew update after candidate
+build/host/package/Homebrew checks. It retains the full native macOS27/Xcode27/iOS27
+HID/media/interactive matrix as open; it does not waive future gates. The same tested
+AX implementation is packaged; this preparation changes only version and documentation.
+Stable prebuilt requirements remain macOS27 ARM64; optional AX dependencies remain separate.
+Candidate publication and tap verification are pending.
+
+## Previous v0.3.0 release
+
 [v0.3.0](https://github.com/ipbtools/ipb/releases/tag/v0.3.0) contains the merged
 [deep AX and element-operation PR #2](https://github.com/ipbtools/ipb/pull/2):
 `ui --deep`, `--deep --full-state`, read-only point hit testing and guarded one-shot
@@ -142,7 +161,7 @@ handoff and condensed verification record.
 4. Update VERSION, user guides and release notes for the reviewed version. Record an exact
    candidate SHA; complete review before selecting the commit to tag.
 
-The full supported physical matrix remains open. The explicit v0.2.0 and v0.3.0 publication decisions
+The full supported physical matrix remains open. The explicit v0.2.0, v0.3.0 and v0.4.0 publication decisions
 are recorded above; standard Release status does not certify physical acceptance.
 
 ## Prepare and publish the reviewed version

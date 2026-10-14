@@ -4,9 +4,9 @@
 
 **Updated 2026-10-14. This section is overwritten; dated records below are append-only.**
 
-### Native deep observation update (2026-10-14, development branch)
+### Native deep observation update (2026-10-14, v0.4.0 preparation)
 
-`codex/ax-native-snapshot` separates the complete native tree/rectangles from optional
+Merged [PR#5](https://github.com/ipbtools/ipb/pull/5) separates the complete native tree/rectangles from optional
 later AX state. Deep JSON is schema2; ordinary dumps/actions retain schema1. On the
 allocated13Pro Bilibili9.14.0 empty login modal/numeric keyboard, ten interleaved trials
 show v0.3.0 deep6/10 (three missing ordinary handles, one moving frame), native-only10/10
@@ -26,8 +26,11 @@ Source/isolated-install Settings ordinary/native/full-state smoke pass13/138/138
 on Mac-M2. Its USB-forwarded helper also passes three native/full-state Bilibili pairs,
 with the same actual phone/keyboard checks. Forwarding is closed and the phone restored
 Settings. This is not the still-unavailable full native macOS27 device gate. No new
-release or Homebrew/default installation update is made. Raw local references and exact
-scope are in the appended October14 record.
+release or Homebrew/default installation update was made during that validation. The
+maintainer has now authorized merge and v0.4.0 publication after candidate host/package/
+Homebrew checks, retaining the full native matrix as open. VERSION and current guides
+are prepared; candidate publication/tap update are pending. Raw local references and
+exact scope are in the appended October14 records.
 
 ### Distribution and documentation scope (checked 2026-10-13)
 
@@ -7416,3 +7419,21 @@ Raw local controls/timestamps/JSON/screenshots are outside Git at
 `~/.local/state/ipb/20261014-native-deep-transitions/` (original scratch
 `/private/tmp/ipb-native-deep-transitions-20261014`). Full native supported-host gate
 remains open; no release/tap publication or default-mode change is made.
+
+
+## 2026-10-14 — v0.4.0 publication scope and preparation
+
+The maintainer requested merge and formal release after the scoped PR#5 results were
+reviewed. PR#5 merged with its four segmented commits at
+cdaf77c089881477bc07ed70c7f2844154b6eb47. Its [CI38511508466](https://github.com/ipbtools/ipb/actions/runs/38511508466)
+passes native build,52AX/host checks, package/startup/hash and actual precompiled
+Homebrew installation on macOS27. The downloaded artifact's backend matches the
+13Pro-tested implementation SHA1860ee8153fbd97172bc5e1fcd302371d231f10639bb0eda72f8c84a992f4d74.
+
+Version0.4.0 marks the deep JSON schema2 migration. VERSION/current guides and this
+publication decision are updated without changing implementation. Candidate tagging,
+build/package/Homebrew checks, formal Latest publication and stable tap verification
+remain pending. This authorization is scoped to v0.4.0; the full supported native
+macOS27/Xcode27/iOS27 HID/media/interactive gate remains open. Local/forwarded AX controls
+are not a substitute for that matrix. Raw release evidence will remain outside Git at
+`~/.local/state/ipb/20261014-v0.4.0-release/`.
