@@ -2,7 +2,7 @@
 
 ## Current channels
 
-v0.4.0 prepares the merged [PR #5](https://github.com/ipbtools/ipb/pull/5) at
+[v0.4.0](https://github.com/ipbtools/ipb/releases/tag/v0.4.0) contains the merged [PR #5](https://github.com/ipbtools/ipb/pull/5) at
 `cdaf77c089881477bc07ed70c7f2844154b6eb47`. Native deep trees and rectangles now come
 from one native snapshot; optional later state is separate. Deep JSON changes to
 schema2 (`supplementalAX`); ordinary dumps/actions remain schema1 and deep remains opt-in.
@@ -17,7 +17,19 @@ build/host/package/Homebrew checks. It retains the full native macOS27/Xcode27/i
 HID/media/interactive matrix as open; it does not waive future gates. The same tested
 AX implementation is packaged; this preparation changes only version and documentation.
 Stable prebuilt requirements remain macOS27 ARM64; optional AX dependencies remain separate.
-Candidate publication and tap verification are pending.
+The formal Latest Release targets `61ac445eac29f173888766446f0450af999f1eb1`.
+[Candidate38522264753](https://github.com/ipbtools/ipb/actions/runs/38522264753)
+passes native build,52AX/host checks, package/signature/startup/hash and actual precompiled
+Homebrew install/test on macOS27.0.1/Xcode27.0/CoreDevice651.19. Independent candidate
+and public downloads match all five assets and14 payload hashes; the AX backend is
+identical to the13Pro-tested implementation.
+[Tap38522683524](https://github.com/ipbtools/homebrew-ipb/actions/runs/38522683524)
+passes published metadata/tag/main/hash and actual package installation checks.
+[Tap PR#5](https://github.com/ipbtools/homebrew-ipb/pull/5) merges at
+`9b39d9eb0974b9418a7dd83ba01f1df1701db1ef`; its formula is byte-identical to the
+published Release asset. Stable installs can run `ipb update` or `brew upgrade ipbtools/ipb/ipb`.
+Existing HEAD installs retain their source/main channel. No local product installation
+was changed by this publication; prior local device controls retain their own scope.
 
 ## Previous v0.3.0 release
 
