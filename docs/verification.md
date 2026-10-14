@@ -4,6 +4,10 @@
 
 **Updated 2026-10-14. This section is overwritten; dated records below are append-only.**
 
+The [current protocol/AX findings index](ax-p0-research.md) groups F01–F22, the six-control
+business matrix, static/runtime proof boundaries and next discriminators. This documentation
+PR adds no input run; the no-Runner preserving-value recipient remains unestablished.
+
 ### Native deep observation update (2026-10-14, v0.4.0 released)
 
 Merged [PR#5](https://github.com/ipbtools/ipb/pull/5) separates the complete native tree/rectangles from optional
@@ -218,7 +222,10 @@ and future release gates remain open.
 | **Keyboard and focused text** | Mirror now handles ordinary down/up, modifiers, repeat, host composition and text Copy/Cut/Paste on its existing FIFO. Live 13 Pro Settings search verifies Shift punctuation, exact `ipb-中文🙂 A1!`, local Mac IME composition followed by committed/copied `测试`, repeat and caret insertion. The product leaves paste prompts visible; the user explicitly authorizes this bench to allow ordinary synthetic-text paste. Final installed noninteractive smoke and host regressions pass on supplementary macOS 26.5.1 / Xcode27B6 / iOS27.0. rc0 alone remains submission only. | Scoped text/keyboard implementation is complete and installed locally. Secure fields, other apps/layouts and the supported macOS27 gate remain open. Text only, 2 MiB bound; no continuous clipboard sync or product-level automatic permission approval. |
 | **Mirror numeric controls / hidden system input** | Code implemented. The user completes 12 mini's password entry on the phone and real XCTest sources are obtained; this does not validate our mirror keypad on the secure sheet. Native Device Hub still had Connecting display during the earlier control. Agent: resolve native display path and verify the numeric panel on a secure page; the 13 Pro repeat is deferred by the latest user decision. No supported-host pass is claimed. | The latest user decision is **“先看 12 mini 结果”**. On 12 mini, human password entry and the corrected reference HTTP client yield actual XCTest sources; the temporary reference is now removed. Native Device Hub display startup and our keypad on the secure page remain unverified. Any future secure-page test needs a working input/display path and fresh human readiness. No supported-host pass is claimed. |
 | **Mirror periodic display refresh timeout** | Bench mirror runs intermittently exit 1 when the existing one-second `device info displays` refresh exceeds devicectl's five-second bound (exit 2). Reproduced with Device Hub closed and zero keyboard events; other input sessions close normally, and a later standalone display query succeeds. | Agent-fixable investigation; cause open. Keyboard-event causality is not established. Preserve the explicit failure rather than hiding stale orientation or replaying input. |
-| **AX vs XCTest baseline and additional DTX functions** | Fresh same-page controls establish complete ordered paths on the three tested pages. An active reference session correlates with Settings171 vs inactive138 records; responsible system flag unlocated. Native action5 press works independently of a running/installed owned Runner. Fresh-device prior Automation Mode dependence is not isolated. | No missing-node percentage from historical12mini176 vs inactive13Pro138. Keep actual AX state separate from XCTest-derived visibility/focus/types. Investigate fresh-device authorization and broader action coverage next. |
+| **AX vs XCTest baseline and additional DTX functions** | Same-page controls match the three recorded pages. P0 clean client0/2/3/0 gives138/depth20 and52 native2025 visibility changes for2/3, with actual Settings hits before/after; same-handle AXP32 control confirms context sensitivity. Retained171/138 difference is11 each UIView/background/content-view wrappers around11 SwiftUI cells. Matched child enumeration branches and faux-cell flag names are known, but inclusion cause is not. APT override and XCTest requesting-client slots are distinct. Native press works without a current Runner; fresh-device authorization remains unisolated. | Do not equate clientType with authorization or adopt client2 as a universal XCTest/visibility fix. Agent can trace wrapper enumeration/flag callers; never-authorized-device control needs an available device. See [P0 plan](ax-p0-research.md). |
+| **AX push/lifetime and text boundaries** | Deleted-token error8, retained background label with zero frame/visiblefalse, stopped-PID error17; repeated surface dumps without observed TreeDestroyed/atomic generation. Field/TextView whole-value and UTF-16 ranges are actual, with ignored/lossy boundaries; whole replacement clears programmatic marked text while selection preserves it. Native known-row action11 scrolls Row20; an already-visible request gives false/error0 with unchanged offset. | Agent can investigate recycled/dynamic rows, observer epochs/backpressure and exact-effect checks. Real IME/candidates, secure/custom controls and general typeText remain open. Product source unchanged. |
+| **Multiline AX callback / native insertion protocol** | Prior13Pro AXAudit parameter loss and ordinary AX-handler failure remain. Latest12mini source resolves Apple's remote RSD/DTX client versus local NSXPC socket adapter, plus a distinct remote-runner broker whose internal entitlement check applies only with Automation Mode disabled. Name-only CoreDevice socket creation succeeds for HID/ordinary.remote and rejects `.runner`/`.control`/`.remote.runner` with1001/no FD. Canonical12mini UUID initiation returns13 capabilities,4s noDriver. Extra socket early close leaves1 pending/continuation warning; the newly started daemon is normally terminated, final absent. No same-UUID test-side callback, AX insertion or business result is reached. | Keep current paste. Locate an actual admitted host relay or preserving endpoint before native807/808 callback/selection/undo/IME tests. The checked routes do not bridge phone Mach namespace; a general no-Runner impossibility is not proven. The prior13Pro pending9→10 limit remains specific to that daemon. See [12mini bridge source](protocol.md#host-to-phone-local-nsxpc-bridge-boundary-2026-10-14). |
+| **AX/HID/XCTest business response** | Six owned UIKit/stock SwiftUI/HTML controls: all three write exact ASCII; AX updates4 models, HID/XCTest6. AX UITextView/TextEditor show text while model/results stay empty and submit disabled after blur, both without and with a current Runner. Chinese/emoji AX/XCTest repeat the boundary; current ipb clipboard+HID paste updates all6 models after reference teardown. Positive native buttons and local submit events are independently observed. Initial Web HID uses Pinyin composition; English matched trials and restored original selection are verified. App-root Web deep42/38 stops at an AXRemoteElement; a targeted52 query yields12 WebContent records. Both owned apps removed; Settings restored. | AX whole-value cannot replace general typing/paste. Native value-preserving admission remains first; filtered/recycled lists, native-handle lifetime and persistent observer are separate follow-ups. Agent can investigate cross-process Web expansion separately. Arbitrary apps, real IME and full supported macOS27 gate remain open. See [business record](#2026-10-14--ax-hid-xctest-business-response-on-iphone-13-pro). |
 | **Orientation and other Device Hub parity** | Mirror now selects live primary geometry, separates device/content/presentation directions, and maps clicks at all four orientations. Cmd-Left/Right works. Rotated-content edge reports match captured native direction flags; 300 ms landscape probes returned Home, ~6 ms CUA drags did not. | Physical mouse edge timing, rotated physical scroll and atomic external-rotation/frame correlation remain open. Siri/recording/new hardware buttons require effect/capability evidence. |
 | **Tap/keyboard timestamp and contact identity** | The ordinary HIDReport builder still had count0 on UP; it now shares the corrected count1 wire builder with Data output. Ordinary max/identity/timestamp differences remain. New rotated-edge reports follow the captured shape including flags/time/identity. | Ordinary field differences remain known, not patched speculatively. Raw swipe probes retain their historical unverified status. |
 | **Silent media loss / cold-start budgets** | Static silence is now correctly tolerated; explicit stream/connection errors fail. Silent loss without an error callback remains indistinguishable from idle until content changes. Setup/watchdog margins are policy values without cold-start calibration. | Agent-fixable measurement work; do not treat a frame-count ceiling as an established transport lifetime. |
@@ -7487,3 +7494,570 @@ The earlier scoped13Pro Bilibili/local/forwarded AX evidence remains valid for t
 backend. The full supported native HID/media/interactive matrix remains open; publication
 does not certify it. Raw hashes/logs/downloads/screenshots and handoff are retained outside
 Git at `~/.local/state/ipb/20261014-v0.4.0-release/`.
+
+## 2026-10-14 — AX P0 context, lifetime and text boundaries on 13 Pro
+
+**Scope:** User requested “P0继续挖挖看” after mergedPR#2/6b84247. Branch
+codex/ax-p0-research-20261013. Serial existing-paired USB target
+7F2FE6E9-5423-552A-A2A2-C499F1D8672F /00008110-0014711C3CC3801E,
+iPhone14,2/iOS27.0/24A437; local macOS26.5.1/25F80, CoreDevice642.15,
+DDI27A5252f, Python3.12.9/pmd11.10.2. Temporary subject uses Xcode27B6/iPhoneOS27 SDK.
+Research began October13 and crossed midnight Asia/Shanghai. No reference Runner started,
+no private entitlement/security flag changed, and no product source changed.
+
+**Context controls:** clean SettingsPID91105 client0/2, honor-modal, full22 attributes,
+frame-only and repeat controls all138 records/135 handles/depth20. Path-by-path0/2
+comparison changes only52 native2025 false→true. Three alternating pairs reproduce
+per-mode signatures; same structural token AXP32 alternates false,true,false,true.
+This narrows visibility semantics, not the171→138 hierarchy mechanism. Original-cache
+APT/AXRuntime UUIDs/dispatch identify a client override slot distinct from requesting-client
+state. Existing active/inactive archives'33 extra records are11 each UIView,
+_UISystemBackgroundView and _UICollectionViewListCellContentView; their causal flag is open.
+Later client0,2,3,4,7,8,9,10,11,12,0 controls remain138/depth20, but under a SpringBoard
+network sheet, so they do not establish clean foreground semantics.
+
+**Controlled subject:** ai.looktech.ipb.axp0probe/PID92137 builds with clang/UIKit,
+signs with the matching ordinary development profile and passes codesign verification.
+Native apps-before proves absence; installation/launch succeeds. Deep baseline96 records/
+92 handles/depth11. Fresh identifier/state/frame/system-centre-hit guards precede single
+native button actions. Actual state proves generation1→2 and push/pop. Removed label
+token givesAX error8; retained covered-page token keeps label but has zero frame/visiblefalse;
+pop restores the same surviving objectID. One fresh-DTX live-token read succeeds.
+After verified owned-process stop, old token giveserror17. These are scoped observations,
+not a stable action-token/atomic-generation contract.
+
+**Push and text effects:** first/popped surface InitialDump102/AdditionalData142 versus
+pushed page22/30, with20 versus4 surface elements; TreeDestroyed not observed. Text
+updates contain actual AXP53/38/47 values. Requested A中文🙂éZ plus newline+尾 becomes
+newline-to-space, UTF-16 length10, field editingChanged1/public AX-value override0.
+Ranges1:2 and3:2 select中文/🙂;4:1 is accepted within the surrogate pair. Requested999:4
+returns nil/error0 but leaves4:1 unchanged. After selecting1:2, whole-value替换🙂 replaces
+all text, caret4:0 and editingChanged2. The app-written Documents/state.json independently
+confirms final value/selection/callbacks. No uncertain mutation is replayed.
+
+**Modal and incomplete controls:** first network sheet is asynchronous. Some explicit
+field edits reach the underlying subject while bulk root switches toSpringBoard39;
+fresh underlying-button hit givesnil/error8 despite app enabled/visible attributes.
+This is additional evidence for keeping actual-hit guards. TextView, marked-text and new
+scroll phases were not reached. Automatic approval review rejects denying the temporary
+subject's network permission; authorization was requested but has not arrived. The denied
+action is not executed and no workaround completes those inputs.
+
+**Cleanup and gates:** native process-after provesPID92137 absent; uninstall/apps-after
+proves the owned subject absent. All AX connections/tunnels close, with acknowledged or
+explicit close-before-ack stop results; no owned pair-cache directory remains. Independent
+state file and raw archives/source/screenshots stay outside Git at
+/private/tmp/ipb-ax-p0-20261013/. Settings is activated, but its screen remains covered by
+the removed subject's system sheet; restoration is incomplete pending user authorization.
+No unrelated native build/smoke or release gate is reported. Full supported native matrix,
+never-authorized-device control, wrapper inclusion cause, broader fields/actions and atomic
+observer semantics remain open. See [current P0 plan](ax-p0-research.md).
+
+## 2026-10-14 — Authorized AX P0 TextView, marked selection and scroll controls
+
+**Authorization / scope:** User answers “允许，仅拒绝测试应用网络权限并继续”. Fresh
+readback confirms the same13Pro UUID/UDID and27.0/24A437, unlocked. The legacy sheet is no
+longer visible by morning; a guarded acknowledgement dismisses the “iOS27.0.1未安装”
+notification, without starting an update. Same supplementary macOS26.5.1/25F80,
+CoreDevice642.15, Xcode27B6 SDK and Python3.12/pmd11.10.2 as the initial P0 record.
+No new XCTest/reference, product code, shared companion or other permission is involved.
+
+**Subject / denial:** The byte-identical previously built ai.looktech.ipb.axp0probe binary
+passes codesign verification. Native inventory confirms absence, then install/launch
+produces ownedPID95680. The new wireless-data sheet is freshly matched by app name,
+label/frame/enabled/visible and actual centre-hit. Single action5 “不允许” returns true;
+independent screenshot shows the unoccluded subject. The prior rejection remains in
+history; this authorization completes that scoped action.
+
+**Text / composition effects:** fresh identifier/frame/state plus actual target-centre-hit
+guard each visible mutation. All mutation replies are recorded separately from actual
+app UITextInput offsets/state and later Documents/state.json copies. Field base中文🙂,
+selection4:2 and the owned Marked button produce basenihao🙂, marked4:5, selection9:0.
+SingleAXP8/53 AX替换🙂 gives length6/caret6:0, clears marked range and field edit count3.
+The mark was created with public setMarkedText in the test subject; this is not real
+Chinese keyboard/candidate composition proof.
+
+UITextView accepts exact A中文🙂éZ plus newline+尾, length10; AXP47 selection1:2 matches
+actual offsets. With that selection, AX whole-value整段🙂 plus newline+第二行 replaces all,
+length8/caret8:0. Its monitored textViewDidChange count stays0 across both AX writes,
+while public AX-value override stays0. A same-view current-ipb single HID Backspace
+deletes the final行, produces caret7:0 and increments didChange0→1. Independent state
+files match before/after. Actual text mutation does not establish keyboard or business
+callback equivalence; unmonitored notifications are not inferred absent.
+
+A separate programmatic field control starts左右nihao🙂, marked2:5/selection7:0.
+Native47 selection3:2 inside and0:1 outside each apply, preserve marked2:5/text/edit count,
+and match separate app-written state files. The programmatic range remains after Done
+resigns focus; system IME commit behavior remains unverified. No uncertain action replay.
+
+**Direct known-row scroll:** fresh deep-only Row20 startsy1485.33/visiblefalse, scrollY0;
+new identifier/frame/enabled reads and an independent visible-button foreground hit
+precede action11. No target acquisition via earlier visibility or HID setup gesture.
+The single request gives true/error0; freshy646/visibletrue and actual scrollY839.33 plus
+screenshot prove movement. A separate already-visible control gives false/error0 and
+unchanged offset. After recording that expected no-op, a new Row00 request gives true,
+y-394→445.33 and scrollY839.33→0. The explicit return phase does not replay either prior
+action. False/error0 alone is not press-like refusal semantics. Recycled/unknown rows
+and a settled-page barrier are not proved.
+
+**Context / source narrowing:** after cleanup, fresh actual hits before/after confirm
+SettingsPID91105. Client0/2/3/0 is138 records/135 handles/depth20 in every read;2/3 each
+change only52 native2025 values. Matching original-cache child-source/UIView class-guard
+selectors and CF literals DisableFauxCollectionViewCells/DisableFauxTableViewCells are
+identified. These are candidate internal states, not the isolated cause of33 wrappers.
+No private flag is written or newly exposed as a remote capability.
+
+**Cleanup / checks:** native process-before bindsPID95680 to AXP0Probe.app/AXP0Probe before
+stop. Native process-after and apps-after verify owned PID/bundle absent after uninstall.
+Every owned AX/DTX/tunnel closes, including documented close-before-stop-ack cases, with
+no remaining owned pair-cache directory. Final screenshot shows unobstructed Settings;
+no full supported macOS27 native gate is claimed. Raw code, archives, app files and
+screenshots stay at /private/tmp/ipb-ax-p0-20261013/ outside Git. Only condensed findings
+and current plan are committed; older dated records are byte-preserved. Wrapper inclusion,
+never-authorized-device baseline, general typeText/app reactions and atomic observer
+semantics remain open. Current plan: [ax-p0-research.md](ax-p0-research.md).
+
+## 2026-10-14 — AX, HID, XCTest business response on iPhone 13 Pro
+
+**Scope / seed:** user requests “先测 AX 写入后的业务响应，对比 AX、HID 和 XCTest”.
+Supplementary host macOS26.5.1/25F80, Xcode27B6, CoreDevice642.15/DDI27A5252f;
+iPhone13Pro/iPhone14,2, iOS27.0/24A437, CoreDeviceUUID
+7F2FE6E9-5423-552A-A2A2-C499F1D8672F, USBUDID00008110-0014711C3CC3801E.
+This is an owned-app research gate, not the supported macOS27 HID/media release gate.
+Product code/CLI are unchanged. Raw artifacts, probe source, hashes, matrix JSON and
+handoff are local at /private/tmp/ipb-ax-business-20261014/ outside Git.
+
+**Subject / reference:** Swift UIKit+stock SwiftUI+local WKWebView fixture
+ai.looktech.ipb.axp0probe builds with Xcode27B6/iPhoneOS27 SDK, signs with an ordinary
+development profile, installs and runs as PID96318. It independently samples public
+backing/DOM values and writes model/results/events into Documents/business-state.json;
+it provides no input server and fetches no external page. Native sandbox copies and
+screenshots are separate from AX acknowledgements. The previously authorized owned-app
+wireless-data denial dismisses its late sheet before accepted input trials.
+
+The saved WDA source labels itself16.14.2; it is a local snapshot rather than a verified
+clean upstream ref. A temporary copy omits only its explicit keyboard-preference setup
+call, rebuilds with xcodebuild build-for-testing, signs and passes deep signature checks,
+then installs the owned ai.looktech.codex.ondevicewda.xctrunner. The element/value route
+retains XCTest event synthesis with shouldClear:NO. The first reference reports actual
+“Timed out while enabling automation mode.” After the user's “已在手机上完成授权”,
+readiness and subsequent typing effects pass. A scratch second-tunnel error before any
+trial input is corrected by sharing one process-wide RSD for AX/HTTP/testmanagerd.
+No keyboard-preference API or clipboard route is called by the retained WDA typing path;
+the internal XCTest implementation is not inferred from that source audit.
+
+**Accepted business matrix:** blank generation/value/model, fresh identity/frame/state,
+actual centre-hit and independent focus precede each input. AXP8/53 client0 whole-value,
+four current-ipb HID key reports and fresh-element XCTest typing compare exact `biz7`.
+All18 active-reference ASCII actual strings match; AX updates4 of6 models, HID/XCTest6.
+The AX UITextView and TextEditor models remain empty, filters have0 hits and native submit
+is disabled, including after blur. Other outcomes have2 matching results, enabled native
+buttons and observed local business.submit events. Twelve no-current-Runner controls
+agree, and the two multiline AX failures recur after reference teardown with screenshots
+showing text beside disabled submit. No generic XCTest parity percentage follows.
+
+AX native field edit/notification count1 differs from HID/XCTest4. AX TextView has0
+monitored didChange/notification events, versus4 on either typing route; TextEditor
+similarly omits Binding updates. Empty SwiftUI reset/focus events are retained separately.
+For both HTML controls, AX emits trusted empty deleteContent then whole insertText;
+typing emits4 key/input sequences. Each receives change on blur. The business listener
+is input, so subscribers to other events are not covered.
+
+Twelve AX/XCTest Chinese+emoji trials use exact 业务中文🙂 and reproduce the same business
+boundary, with exact actual strings on all6 types. One editor XCTest control receives5
+Binding writes but4 onChange calls, omitting the intermediate 业务 update. Six separate
+current-ipb clipboard+HID paste controls after Runner teardown have exact actual/model
+text,1 filter hit and exercised enabled submit. The first paste's rc0 precedes a known
+owned-app/dtpasteboardd permission sheet and empty receiver; allowing that synthetic
+paste completes the pending original input without replay. TextView/TextEditor paste
+delivers1 didChange/Binding update; HTML paste has1 trusted insertFromPaste input event.
+This route is clipboard plus Command+V, not direct Unicode HID usages or real IME proof.
+
+**Input method / Web boundary:** initial Web HID b/i/z enters selected 简体拼音 composition
+and yields bi\u2006z before the control stops. Existing English (US) is selected for matched
+typing trials; original 简体拼音 selection is later verified restored. No keyboard list or
+configuration is modified. Initial app deep42 records/38 handles stops at WebContent's
+AXRemoteElement; a fresh52 request at that token yields12 records with actual input/
+textarea wrappers. DOM IDs are absent as native identifiers. Label+geometry+same-handle
+hit establish targeting; arbitrary Web completeness and product expansion remain open.
+
+**Cleanup / checks:** owned reference completes30 trials and stops; all AX subscriptions/
+DTX connections close, and the shared userspace RSD closes last. The first subject-stop
+check occurs before its asynchronous exit; a subsequent fresh lookup confirms PID0,
+without another stop send. Both owned installation paths are checked, both PIDs0 precede
+uninstall, native app inventories confirm both absent, and no owned pair-cache directory
+remains. Original SettingsPID91105 is restored and matched by actual system hit and
+app label; screenshots include the later settled page after launch transition. No shared
+companion is removed. Native final process inventory is retained locally. Full supported
+matrix, real IME/candidates, secure/custom inputs, dynamic/recycled lists and persistent
+observer semantics remain open. Older dated records are byte-preserved. See the
+[protocol findings](protocol.md#ax-hid-and-xctest-business-response-comparison-2026-10-14)
+and [current plan](ax-p0-research.md).
+
+## 2026-10-14 — Multiline AX callback root cause and compensation on 13 Pro
+
+Scope: user's requested UITextView/TextEditor AX callback investigation, alternate input
+protocols and change-event possibility, using the allocated iPhone13Pro. Research only;
+product source/CLI remain unchanged and full supported native-host acceptance stays open.
+Host macOS26.5.1/25F80, Xcode27B6/CoreDevice642.15/DDI27A5252f; iPhone14,2/iOS27.0/24A437,
+CoreDevice7F2FE6E9-5423-552A-A2A2-C499F1D8672F, USB00008110-0014711C3CC3801E.
+Fresh native details/lock/apps/processes confirm Developer Mode, passcodeRequiredfalse,
+owned subject absent and no current Runner. Before screenshot is inspected Settings.
+No XCTest reference, private entitlement/global keyboard setting or unknown action sweep.
+
+**Build/install/device gate for the owned subject:** public BusinessProbe.swift gains only
+read-only actual-delegate class/respondsToSelector telemetry, retaining the prior six-control
+business subject and independent model/file readers. Ordinary SDK27 arm64 iOS27 Swift build,
+profile signing and strict verification pass; devicectl install and Instruments activation
+produce actualPID96769 and its owned installation path. Source SHA256
+224e09c344007428d285fd7090d46ffd28f601ac22c151283681d349ace078ad;
+signed binary SHA256ae3b4efc0bb35b80161b7810ff17ba49bfe715dae1ef98b77f9b21bd27966243.
+A late network sheet blocks the initial focus after fresh guards; no AX text is sent and that
+attempt is excluded. Its exact owned-app labels/button are freshly checked before the user's
+previously authorized network denial. A new blank generation starts the valid trials.
+
+**Confirmed mechanism:** original-cache reads match DeviceSupport image-header UUIDs for
+UIKit.axbundle731439B9-866C-3335-9429-A7AC20AB87FC, UIKitCore
+AAC84A00-13AB-3B06-B622-A4E676971EB8, APTAA0429D2-50DA-3B83-9C2A-A8D9E752581D and
+AXRuntime6A0D8F1C-E84D-3040-90DC-881A282774AF. The field setter's setText →
+fieldEditorDidChange path sends editingChanged and text notification; the view setter's
+setText → keyboardInputChanged:nil path forwards only that private delegate selector.
+It contains no public didChange or notification post. Both actual delegates support
+textViewDidChange: and report false for keyboardInputChanged:. UIKit backing class is
+UITextView; stock TextEditor backing class is SwiftUI.TextEditorTextView/coordinator.
+This matched branch explains the tested model omission; custom delegates are not covered.
+Addresses/source paths and insertion reachability are in the
+[protocol record](protocol.md#multiline-ax-callback-cause-and-edit-alternatives-2026-10-14).
+
+**Ten valid real-device trials:** each reset verifies blank actual/model and generation;
+fresh native identifier/frame/state and centre-hit guard focus and mutation. Raw AXP8/53
+uses parameters.value NSString; AXP8/47 uses range NSValue/UTF-16. Observe independent
+app files, target callbacks/Binding, filter results and native submit state after input/blur.
+Representative invocation (local research script, not a product command):
+`python3 /private/tmp/ipb-ax-callback-20261014/callback_trials.py 10-view-same-paste uikit business-view ax-select-same-paste`.
+
+| Method, payload `业务中文🙂` / UTF-16 length6 | UITextView | Stock TextEditor |
+| --- | --- | --- |
+| AX whole-value client0 | actual exact/model empty; disabled after blur | same |
+| AX whole-value client3 | actual exact/model empty; disabled after blur | same |
+| AX whole-value → AX full0:6 selection → same-value AX write | no target text callback/model update; selection stays0:6 | same |
+| AX whole-value → full0:6 selection → same-text current-ipb paste without refocusing | one didChange/notification; exact model, one filter hit, enabled submit | one Binding/onChange/notification; same business result |
+| AX whole-value → end6:0 selection → HID0x2c Space → HID0x2a Backspace | two didChange/notifications; intermediate model has space/0 hits; final exact/1 hit | two Binding/onChange/notifications; same intermediate/final outcome |
+
+All four positive controls also perform native guarded local submit and independently read
+business.submit==1; six negative controls remain disabled. Each input is sent exactly once.
+The two paste controls both encounter the owned AX P0 Probe/dtpasteboardd sheet; rc0 leaves
+selection0:6/model empty. Fresh sheet text/allow-button hit guards complete the known synthetic
+pending paste; no touch collapses selection and no paste is resent. Selected paste changes
+sampled model from empty to payload while actual value stays payload, ending selection6:0.
+It depends on clipboard replacement and paste permission; this is a normal replacement edit,
+not a callback-only RPC. Space/Backspace exposes two real business values and cannot safely
+stand in for an arbitrary app's single edit. Late empty SwiftUI reset callbacks are retained
+and distinguished from the current target's events; event totals across controls are not
+misreported as target callbacks. Screenshots verify correct text/results/enabled button.
+
+**Other protocol boundary:** AXRuntime exposes concrete insert0x807/0x808 with value on
+its insertion/deletion UIElement. APT's17 mapped branches/default custom0x7e5 do not forward
+these native IDs; out-of-range AXP IDs are not a native-action pass-through. Separate
+24A437 AXAudit daemon08B6FBF3-3EF9-34FD-B86F-8DCA4E4D6616 accepts AXAction-2055/2056 in a
+native-action-name format behind developer gating, but server drops withValue and manager
+calls parameterless performAction:. Peer extraction is independently checked by main against
+the decisive original instructions. No AXAudit insertion is attempted. No concrete numerical
+Paste/Replace mapping is recovered from named textOperations constants. Live CoreDevice
+advertises Post Darwin Notification, but Apple's distinct center/payload contract supplies
+no generic UIKit delegate/local text-notification operation. No guessed notification is sent.
+A usable remote native insertion-with-value path and its callback/undo semantics remain open.
+
+**Cleanup:** all14 AX phases record stop status (9 acknowledged,5 closed-before-ack),
+closed connection/tunnel or shared tunnel ownership returned to the cleanup owner;
+all pair caches are absent. The owned
+PID96769/path is freshly verified before a single stop; bounded read-only polling confirms
+PID0 before uninstall. Native app/process inventories confirm the subject absent, with no
+AXP0Probe or Runner executable. SettingsPID91105 is restored, independently matched by system
+hit and app label. Settled screenshot is inspected and matches the before page except time.
+No keyboard selection is changed; synthetic clipboard content from paste is left as written,
+without reading/restoring arbitrary prior contents. No shared companion is stopped.
+
+Raw archives, source/sign/install logs, per-trial state/screenshots, original-cache extracts,
+trial-matrix.json, AX-phase-cleanup-matrix.json, source-binary-sha256.json and local handoff:
+`/private/tmp/ipb-ax-callback-20261014/` outside Git. No product build/full smoke or macOS27
+native-device gate is claimed for this documentation-only research delivery.
+
+## 2026-10-14 — Native AX insertion forwarding and admission on 13 Pro
+
+**Scope:** user authorizes deeper native0x807/0x808 forwarding research and clipboard-free
+UITextView/TextEditor business-callback tests on iPhone13Pro. Local supplementary host
+macOS26.5.1/25F80, Xcode27B6/CoreDevice642.15/DDI27A5252f; iPhone14,2/iOS27.0/24A437,
+CoreDevice7F2FE6E9-5423-552A-A2A2-C499F1D8672F, USB00008110-0014711C3CC3801E.
+Fresh details/lock/apps/processes verify Developer Mode, passcodeRequiredfalse, owned
+subject absent and no current Runner. Starting SettingsPID97184/page is screenshot
+inspected. No clipboard read/write, Runner launch, enableAutomation request, private
+entitlement, policy alteration or global keyboard change is used by this probe.
+
+**Owned subject gate:** reuse the prior telemetry fixture's identical source SHA256
+224e09c344007428d285fd7090d46ffd28f601ac22c151283681d349ace078ad and signed binary
+ae3b4efc0bb35b80161b7810ff17ba49bfe715dae1ef98b77f9b21bd27966243. Strict codesign
+verification passes outside the sandbox after the sandbox's certificate-trust error;
+no unnecessary rebuild/resign. Native install/activation produces actualPID97281 and
+owned path FB4F265A-5F23-4D16-945F-2A7BA631B298/AXP0Probe.app. The same AX P0 Probe
+wireless-data sheet is freshly identified and gets the user's prior scoped denial.
+
+**Confirmed protocol/problem investigation:** matching original-cache APT/AXRuntime/
+UIKit/UIAccessibility image UUIDs establish the final action receiver and two getters;
+addresses, binary identities and the captured shapes are in the
+[protocol record](protocol.md#native-ax-insertion-forwarding-and-remote-admission-2026-10-14).
+Native0x808 consumes NSString or a text/source/createsUndoableAction dictionary;
+native0x807 expects attributed text, not a plain-string substitute. APT59 bridges
+native attribute0x887 to the actual insertion/deletion element; APT60 exports unchanged
+native20-byte data for Inspector. All four final trials actually use nonnil getter
+results, with matching PID, current frame/state/actual hit and independent first-responder
+state. This is not a stale/container target explanation for their missing text effect.
+
+The token bridge reads Reset/UIButton and both actual input classes. One native
+AXAction-2010 press changes owned generation1→2. Matching axauditd08B6FBF3-3EF9-34FD-
+B86F-8DCA4E4D6616 nevertheless drops its third argument and invokes parameterless
+performAction, discarding native status. The setter and inspected parameterized-getter
+completion are stubs. Static source extraction started with a peer; main independently
+checks the decisive action branches, constants, handlers and runtime outcomes.
+
+**Valid real-device matrix:** one outstanding semantic AX request, bounded object/byte/
+time limits, fresh reset/focus/identity before each single input. Representative command:
+`PYTHONDONTWRITEBYTECODE=1 python3 /private/tmp/ipb-ax-insert-20261014/audit_trials_11.py`.
+Only known native0x808 is requested through AXAction-2056; no unknown numeric sweep.
+DTX byte decoding verifies four outgoing NSString values and four corresponding
+typeOK replies with absent payload. Independent Documents/business-state.json and
+screenshots establish actual outcomes; reply status alone is not action success.
+
+| Method | UITextView | Stock TextEditor |
+| --- | --- | --- |
+| AXAudit0x808, `biz7` | actual/model empty; no callbacks/results; disabled submit | same |
+| AXAudit0x808, `业务中文🙂` | same; selection0:0, no marked range | same |
+| Existing UniversalHID keys, `biz7` | actual/model exact, two filter hits, four didChange/notifications, enabled submit | actual/model exact, two hits, four Binding/onChange/notifications, enabled submit |
+
+Each HID control also exercises one guarded native local submit and reads business.submit1.
+The native-input rows stay focused with unchanged empty backing text, models and edit state;
+they agree with the lost parameter identified in the adapter, without claiming an observed
+in-app native dispatcher invocation. An initial NSData decoder-wrapper mismatch, an alert-
+blocked focus attempt and an inner `parameter:null` getter/error3 control are excluded:
+all stop before any0x808 text request. Omitting the optional inner key fixes the plain
+getter schema and permits the valid matrix. No uncertain sent edit is replayed.
+No valid attributed0x807/selected-insertion/undo/IME trial is claimed.
+
+**Value-preserving candidate and physical admission boundary:** DDI testmanagerd
+arm64eF154543F-6075-34E5-8ACF-C8245D4F2611 matches current phonePID8118's syslog image.
+The decisive handler/listener/readiness branches are independently re-extracted with
+explicit arm64e selection; older retained disassembly is the arm64 sibling, with different
+addresses. The existing read-only DDI mount is a preexisting resource and is preserved.
+The separate XCTDRemoteAutomationServer handler preserves action/element/value into
+AXUIElementPerformActionWithValue. ServiceType1 listener registration is conditional
+on os_variant internal security policy; accepted connections also enable Automation Mode.
+The getter's actual result on this phone is not observed. Live RSD advertises the independent
+automation service, but its generic DTX capabilities, recovered proxy-channel request and
+ordinary RSDCheckin controls each time out4–6s with no corresponding reply. No beginSession,
+capability exchange at that session level, element lookup or input request is reached.
+Ordinary.remote separately completes generic DTX capability handshake (versions2/1).
+Captured harness-wait logs belong to that ordinary control and cannot diagnose automation.
+Policy gating is a source-grounded candidate, not a conclusive cause of the observed timeout.
+
+The ordinary XCTestSession AX method is on a phone-local NSXPC endpoint. Its inspected
+readiness checks Automation Mode/skip bit and automationServices, without a Runner-PID
+predicate. The ordinary harness and inspected legacy/local protocol declarations do not
+establish a host AX relay. Full harness-to-NSXPC session creation/transfer remains open;
+neither ordinary handshake success nor no-current-Runner state proves access to that method.
+
+**Cleanup and delivery limits:** all12 AX phases close (10 acknowledged stops,2 closed-
+before-ack), returning shared-tunnel ownership where appropriate. The first generic-provider
+timeout exposes a cancellation cleanup limitation: providerClosed alone is insufficient;
+the owning tunnel/process ends, and subsequent raw controls explicitly close their DTX/
+socket. Diagnostic streams/connections close and temporary pair-cache directories are absent.
+Diagnostic phase7 has a partial final AX stop frame in its offline stream decode; this
+coincides with closed-before-ack and is retained, not counted as a complete stop reply.
+The valid four-input phase11 DTX capture decodes without errors.
+Fresh native bundle/PID/path ownership precedes one stop of97281; bounded read-only polling
+provesPID0 before uninstall. Native app/process inventories prove the owned subject absent,
+with no AXP0Probe/Runner executable. SettingsPID97184 is restored and matched by system hit,
+app label and inspected screenshot. Clipboard/keyboard selection are untouched this round.
+
+Raw probes/original extracts, DTX streams/decoded.jsonl, per-trial files/screenshots,
+trial-summary.json, AX-phase-cleanup-matrix.json, source-binary-sha256.json, cleanup result
+and local handoff remain outside Git at `/private/tmp/ipb-ax-insert-20261014/`.
+Product source/CLI/default paste remain unchanged. This is research verification, not
+the supported macOS27 native-device smoke gate or successful native Unicode insertion.
+Next discriminator: a legitimate admitted preserving-value service/session route;
+AXAudit payload variants cannot repair its omitted value.
+
+## 2026-10-14 — Ordinary testmanagerd session and NSXPC boundary on 13 Pro
+
+**Scope/seed:** user continues ordinary testmanagerd session establishment/NSXPC handoff
+research, explicitly without Runner or clipboard, seeking direct multiline AX business
+callbacks on iPhone13Pro. Host macOS26.5.1/25F80, Xcode27B6/27A5252f/CoreDevice642.15;
+DDI27A5252f, iPhone14,2/iOS27.0/24A437, CoreDevice7F2FE6E9-5423-552A-A2A2-C499F1D8672F,
+USB00008110-0014711C3CC3801E. Fresh native details/lock/apps/processes/screenshot show
+Developer Mode, passcodeRequiredfalse, Settings97184, testmanagerd8118, owned subject absent
+and no current Runner. Live syslog again matches the DDI arm64e image UUIDF154543F-
+6075-34E5-8ACF-C8245D4F2611 and retained fat-binary SHA256b2d06cf542e0cd0e82e4b26e699e8a81657222e284b4a5e3e394d3d989216a49.
+No phone app install, Runner launch/test-plan execution, PID authorization, clipboard,
+input/keyboard setting, hidden policy/skip flag or new ABI shim is used this round.
+
+**Confirmed source mechanism:** explicit arm64e original code resolves ordinary harness
+response fulfillment, delegate UUID storage, the other pending callback's NSXPC origin
+and serialized DTX transport handoff. Main independently checks the peer's critical
+branches and constants; exact paths/VMs and argument shapes are in the
+[protocol record](protocol.md#ordinary-testmanagerd-session-creation-and-transport-handoff-2026-10-14).
+
+`_IDE_initiateSessionWithIdentifier:capabilities:` takes nonnil NSUUID/XCTCapabilities,
+fulfills the response and registers the harness by UUID. The matching pending request
+originates in XCTestSession `_XCT_requestSerializedTransportWrapperForIDESessionWithIdentifier:reply:`;
+daemon delegate writes that reply callback to pendingTestConnectionRequests[UUID].
+Only both map entries trigger closeAndHandOffTransportWith: after a DTX barrier. The
+object handed off is serialized DTX transport. This does not expose an AXManager/XCTestSession
+object to the host. The separate phone-local test-bundle NSXPC listener, named
+com.apple.dt.testmanagerd.runner, constructs XCTestSession. Its name does not prove a
+Runner executable is universally required; no legitimate host/local-Mach bridge is recovered.
+
+Apple's protocol-name helper maps modern role objects to legacy wire aliases. Captured
+successful proxy key is dtxproxy:XCTestManager_IDEInterface:XCTestManager_DaemonConnectionInterface.
+Empty own method lists on the legacy protocol placeholders do not disprove these functioning
+RPCs. Main checks protocol refs, original CFString/cstring bytes and the actual sent key.
+
+**Four physical protocol controls:** one existing-paired USB userspace RSD per phase,
+raw bounded AX DTX for independent screen identity, explicit-owned ordinary DTX/socket,
+PID8118-limited syslog and32MiB wire limit. Initiations use fresh UUIDs and empty typed
+XCTCapabilities, each sent once; no mutation is replayed. Representative local command:
+`PYTHONDONTWRITEBYTECODE=1 python3 /private/tmp/ipb-ax-harness-20261014/bootstrap.py 01-legacy-test legacy test`.
+
+| Control | Actual RPC/device result | Recipient/effect boundary |
+| --- | --- | --- |
+| Canonical ordinary test-session initiation | OBJECT reply,13 integer capabilities; native log registers exact requested UUID | Bounded4s wait sees no reverse Driver channel; input not sent |
+| Modern protocol names sent literally | Channel-open OK, then initiation ERROR/DTXConnection1: invalid channel | Python bypasses Apple's alias mapper; actual literal differs from the server's registered canonical key; no repeat |
+| Canonical ordinary control initiation |13 capabilities; native log registers control session | Same4s no-Driver observation; no AX service or input effect established |
+| New canonical initiated session → recovered RemoteAutomation proxy → read-only screen query | Initiation again returns13 capabilities; daemon explicitly logs protocol handler unavailable for that AX proxy; screen query returns invalid-channel1 | Host proxy allocation/channel-open OK do not admit an AX handler; no native807/808 payload is sent |
+
+Offline raw DTX decoding verifies canonical/modern/AX identifier strings, typed NSUUID/
+XCTCapabilities arguments, OBJECT capabilities versus ERROR replies, and no text/action
+selector. The13-entry capability dictionary includes automation mode1; it is not measured
+Automation Mode readiness. A generic decoder initially lacks XCTCapabilities; loading the
+pinned11.10.2 adapter fixes this offline schema limitation without another device call.
+All ordinary-service streams decode without errors. Phase3's AX stream has a partial final
+stop frame consistent with closed-before-ack; retain it rather than counting a full reply.
+
+There is no captured serialized-transport request/handoff/new NSXPC test-session connection
+in these bounded controls. Native post-close summaries report0 test/identified/unidentified/
+remote-automation sessions and no control session. A separate failed modern-literal control
+logs Swift continuation misuse; later pending harness count rises9→10. Ownership/causality
+of that retained entry is not fully isolated. Owned clients close, but all daemon pending
+objects are not claimed removed; the preexisting shared daemon is not restarted. This is a
+research-only known trigger, not a shipped ipb code fix or a new ordinary-path impossibility.
+
+**Adjacent XPC-peer source check:** current host CoreDevice642.15/27A5252f arm64e UUID
+C837E681-C7B4-372B-8AD0-983F7FAB0776 implements Service XPC Peer Connection through a
+feature-identified RSD socket, then connected-FD Mercury wrapping. Main verifies the decisive
+remote_service_connect_socket/xpc_remote_connection_create_with_connected_fd calls. No
+testmanagerd.runner/control feature mapping or direct phone-local NSXPC construction is
+established; no guessed Mach-service-as-feature request is sent.
+
+**Cleanup/acceptance:** all5 AX phases record4 acknowledged stops/1 closed-before-ack and
+closed connection/tunnel; ordinary DTX/socket/syslog/lockdown clients close and temporary
+pair-cache directories are absent. Final native apps/processes/lock verify no owned subject
+or Runner, testmanagerd still8118 and Settings still97184. Actual Settings system hit,
+app label and inspected screenshot match the starting page; an unchanged surface is expected
+because no input was sent. No uninstall is needed because
+the subject was never installed; no clipboard/input/keyboard permission is touched.
+
+The business-callback stage is **unreached**: this round proves no-Runner ordinary bootstrap
+and a concrete AX-handler admission failure, not a UITextView/TextEditor input/callback
+matrix. Prior fixture results remain separate. Product input/default paste is unchanged;
+no product build/full supported macOS27 physical smoke is claimed for documentation research.
+
+Raw probes/matching extracts, original DTX streams/decoded.jsonl, device logs/screenshots,
+probe-summary.json, wire-summary.json, AX-phase-cleanup-matrix.json and local handoff stay
+outside Git at `/private/tmp/ipb-ax-harness-20261014/`. Next useful discriminator is a
+legitimate host-to-NSXPC or another admitted preserving-value endpoint; further ordinary
+UUID initiation alone cannot satisfy the missing test-side request.
+
+
+## 2026-10-14 — Host-to-local NSXPC bridge admission on iPhone 12 mini
+
+**Request/seed:** user explicitly switches to12mini, seeking the matching UUID request and
+clipboard-free native AX insertion with UITextView/TextEditor business callbacks, without
+starting Runner. Supplementary macOS26.5.1/25F80, Xcode27Beta6/27A5252f/CoreDevice642.15,
+DDI27A5252f; physical iPhone13,1 / iOS27.0/24A437, UUID1D533177-5153-5A0C-9102-
+8D0A8ADDAEFB / USB00008101-001D29020E42001E. Existing-paired wired transport and Developer
+Mode verified. Native lockState succeeds with passcodeRequired=false/unlockedSinceBoot=true;
+initial processes contain no Runner/Probe/testmanagerd and the owned fixture is absent.
+Initial screenshot has an account-association sheet over PocketAgent; the human handles it.
+The client makes no account choice or phone input.
+
+**Static discriminator:** matching DDI arm64e and shipped iPhoneOS-target XCTestCore locate
+both UUID callback caller and handler, behind a process-local Mach NSXPCConnection. Actual
+host XCTDaemonControl remote-device provider opens RSD service sockets and constructs DTX;
+its apparent NSXPC socket adapter belongs to the local-computer provider. XCUIAutomation's
+remote-runner client also uses local Mach NSXPC. DDI RemoteRunnerConnectionBroker uses a
+separate local callback/serialized-transport flow. Its readiness is Automation Mode enabled
+OR internal-client entitlement; the inspected listener callback itself returns true after
+reading processIdentifier. Entitlement denial and a token-to-PID admission check are not
+observed at runtime. Full paths/UUIDs/VM references are condensed in
+[protocol.md](protocol.md#host-to-phone-local-nsxpc-bridge-boundary-2026-10-14).
+
+**Physical socket matrix:** a compiled temporary host-only ObjC probe copies the existing
+CoreDevice action envelope, uses the source-defined optional serviceName input, omits
+featureIdentifier, and opens each exact destination once with a12s deadline. It closes any
+returned FD before remote activation or payload; no new Swift ABI shim, phone helper or
+entitlement is introduced.
+
+| Exact serviceName | Result | What it proves |
+| --- | --- | --- |
+| com.apple.coredevice.hid.universalhidservice | FD3, flags72057594037927942, featureIdentifiers containing universalhidservice; immediately closed | Real working name-only remote-service socket path on this selected phone |
+| com.apple.dt.testmanagerd.remote | FD3, same flags, empty featureIdentifiers; no DTX payload, immediately closed | Ordinary DTX endpoint is also reachable by name; the three Mach failures are not a blanket DTX-type limitation. Early-close daemon failure below |
+| com.apple.dt.testmanagerd.runner | CoreDeviceError1001, ServiceName echo, no FD; probe exit3 | Tested named bridge does not admit the phone-local XCTestSession listener |
+| com.apple.dt.testmanagerd.control | Same1001/no FD/exit3 | Tested named bridge does not reach the local IDE socket adapter |
+| com.apple.dt.testmanagerd.remote.runner | Same1001/no FD/exit3 | Tested named bridge does not reach the separate local remote-runner broker |
+
+The error text says Create Service Socket is unsupported, but the positive control prevents
+interpreting that as a global capability failure. These are host XPC request/reply boundaries;
+no phone NSXPC message or serialized transport wrapper is captured. No unknown-name/ID sweep,
+retry, clipboard, Runner or manual callback is used.
+
+**Ordinary12mini control:** one fresh canonical
+`dtxproxy:XCTestManager_IDEInterface:XCTestManager_DaemonConnectionInterface` initiation with
+NSUUID FE137652-C013-C841-FA8D-B71CC260A828 and empty XCTCapabilities returns13 capabilities.
+PhonePID1793 logs exact UUID registration; its process_image_uuid F154543F-6075-34E5-8ACF-
+C8245D4F2611 matches the retained DDI fat SHA256
+b2d06cf542e0cd0e82e4b26e699e8a81657222e284b4a5e3e394d3d989216a49. No reverse Driver appears
+in4s. Host proxy allocation/capabilities are not an AX recipient. No local same-UUID callback
+or input/handoff is generated. Both canonical controls’ original AX/ordinary DTX streams
+decode completely (51 records each, no stream/archive errors) after XCTCapabilities registration.
+
+**New early-close problem:** the additional name-only ordinary.remote FD-only control
+returns a socket and closes it before any DTX handshake/proxy request. Phone logs its
+DTXSocketTransport disconnection followed by `Waiting for proxy request from harness...` and
+`SWIFT TASK CONTINUATION MISUSE`, identifying the initializer
+`init(socket:effectiveUserId:clientPrivilege:diagnosticsProvider:disconnectionHandler:delegate:)`.
+A second source-established canonical session (UUID747711EF-9EDC-9622-3390-8D26BAC22B6E)
+still returns13 capabilities/noDriver in4s and closes, but now logs1 pending harness and
+zero other test/identified/unidentified/remote-automation/control sessions. The before0 →
+after1 counter and warning isolate this early-close trigger; exact pending object identity
+and the missing cancellation/resumption branch remain source questions. This is not the
+prior13Pro modern-literal trial, and no broken call/input is replayed.
+
+**Business scope:** UITextView/TextEditor ASCII/Chinese actual text, model/filter/button,
+public didChange/Binding/onChange and local submit are **unreached**, not failed/no-op or
+zero-callback observations. The recipient is not admitted, so no fixture is installed and
+no native action/value is sent. Previous13Pro business matrices remain separate evidence.
+
+**Cleanup/state:** ordinary sessions/FDs/syslog clients close. The five AX subscriptions
+acknowledge stop; owned DTX/USB userspace tunnels and temporary pairing caches close. The
+initial process inventory had no testmanagerd; this round started PID1793. After the leak,
+a fresh process/path check confirms that exact PID and no Runner; the closure summary has
+zero other active sessions. One normal SIGTERM targets1793 only, native output reports
+success, and a bounded process poll verifies it gone with no replacement daemon. No SIGKILL
+fallback, device reboot, shared preexisting daemon restart or other app termination occurs.
+Post-cleanup native apps/processes/lock plus fresh AX system-hit/label and viewed screenshot
+show PocketAgentPID1295, no Runner/Probe/fixture and testmanagerd absent. The account sheet's
+disappearance is human-controlled; the phone page/content stays intact after client cleanup.
+
+Only condensed investigation documents change; no production code/build or full supported
+macOS27 smoke gate is claimed. Local scripts, original host replies/DTX bytes, matching
+extracts, screenshots, decoded summaries and handoff remain outside Git at
+`/private/tmp/ipb-nsxpc-12mini-20261014/`. The next unresolved item is a concrete admitted
+host-to-local or independent preserving-value endpoint, not another ordinary UUID initiation.
