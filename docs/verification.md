@@ -7605,3 +7605,26 @@ its own probes preserved (来源：peer; cleanup references remain in that task'
 No new release, Homebrew/default install update or merge is performed. Raw JSON/screenshots,
 commands/build/host/install logs, probe sources and local handoff are kept outside Git at
 `~/.local/state/ipb/20261021-runner-free-elements/`.
+
+## 2026-10-21 — Opus review and wait deadline correction (host only)
+
+Opus5.5 independently reviews fixed head `01f0d9a` against `3842611` and returns
+ACCEPT, identifying a pre-tag wait-result correction and release-state documentation.
+The maintainer explicitly waived further physical verification for v0.5.0; no phone
+operation, XCTest connection or Runner is part of this publication turn. Existing
+12mini device evidence remains tied to implementation `c4f29f2`.
+
+A new host CLI fixture reproduces `ui wait --json` returning exit5 with empty stdout
+when the total wait deadline interrupts an in-flight native snapshot. Correction
+`d3ba9bd` catches only the expired wait budget, emits `timed_out` JSON/exit5 and
+retains the last complete observation. A separate request-timeout control still emits
+no JSON and preserves the type2 request failure. Both regressions and all89 AX tests
+pass on supplementary macOS26.5.1/25F80/Python3.12.9, as does complete `make check-host`
+with Xcode27B6. No native physical support claim follows from these fixtures.
+
+[CI39572591516](https://github.com/ipbtools/ipb/actions/runs/39572591516), at `d3ba9bd`,
+passes native macOS27 build, host regressions, package checks and precompiled Homebrew
+installation/test. These are host gates, not the waived device matrix. Release-specific
+state and remaining limits are described in `releasing.md`; raw reviews, model metadata,
+reproduction and check logs remain outside Git at
+`~/.local/state/ipb/20261021-v0.5.0-release/`.
