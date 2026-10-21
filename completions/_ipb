@@ -43,7 +43,7 @@ _ipb_commands() {
     'lock:the side button, under the name you want'
     'wake:the side button, under the name you want'
     'key:one keyboard key'
-    'text:replace device clipboard and paste into focused field'
+    'text:paste at caret/selection, or explicitly replace all in the focused field'
     'key-down:hold a key'
     'key-up:release a key, or all keys'
     'button:a hardware button by HID usage'
@@ -54,7 +54,7 @@ _ipb_commands() {
     'screenrecord:record the screen'
     'stream:live JPEG frames'
     'mirror:live screen, mouse and shortcuts'
-    'ui:AX tree/state, point hit-test or fresh element press'
+    'ui:AX tree, fresh element location, bounded waits, guarded press, scroll and explicit input'
 
     'apps:installed apps'
     'ps:running processes'
@@ -126,7 +126,21 @@ _ipb() {
         displays|capabilities) _values 'format' --json ;;
         stream) _values 'option' --dir --count --fps --seconds --stdout ;;
         mirror) _values 'option' --seconds --csv --service-id --help ;;
-        ui) _arguments '1:operation:(press hit-test)' '--identifier[exact identifier for press]:identifier:' '--deep[native tree and geometry; JSON schema 2]' '--full-state[with --deep, read separate supplementalAX state; slower]' '--json[structured AX result]' '--pid[explicit application PID]:PID:' '--point[normalized hit-test point]:X::Y:' '--help[AX command help]' ;;
+        text) _arguments '1:text or mode:(--replace-all)' '2:text:' ;;
+        ui) _arguments '1:operation:(press alert-press scroll-to-visible input hit-test locate wait)' \
+          '--identifier[exact native identifier selector]:identifier:' \
+          '--label[exact native label selector]:label:' \
+          '--alert-label[exact visible native alert title]:title:' \
+          '--value[exact native string value selector]:value:' \
+          '--class[exact native AX class selector (attribute 5003)]:class:' \
+          '--text[text to replace; never echoed]:text:' \
+          '--replace-all[explicit whole-field replacement; requires current first responder]' \
+          '--wait-for[wait condition]:condition:(present absent)' \
+          '--timeout[wait deadline, at most 15 seconds]:seconds:' \
+          '--deep[native tree and geometry; JSON schema 2]' \
+          '--full-state[with --deep, read separate supplementalAX state; slower]' \
+          '--json[structured AX result]' '--pid[explicit application PID]:PID:' \
+          '--point[normalized hit-test point]:X::Y:' '--help[AX command help]' ;;
       esac
       ;;
   esac

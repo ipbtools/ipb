@@ -858,20 +858,25 @@ static void send_coredevice_keyboard_key(xpc_remote_connection_t remote, uint64_
     send_coredevice_hid_barrier(remote, 100000);
 }
 
-static void send_coredevice_paste(xpc_remote_connection_t remote, uint64_t service_id) {
+static void send_coredevice_paste(xpc_remote_connection_t remote, uint64_t service_id, bool replace_all) {
     // Device Hub's captured held sets, not sequential independent key clicks.
-    const uint32_t states[][2]={{0xe3,0},{0xe3,0x19},{0x19,0},{0,0}};
+    // Replace-all prepends Command+A using the same complete-held report sequence.
+    const uint32_t states[][2]={{0xe3,0},{0xe3,0x04},{0x04,0},{0,0},
+                                {0xe3,0},{0xe3,0x19},{0x19,0},{0,0}};
     if (!uhid_make_keyboard_pair_hid_report || !coredevice_send_universalhid_hid_report) {
         fprintf(stderr,"CoreDevice keyboard pair builder is not linked\n"); exit(2);
     }
-    for (unsigned i=0;i<4;i++) {
+    unsigned first = replace_all ? 0 : 4;
+    unsigned count = replace_all ? 8 : 4;
+    for (unsigned i=first;i<first+count;i++) {
         uint64_t words[2]={0,0};
         if (uhid_make_keyboard_pair_hid_report(states[i][0],states[i][1],words)!=(int)sizeof words) {
-            fprintf(stderr,"Unable to build paste keyboard report\n"); g_failures++; return;
+            fprintf(stderr,"Unable to build %s keyboard report\n",replace_all?"replace-all":"paste"); g_failures++; return;
         }
         int result=coredevice_send_universalhid_hid_report(remote,words,service_id);
         if (result || g_remote_error) {
-            fprintf(stderr,"Paste keyboard report %u failed: %d; not replayed, release not guaranteed\n",i,result);
+            fprintf(stderr,"%s keyboard report %u failed: %d; not replayed, release not guaranteed\n",
+                    replace_all?"Replace-all":"Paste",i-first,result);
             g_failures++; return;
         }
         usleep(20000);
@@ -1517,7 +1522,10 @@ int main(int argc, const char *argv[]) {
                         send_coredevice_hid_barrier(remote, 100000);
                     } else if (strcmp(kind, "cd_paste") == 0) {
                         if (argc != 7) { fprintf(stderr,"cd_paste requires a keyboard service id\n"); exit(2); }
-                        send_coredevice_paste(remote,strtoull(argv[6],NULL,0));
+                        send_coredevice_paste(remote,strtoull(argv[6],NULL,0),false);
+                    } else if (strcmp(kind, "cd_replace_paste") == 0) {
+                        if (argc != 7) { fprintf(stderr,"cd_replace_paste requires a keyboard service id\n"); exit(2); }
+                        send_coredevice_paste(remote,strtoull(argv[6],NULL,0),true);
                     } else if (strcmp(kind, "cd_key_report") == 0) {
                         uint64_t service_id = argc > 6 ? strtoull(argv[6], NULL, 0) : 0x200;
                         uint32_t usage = argc > 7 ? (uint32_t)strtoul(argv[7], NULL, 0) : 0;

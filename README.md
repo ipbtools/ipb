@@ -205,6 +205,10 @@ bin/ipb ui --deep --json                     # native application hierarchy
 bin/ipb ui --deep --full-state --json        # separate supplementalAX state/role (slower)
 bin/ipb ui hit-test --point 0.15 0.55 --json
 bin/ipb ui press --identifier Seven --json   # Calculator; re-read to verify effect
+bin/ipb ui locate --label '7' --json         # exact native label; source branch addition
+bin/ipb ui wait --identifier Seven --timeout 5 --json # bounded read-only wait
+bin/ipb ui input --class UISearchBarTextField --text Battery --replace-all --json # requires actual keyboard focus
+bin/ipb ui scroll-to-visible --identifier com.apple.settings.general --json # one native scroll, then observe
 bin/ipb displays --json
 bin/ipb capabilities --json
 bin/ipb apps | bin/ipb ps | bin/ipb lock-state | bin/ipb orientation
@@ -232,6 +236,10 @@ bin/ipb key escape
 bin/ipb button 0x0c 0x40
 bin/ipb raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
 ```
+
+The branch's locator, input, scroll-to-visible and explicit system-alert operations are
+unreleased. See [the element guide](docs/ui.md) for exact selectors, paste prompts,
+`alert-press`, nonzero outcomes and the tested device/host boundary.
 
 ### Choosing a device
 
