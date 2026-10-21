@@ -4627,5 +4627,51 @@ Automation authorization, so it is rejected even without a linked XCTest
 framework or separate Runner. Its experimental PocketAgent adapter has been
 withdrawn. The runtime observations above remain research about this excluded
 service; they do not establish a compliant ipb/PocketAgent Unicode route.
-Direct Recap/IOKit ordinary-signing admission remains unproven. See
+The ordinary-app type-zero admission lead is resolved below; a compliant Unicode
+sender remains unestablished. See
 [the current plan](unicode-input-20261021.md).
+
+### Strict-no-XCTest HID admission and DDI creation boundary (2026-10-21)
+
+On the same iOS 27.0/24A437 IOKit image, UUID
+`38DD6D30-4343-3F3F-8869-0938BF2CA23D`,
+`__IOHIDEventSystemConnectionCreate` stores request type at `+0xb0` and checks
+type zero at `0x18f086ac4–0x18f086ad0`: dereference the entitlement byte pointer
+at `+0xf0`, require admin bit 0, otherwise release/return null at
+`0x18f086aec–0x18f086b30`. Its cold log names
+`com.apple.private.hid.client.admin`. Thus the type-zero skip of the later
+event-dispatch check is not an entitlement-free sender. Nonzero types still
+require event-dispatch bit 3 at the two receivers documented above.
+
+`IOHIDEventSystemClientCreateWithType` synchronously calls
+`___IOHIDEventSystemClientRefresh` at `0x18f07f704`. After a successful open,
+Refresh stores a **32-bit Mach port name** at client `+0x20`
+(`0x18f080118–0x18f08011c`); the server connection object's `+0x20` is a
+different layout. `CreateSimpleClient` sets type **4** at `0x18f10a404`;
+ordinary `Create` sets type 3, which must not be called Simple.
+
+A disposable ordinary-signed app pins the loaded image UUID before this
+seed-specific, read-only observation. Type 0 returns a CF object but no server
+port; types 3/4 have nonnull ports with valid send rights. It constructs/sends
+no event. This admission control supports the static creation gate; runtime
+event-dispatch refusal is not claimed. A third-party app linking Recap does not
+inherit an Apple daemon's entitlements. Conversely this does not rule out a
+sender implemented by Apple's DDI service.
+
+Independent UITextView controls receive one ordinary HID `7`, call
+`textViewDidChange` and update both backing and business model to `7`, with and
+without an active media session. No clipboard, XCTest/testmanagerd connection
+or Automation authorization is used. A Unicode usage page (`0x10`) is distinct
+from IOKit event type Unicode (`0x1e`); neither constant proves a text receiver.
+
+The next DDI `createService` experiment does **not** establish such a receiver.
+Unicode-page and standard-keyboard descriptor controls both close the connection;
+matching dtuhidd arm64e UUID `87030D25-7165-33AC-99EE-7B7803D100E7` reports
+`Attempted to send non-reply msg ... on the reply channel`, with Mercury send
+under dtuhidd `0x10002b474`. The host `send_receive_request` sets WANTING_REPLY.
+This is a reply-framing lead, not a proved complete root cause: an explicit
+non-WANTING_REPLY event-channel control times out and no owned service is
+observed. No Unicode report is issued, so neither callback failure nor lack of
+iOS Unicode-page support has been demonstrated. Stop repeated create attempts
+until the legitimate request/reply contract is established. Temporary apps
+and service are removed/absent, and read-only DDI enumeration recovers.

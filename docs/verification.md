@@ -15,10 +15,10 @@ and its PocketAgent integration is withdrawn. No further password authorization
 or optional product adapter is appropriate for this branch.
 
 - **Still unresolved:** clipboard-free Unicode with normal business callbacks and no XCTest/testmanagerd dependency.
-- **Agent work:** establish an ordinary-signing, XCTest-independent receiver/permission path before new device input or product integration. Recap/IOKit nonzero-type permission gates are known; type-zero usability remains unproven. Existing HID/IME evidence does not prove arbitrary Unicode.
+- **Agent work:** ordinary-app type-zero creation is admin-gated and the inspected nonzero dispatch receivers require event-dispatch permission. The UUID-pinned admission control confirms no type-zero server port. DDI self-owned permissions are a separate route; its raw createService controls currently fail before Unicode dispatch. Establish legitimate creation/reply framing and the text receiver before integration. Existing HID/IME evidence does not prove arbitrary Unicode.
 - **Retained research facts:** the excluded service can deliver normal callbacks, and disconnecting it does not cancel injection. These are not compliant-feature acceptance.
 - **Separate observation work:** ipb native deep trees exist; PocketAgent AXChildren omitted the receiver Web field. Deep-tree integration is not Unicode dispatch.
-- **Device state:** prior owned fixtures were removed, VPN restored and 13 Pro released. This correction does not operate either phone; recheck occupancy before future experiments.
+- **Device state:** this continuation re-coordinated 13 Pro, removed its two temporary fixtures and confirmed the owned service absent plus DDI enumeration recovered. Original PocketAgent installation metadata is preserved; no 12 mini, VPN or UI Automation setting was changed. Recheck occupancy before future experiments.
 
 See [the current input plan](unicode-input-20261021.md) and
 [the rejected local protocol investigation](protocol.md#phone-originated-local-nsxpc-admission-and-ui-automation-gate-2026-10-21).
@@ -8137,3 +8137,46 @@ experimental-adapter results do not count as acceptance of the desired route.
 No new device operation or authorization was performed for this correction.
 The independent bootstrap fix remains. Future work must first prove a receiver
 and signing path that does not rely on XCTest/testmanagerd/Automation Mode.
+
+
+## 2026-10-21 — Strict-no-XCTest Unicode admission and creation blockers
+
+Scope: allocated iPhone 13 Pro, iOS 27.0/24A437; macOS 26.5.1/25F80,
+Xcode 27.0/27A5252f. This is a research control, not the supported native host
+matrix or Unicode product acceptance. No XCTest/testmanagerd session or
+Automation authorization is requested; no clipboard or private entitlement is
+used. The current Automation setting is not changed or independently asserted.
+
+The formerly open type-zero sender lead is admin-gated at connection creation
+in matching IOKit; types 3/4 still require event-dispatch at the inspected
+receivers. A UUID-pinned ordinary app observes null server port for type zero
+and valid send rights for types 3/4 after CreateWithType's synchronous Refresh.
+No event is sent by this admission probe; the nonzero dispatch barrier remains
+static evidence. Client CF object creation must not be reported as permission
+success. See the protocol section for exact addresses/layout boundaries.
+
+Further DDI creation controls expose a separate confirmed blocker. Ordinary
+keyboard `7` updates independent UITextView backing/model and emits its normal
+didChange callback, once with media and once without it. Unicode-page and
+standard-keyboard createService descriptor controls both terminate dtuhidd with
+RemoteXPC's non-reply-message-on-reply-channel assertion; matching crash UUID
+and stack identify Mercury send under dtuhidd. A non-WANTING_REPLY event-channel
+control instead times out, with no owned service observed. Thus the reply
+framing is a lead, not a complete root cause or fix. Two earlier media startup
+timeouts also precede creation/input. No Unicode report reaches dispatch, so
+the experiment does not establish Unicode support or lack of text callbacks.
+The ordinary positive controls do not establish input stability or a completed
+business submission; the attempted native Submit press is refused with AX
+error 8 before action submission.
+
+Stop repeated create probes and first establish the legitimate creation/reply
+wire, then the Unicode text receiver and independent six-control callbacks /
+actual submission. The two disposable apps are removed; the owned service is
+absent and DDI enumeration recovers. Original PocketAgent installation metadata
+is preserved. No 12 mini, VPN or Automation setting is changed. Raw fixtures,
+crashes, signing and local references stay outside Git. Product source is
+unchanged; full product build/device gates were not rerun for documentation.
+
+The requested Opus 5.5 technical review is blocked by its provider safeguard
+(`[cyber]`). Automatic 4.8 fallback output is not accepted as a 5.5 review;
+source/runtime conclusions above were adjudicated directly by the main agent.
