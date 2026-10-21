@@ -4621,11 +4621,11 @@ Recap app input control has run, and the type-zero admission branch must not
 be omitted from the analysis. Framework dependencies or symbol presence alone
 do not establish effective permission.
 
-Runtime acceptance now distinguishes the primitive and the product: all six
-independent controls have real backing/callback/model/submit confirmation for
-the local sendString primitive. PocketAgent has an explicit experimental method
-and exercises four UIKit/SwiftUI controls through its actual serial executor,
-including Stop drain and durable unknown isolation. Its existing AXChildren
-observation omits the receiver Web field, so that product trial refuses before
-input. No default route changes, automatic replay, serverless ipb implementation
-or live provider-driven acceptance follows. See [the current plan](unicode-input-20261021.md).
+**Product constraint (2026-10-21):** the branch must remove XCTest dependencies.
+The local NSXPC candidate still depends on testmanagerd/XCTestSession and UI
+Automation authorization, so it is rejected even without a linked XCTest
+framework or separate Runner. Its experimental PocketAgent adapter has been
+withdrawn. The runtime observations above remain research about this excluded
+service; they do not establish a compliant ipb/PocketAgent Unicode route.
+Direct Recap/IOKit ordinary-signing admission remains unproven. See
+[the current plan](unicode-input-20261021.md).

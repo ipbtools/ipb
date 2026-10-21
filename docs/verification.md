@@ -5,21 +5,23 @@
 **Updated 2026-10-21. This section is overwritten; dated records below are append-only.**
 
 The [current protocol/AX findings index](ax-p0-research.md) groups F01–F22, the six-control
-business matrix, static/runtime proof boundaries and next discriminators. The phone-local Unicode route is now feasible with normal system authorization; a serverless/XCTest-independent ipb product route remains unestablished.
+business matrix, static/runtime proof boundaries and next discriminators. The prior phone-local Unicode route requires XCTest and is excluded by the user's branch requirement; an XCTest-independent product route remains unestablished.
 
-### Unicode input authorization control (2026-10-21)
+### Unicode input without XCTest (2026-10-21)
 
-Recommendation: retain the guarded experimental PocketAgent route. Its formal setup-page preparation/release is checked; integrate the existing native deep observation separately if product Web support is required. The user already authorized implementation and device validation; no new architecture approval or passcode entry is currently pending.
+The user explicitly requires removing XCTest dependencies. The local NSXPC
+candidate uses testmanagerd/XCTestSession and Automation Mode, so it is rejected
+and its PocketAgent integration is withdrawn. No further password authorization
+or optional product adapter is appropriate for this branch.
 
-- **Confirmed:** ordinary development-signed local NSXPC admission, normal human UI Automation authorization and independent six-control Unicode/business submission. This still uses DDI XCTest daemon components.
-- **Confirmed blocker in the naive design:** disconnecting the local client 0.8 seconds into a 140-character send does not stop it; the independent receiver continues to the full string. Session teardown is not input cancellation.
-- **Implemented/selected-device checked:** explicit foreground preparation/one-use turn lease, four native-control shared-executor business effects, terminal-reply draining on Stop, durable unknown isolation including restart, and suppressed assistant activation while unknown. Ordinary development signing only; live external-model selection, other seeds/signing and unplugged operation remain open.
-- **Confirmed compatibility boundary:** product AXChildren observation omits the Web receiver field and refuses before text, despite primitive Web input/callback success and ipb native deep capability. Native deep integration is agent work; secure/append/other unknown-value fields remain outside the first contract.
-- **Device allocation:** this task uses 13 Pro; the separate ipb task uses 12 mini. No operation on the other phone is authorized here.
+- **Still unresolved:** clipboard-free Unicode with normal business callbacks and no XCTest/testmanagerd dependency.
+- **Agent work:** establish an ordinary-signing, XCTest-independent receiver/permission path before new device input or product integration. Recap/IOKit nonzero-type permission gates are known; type-zero usability remains unproven. Existing HID/IME evidence does not prove arbitrary Unicode.
+- **Retained research facts:** the excluded service can deliver normal callbacks, and disconnecting it does not cancel injection. These are not compliant-feature acceptance.
+- **Separate observation work:** ipb native deep trees exist; PocketAgent AXChildren omitted the receiver Web field. Deep-tree integration is not Unicode dispatch.
+- **Device state:** prior owned fixtures were removed, VPN restored and 13 Pro released. This correction does not operate either phone; recheck occupancy before future experiments.
 
-The [current input plan](unicode-input-20261021.md) and
-[local protocol/gate investigation](protocol.md#phone-originated-local-nsxpc-admission-and-ui-automation-gate-2026-10-21)
-separate this path from the prior host-Mach failures and direct Recap/HID permissions.
+See [the current input plan](unicode-input-20261021.md) and
+[the rejected local protocol investigation](protocol.md#phone-originated-local-nsxpc-admission-and-ui-automation-gate-2026-10-21).
 
 ### Native deep observation update (2026-10-14, v0.4.0 released)
 
@@ -8123,3 +8125,15 @@ maintained in PocketAgent's devicehub-control.md; [the input plan](unicode-input
 records the integration boundary. No ipb CLI input implementation, supported
 macOS27 smoke gate or release update follows from this supplementary experiment.
 Raw receiver/tool results remain outside version control.
+
+
+## 2026-10-21 — XCTest-dependent candidate withdrawn
+
+The user clarified the hard requirement: this branch removes XCTest dependencies.
+The phone-local testmanagerd candidate violates that requirement despite real
+input/callback results and no separate Runner. Its PocketAgent method, settings
+preparation, local client and lifecycle wiring have been withdrawn; the earlier
+experimental-adapter results do not count as acceptance of the desired route.
+No new device operation or authorization was performed for this correction.
+The independent bootstrap fix remains. Future work must first prove a receiver
+and signing path that does not rely on XCTest/testmanagerd/Automation Mode.
