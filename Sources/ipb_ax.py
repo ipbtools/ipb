@@ -63,12 +63,13 @@ def snapshot_nodes(snapshot, root):
         if not isinstance(record, dict) or id(record) in ancestors:
             raise ValueError("invalid or cyclic AX snapshot")
         key = identity(record.get(ELEMENT))
-        if key[0] != root["pid"]:
-            raise ValueError("AX snapshot child belongs to another process")
         children, count, native = record.get(CHILDREN), record.get(CHILD_COUNT), record.get(NATIVE_ATTRS)
         if (not isinstance(children, list) or type(count) is not int or count != len(children)
                 or not isinstance(native, dict)):
             raise ValueError("AX snapshot children/attributes unavailable or truncated")
+        external = key[0] != root["pid"]
+        if external and (native.get(5003) != "AXRemoteElement" or children or count != 0):
+            raise ValueError("AX snapshot foreign child is not a proven leaf AXRemoteElement")
         fields = node_fields({mapped: native[native_id] for native_id, mapped in
                               ((2001, 3), (2003, 21), (2004, 77), (5019, 25), (2006, 53), (2025, 32))
                               if native_id in native})
@@ -87,6 +88,9 @@ def snapshot_nodes(snapshot, root):
         node_id = "n" + str(len(nodes))
         node = {"id": node_id, "parentId": parent, "depth": depth, "children": [],
                 "attributeSource": "native-snapshot", **fields}
+        if external:
+            node["processIdentifier"] = key[0]
+            node["externalProcessReference"] = True
         nodes.append(node)
         by_handle.setdefault(key, []).append(node)
         if parent is not None:
@@ -95,23 +99,225 @@ def snapshot_nodes(snapshot, root):
     return nodes, by_handle
 
 
-def snapshot_target(snapshot, root, identifier):
-    """Resolve one native handle, retaining duplicate paths only in dump output."""
-    _, by_handle = snapshot_nodes(snapshot, root)
+def native_matches(snapshot, root, selectors):
+    """Match exact string selectors against one fresh native snapshot."""
+    nodes, by_handle = snapshot_nodes(snapshot, root)
     matches = {}
     pending = [snapshot]
     while pending:
         record = pending.pop()
         token = record[ELEMENT]
-        if record[NATIVE_ATTRS].get(5019) == identifier:
-            matches.setdefault(identity(token), (token, record[NATIVE_ATTRS]))
+        native = record[NATIVE_ATTRS]
+        values = {"identifier": native.get(5019), "label": native.get(2001), "value": native.get(2006),
+                  "className": native.get(5003)}
+        if all(type(values[key]) is str and values[key] == value
+               for key, value in selectors.items()):
+            key = identity(token)
+            matches.setdefault(key, {"token": token, "native": native,
+                                     "node": by_handle[key][0],
+                                     "nodeIds": [node["id"] for node in by_handle[key]]})
         pending.extend(record[CHILDREN])
+    return nodes, list(matches.values())
+
+
+def resolve_native_target(snapshot, root, selectors, *, operation="AX locator"):
+    """Resolve exactly one distinct native AX element; never accept a cached handle."""
+    _, matches = native_matches(snapshot, root, selectors)
     if len(matches) != 1:
-        raise ValueError(f"AX press identifier matches={len(matches)}; exactly one native element is required")
-    token, native = next(iter(matches.values()))
-    node = by_handle[identity(token)][0]
-    target = {key: node[key] for key in ("identifier", "label", "frame", "frameUnavailable", "nativeAttributes") if key in node}
-    return token, native, target
+        raise ValueError(f"{operation} selector matches={len(matches)}; exactly one native element is required")
+    match = matches[0]
+    return match["token"], match["native"], match["node"]
+
+
+TEXT_ENTRY_TRAIT = 0x200000
+
+
+def resolve_input_target(snapshot, root, selectors):
+    """Require one selected native element to be the root's live text-entry responder."""
+    root_attrs = snapshot.get(NATIVE_ATTRS) if isinstance(snapshot, dict) else None
+    responder = root_attrs.get(3002) if isinstance(root_attrs, dict) else None
+    if not isinstance(responder, dict):
+        raise ValueError("AX input first responder is unavailable; no input submitted")
+    responder_token = responder.get(ELEMENT)
+    responder_attrs = responder.get(NATIVE_ATTRS)
+    responder_key = identity(responder_token)
+    if responder_key[0] != root["pid"] or not isinstance(responder_attrs, dict):
+        raise ValueError("AX input first responder is not a same-process native element; no input submitted")
+    _, matches = native_matches(snapshot, root, selectors)
+    if len(matches) != 1:
+        raise ValueError(f"AX input selector matches={len(matches)}; exactly one native element is required")
+    match = matches[0]
+    target_key = identity(match["token"])
+    if target_key[0] != root["pid"]:
+        raise ValueError("AX input target belongs to another process; no input submitted")
+    if target_key != responder_key:
+        raise ValueError("AX input target is not the current first responder; no input submitted")
+    traits, responder_traits = match["native"].get(2004), responder_attrs.get(2004)
+    if (type(traits) is not int or traits < 0 or not traits & TEXT_ENTRY_TRAIT or
+            type(responder_traits) is not int or responder_traits < 0 or
+            not responder_traits & TEXT_ENTRY_TRAIT):
+        raise ValueError("AX input first responder is not a known text-entry element; no input submitted")
+    value, responder_value = match["native"].get(2006), responder_attrs.get(2006)
+    if type(value) is not str or type(responder_value) is not str or responder_value != value:
+        raise ValueError("AX input current value is unavailable or inconsistent; no input submitted")
+    return match, value
+
+
+def native_records_for_identity(snapshot, target_key):
+    """Find fresh snapshot occurrences by exact native identity, without stale selectors."""
+    matches, pending = [], [snapshot]
+    while pending:
+        record = pending.pop()
+        if identity(record.get(ELEMENT)) == target_key:
+            matches.append(record)
+        pending.extend(record[CHILDREN])
+    return matches
+
+
+async def stop_input_child(process):
+    """Boundedly terminate/reap the dedicated child process group."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        await asyncio.wait_for(process.wait(), 0.5)
+    except (TimeoutError, ProcessLookupError):
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        await asyncio.wait_for(process.wait(), 1.0)
+    except (TimeoutError, ProcessLookupError):
+        pass
+
+
+async def run_input_child(cli, device_id, text):
+    """Run the existing replace-all CLI once in its own bounded process group."""
+    process = None
+    try:
+        process = await asyncio.create_subprocess_exec(
+            cli, "-s", device_id, "text", "--replace-all", text,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=None,
+            start_new_session=True)
+        try:
+            async with asyncio.timeout(12):
+                return await process.wait()
+        except TimeoutError as error:
+            raise TimeoutError("replace-all child exceeded its 12 second deadline") from error
+    finally:
+        if process is not None:
+            # Reap the leader and terminate any helper left in its private group.
+            await stop_input_child(process)
+
+
+def public_matches(matches):
+    """Expose snapshot-local path IDs and public AX fields, never native handles."""
+    output = []
+    for match in matches:
+        node = match["node"]
+        item = {key: node[key] for key in
+                ("id", "parentId", "depth", "identifier", "label", "value", "frame", "frameUnavailable")
+                if key in node}
+        if "5003" in node.get("nativeAttributes", {}):
+            item["nativeAttributes"] = {"5003": node["nativeAttributes"]["5003"]}
+        for key in ("processIdentifier", "externalProcessReference"):
+            if key in node:
+                item[key] = node[key]
+        item["pathIds"] = list(match["nodeIds"])
+        output.append(item)
+    return output
+
+
+def public_scroll_state(match, state):
+    """Report selected public fields and live state, never the native token."""
+    node = match["node"]
+    item = {key: node[key] for key in
+            ("id", "parentId", "depth", "identifier", "label", "value", "frame", "frameUnavailable")
+            if key in node}
+    if "5003" in node.get("nativeAttributes", {}):
+        item["nativeAttributes"] = {"5003": node["nativeAttributes"]["5003"]}
+    for key in ("processIdentifier", "externalProcessReference"):
+        if key in node:
+            item[key] = node[key]
+    item["pathIds"] = list(match["nodeIds"])
+    for key, source in (("enabled", 27), ("focused", 28), ("selected", 30), ("visible", 32)):
+        if source in state:
+            item[key] = bool(state[source])
+    return item
+
+
+def frame_within_display(rect, display):
+    """Require the full native frame to fit in current logical display bounds."""
+    if not isinstance(rect, dict) or not isinstance(display, dict):
+        return False
+    x, y, width, height = (rect.get(key) for key in ("x", "y", "width", "height"))
+    if any(type(value) not in (int, float) or not math.isfinite(value)
+           for value in (x, y, width, height)) or width <= 0 or height <= 0:
+        return False
+    return (x >= display["x"] and y >= display["y"] and
+            x + width <= display["x"] + display["width"] and
+            y + height <= display["y"] + display["height"])
+
+
+ALERT_CONTAINER_CLASS = "_UIAlertControllerPhoneTVMacView"
+ALERT_BUTTON_CLASS = "_UIInterfaceActionCustomViewRepresentationView"
+ALERT_POSTCONDITION_SETTLE_S = 2.0
+ALERT_POSTCONDITION_POLL_S = 0.1
+
+
+def _native_true(value):
+    return type(value) in (bool, int) and value in (0, 1) and bool(value)
+
+
+def _has_path_under(match, ancestor, nodes_by_id):
+    ancestor_paths = set(ancestor["nodeIds"])
+    for node_id in match["nodeIds"]:
+        current = nodes_by_id[node_id]
+        while current is not None:
+            if current["id"] in ancestor_paths:
+                return True
+            parent_id = current.get("parentId")
+            current = nodes_by_id.get(parent_id) if parent_id is not None else None
+    return False
+
+
+def resolve_alert_press_targets(snapshot, root, alert_label, button_label):
+    """Resolve one visible native system alert and its exact descendant button."""
+    nodes, _ = snapshot_nodes(snapshot, root)
+    nodes_by_id = {node["id"]: node for node in nodes}
+    _, modal_matches = native_matches(snapshot, root, {"className": ALERT_CONTAINER_CLASS})
+    modals = [match for match in modal_matches
+              if identity(match["token"])[0] == root["pid"] and _native_true(match["native"].get(2025))]
+    if len(modals) != 1:
+        raise ValueError("alert-press requires exactly one visible native alert container")
+    modal = modals[0]
+    if modal["native"].get(2001) != alert_label:
+        raise ValueError("alert-press requires the unique visible native alert container to have the exact title")
+    _, button_matches = native_matches(snapshot, root,
+                                       {"label": button_label, "className": ALERT_BUTTON_CLASS})
+    buttons = [match for match in button_matches
+               if identity(match["token"])[0] == root["pid"] and
+               _native_true(match["native"].get(2025)) and
+               _has_path_under(match, modal, nodes_by_id)]
+    if len(buttons) != 1:
+        raise ValueError("alert-press requires exactly one visible exact-label native button in the alert")
+    if (not modal["native"].get(2003) or not buttons[0]["native"].get(2003)):
+        raise ValueError("alert-press modal or button frame is unavailable")
+    return modal, buttons[0]
+
+
+def validate_springboard_snapshot(snapshot, root):
+    if identity(snapshot.get(ELEMENT)) != identity(root):
+        raise ValueError("alert-press SpringBoard snapshot root changed")
+    native = snapshot.get(NATIVE_ATTRS)
+    if (not isinstance(native, dict) or native.get(5003) != "SpringBoard" or
+            native.get(3003) != "com.apple.springboard"):
+        raise ValueError("alert-press requires a SpringBoard root")
 
 
 def ordinary_nodes(captured, root):
@@ -295,7 +501,10 @@ async def capture(rsd, args):
             try:
                 async with asyncio.timeout(3):
                     if kind == 7:
-                        args.press_state = "submitted"
+                        if action == 5:
+                            args.press_state = "submitted"
+                        elif action == 11:
+                            args.scroll_state = "submitted"
                     await dtx._ctrl_channel.invoke("processDataFromHost:", data)
                     while True:
                         raw = await queue.get()
@@ -312,7 +521,8 @@ async def capture(rsd, args):
                             continue
                         received_reply = True
                         if kind == 7 and ("error" not in reply or type(reply["error"]) is not int):
-                            raise ValueError("AX press semantic status unavailable; do not retry automatically")
+                            action_name = "scroll-to-visible" if action == 11 else "press"
+                            raise ValueError(f"AX {action_name} semantic status unavailable; do not retry automatically")
                         if reply.get("error") not in (None, 0):
                             raise ValueError("AX request refused: error " + str(reply["error"]))
                         if kind == 2 and (reply.get("attribute") != 52 or
@@ -323,11 +533,13 @@ async def capture(rsd, args):
                 target = (f" pid={token['pid']} objectID={token['objectID']}" if token else "")
                 fields = (f" attributes={params['attributes']}" if kind == 5 else
                           " attribute=52" if kind == 2 else "")
-                suffix = "; press outcome unknown; do not retry automatically" if kind == 7 else ""
+                action_label = "scroll-to-visible" if action == 11 else "press"
+                suffix = f"; {action_label} outcome unknown; do not retry automatically" if kind == 7 else ""
                 raise TimeoutError(f"AX request type={kind}{target}{fields} timed out{suffix}") from error
             except Exception as error:
                 if kind == 7 and not received_reply:
-                    raise RuntimeError("AX press outcome unknown after submission; do not retry automatically") from error
+                    action_label = "scroll-to-visible" if action == 11 else "press"
+                    raise RuntimeError(f"AX {action_label} outcome unknown after submission; do not retry automatically") from error
                 raise
 
         async def node_attributes(token):
@@ -351,9 +563,24 @@ async def capture(rsd, args):
             identity(obj)
             return obj
 
+        async def validate_snapshot_selection():
+            if identity(await app(root["pid"])) != identity(root):
+                raise ValueError("AX application root identity changed during native snapshot")
+            if hit_point is not None and identity(await hit(hit_point))[0] != root["pid"]:
+                raise ValueError("displayed AX process changed during native snapshot")
+            if display is not None:
+                from pymobiledevice3.remote.core_device.device_info import DeviceInfoService
+                async with DeviceInfoService(rsd) as service:
+                    if display_geometry(await asyncio.wait_for(service.get_display_info(), 4)) != display:
+                        raise ValueError("AX display changed during native snapshot")
+
         operation = getattr(args, "operation", None)
-        pressing = operation == "press"
-        if args.pid and not pressing:
+        selecting_action = operation in ("press", "scroll-to-visible", "input")
+        selectors = {key: getattr(args, attr, None) for key, attr in
+                     (("identifier", "identifier"), ("label", "label"), ("value", "value"),
+                      ("className", "class_name"))
+                     if getattr(args, attr, None) is not None}
+        if args.pid and not selecting_action:
             root = await app(args.pid)
             selection = "explicit-pid"
             hit_point = None
@@ -367,9 +594,62 @@ async def capture(rsd, args):
                          rect["y"] + rect["height"] * args.point[1])
             selected = await hit(hit_point)
             if args.pid and selected["pid"] != args.pid:
-                raise ValueError("AX press PID is not the displayed application at the selected point")
+                action_name = {"scroll-to-visible": "scroll", "input": "input"}.get(operation, "press")
+                raise ValueError(f"AX {action_name} PID is not the displayed application at the selected point")
             root = await app(selected["pid"])
             selection = "explicit-pid+hit-test" if args.pid else "hit-test"
+
+        if operation == "locate":
+            native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+            await validate_snapshot_selection()
+            _, matches = native_matches(native, root, selectors)
+            return {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
+                    "application": {"pid": root["pid"], "selection": selection},
+                    "scope": "native-locator", "snapshotId": str(uuid.uuid4()),
+                    "selectors": dict(selectors), "matchCount": len(matches),
+                    "unique": len(matches) == 1, "matches": public_matches(matches),
+                    "atomic": False, "cleanup": cleanup,
+                    "queryMs": round((time.monotonic() - started) * 1000, 3),
+                    "deviceAPIVersion": api}
+
+        if operation == "wait":
+            deadline = time.monotonic() + args.timeout
+            last = None
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    status = "timed_out"
+                    break
+                try:
+                    async with asyncio.timeout(remaining) as budget:
+                        native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+                        await validate_snapshot_selection()
+                except TimeoutError:
+                    if not budget.expired():
+                        raise
+                    status = "timed_out"
+                    break
+                _, matches = native_matches(native, root, selectors)
+                if len(matches) > 1:
+                    raise ValueError(f"AX wait selector is ambiguous: matches={len(matches)}")
+                satisfied = (len(matches) == 1) if args.wait_for == "present" else (len(matches) == 0)
+                last = {"snapshotId": str(uuid.uuid4()), "matchCount": len(matches),
+                        "matches": public_matches(matches)}
+                if satisfied:
+                    status = "satisfied"
+                elif time.monotonic() >= deadline:
+                    status = "timed_out"
+                else:
+                    await asyncio.sleep(min(0.25, max(0, deadline - time.monotonic())))
+                    continue
+                break
+            return {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
+                    "application": {"pid": root["pid"], "selection": selection},
+                    "scope": "native-wait", "status": status, "waitFor": args.wait_for,
+                    "selectors": dict(selectors), **(last or {"snapshotId": None, "matchCount": 0, "matches": []}),
+                    "atomic": False, "cleanup": cleanup,
+                    "queryMs": round((time.monotonic() - started) * 1000, 3),
+                    "deviceAPIVersion": api}
 
         if operation == "hit-test":
             fields = node_fields(await node_attributes(selected))
@@ -385,12 +665,297 @@ async def capture(rsd, args):
                     "atomic": False, "targetStable": True, "cleanup": cleanup,
                     "queryMs": round((time.monotonic() - started) * 1000, 3), "deviceAPIVersion": api}
 
-        if pressing:
+        if operation == "alert-press":
+            from pymobiledevice3.remote.core_device.device_info import DeviceInfoService
+            async with DeviceInfoService(rsd) as service:
+                display = display_geometry(await asyncio.wait_for(service.get_display_info(), 4))
+
+            async def validate_alert_context():
+                if identity(await app(root["pid"])) != identity(root):
+                    raise ValueError("alert-press SpringBoard root identity changed")
+                async with DeviceInfoService(rsd) as service:
+                    if display_geometry(await asyncio.wait_for(service.get_display_info(), 4)) != display:
+                        raise ValueError("alert-press display changed")
+
+            first_native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+            validate_springboard_snapshot(first_native, root)
+            first_modal, first_button = resolve_alert_press_targets(
+                first_native, root, args.alert_label, args.label)
+            await validate_alert_context()
+
+            second_native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+            validate_springboard_snapshot(second_native, root)
+            modal, button = resolve_alert_press_targets(
+                second_native, root, args.alert_label, args.label)
+            await validate_alert_context()
+
+            def same_native_observation(left, right, fields):
+                return (identity(left["token"]) == identity(right["token"]) and
+                        all(left["native"].get(field) == right["native"].get(field) for field in fields))
+
+            if not same_native_observation(first_modal, modal, (2001, 2003, 5003)):
+                raise ValueError("alert-press modal identity/frame/class/label changed before action")
+            if not same_native_observation(first_button, button, (2001, 2003, 5003)):
+                raise ValueError("alert-press button identity/frame/class/label changed before action")
+
+            modal_frame = modal["native"].get(2003)
+            button_frame = button["native"].get(2003)
+            if (not frame_within_display(modal_frame, display) or
+                    not frame_within_display(button_frame, display)):
+                raise ValueError("alert-press modal or button frame is not fully within the display")
+            live = await read(5, {"attributes": [21, 25, 27, 32]}, button["token"])
+            expected_identifier = button["native"].get(5019)
+            if (not isinstance(live, dict) or
+                    (expected_identifier is not None and live.get(25) != expected_identifier) or
+                    live.get(21) != button_frame or
+                    any(type(live.get(key)) not in (bool, int) or live[key] not in (0, 1) or not live[key]
+                        for key in (27, 32))):
+                raise ValueError("alert-press button live state/frame is not known enabled and visible")
+            await validate_alert_context()
+
+            accepted = await read(7, None, button["token"], action=5)
+            if type(accepted) not in (bool, int) or accepted not in (0, 1):
+                raise ValueError("alert-press returned no known native result; do not retry automatically")
+            base_result = {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
+                           "application": {"pid": root["pid"], "selection": "explicit-pid"},
+                           "scope": "springboard-modal-action", "alertLabel": args.alert_label,
+                           "buttonLabel": args.label, "hitTestVerified": False,
+                           "modal": {"label": modal["native"].get(2001), "frame": modal_frame,
+                                     "nativeAttributes": {"5003": ALERT_CONTAINER_CLASS}},
+                           "button": {"label": button["native"].get(2001), "frame": button_frame,
+                                      "enabled": True, "visible": True,
+                                      "nativeAttributes": {"5003": ALERT_BUTTON_CLASS}},
+                           "action": {"name": "alert-press", "nativeAccepted": bool(accepted),
+                                      "effectVerified": False},
+                           "postconditionVerified": False, "effectVerified": False,
+                           "atomic": False, "cleanup": cleanup,
+                           "queryMs": round((time.monotonic() - started) * 1000, 3),
+                           "deviceAPIVersion": api}
+            if not accepted:
+                args.press_state = "refused"
+                base_result["status"] = "native_refused"
+                base_result["postconditionFailure"] = "native-action-refused"
+                return base_result
+
+            args.press_state = "accepted"
+            def no_longer_visible(records):
+                if not records:
+                    return True
+                return all(type(record[NATIVE_ATTRS].get(2025)) in (bool, int) and
+                           record[NATIVE_ATTRS].get(2025) in (0, 1) and
+                           not record[NATIVE_ATTRS].get(2025) for record in records)
+
+            settle_started = time.monotonic()
+            settle_deadline = settle_started + ALERT_POSTCONDITION_SETTLE_S
+            observations = 0
+            modal_gone = button_gone = False
+            while True:
+                remaining = settle_deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                try:
+                    async with asyncio.timeout(remaining):
+                        post_native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+                        validate_springboard_snapshot(post_native, root)
+                        snapshot_nodes(post_native, root)
+                        await validate_alert_context()
+                        modal_after = native_records_for_identity(post_native, identity(modal["token"]))
+                        button_after = native_records_for_identity(post_native, identity(button["token"]))
+                        modal_gone = no_longer_visible(modal_after)
+                        button_gone = no_longer_visible(button_after)
+                        observations += 1
+                except TimeoutError as error:
+                    raise TimeoutError("alert-press postcondition observation exceeded its settle deadline") from error
+                if (modal_gone and button_gone) or time.monotonic() >= settle_deadline:
+                    break
+                await asyncio.sleep(min(ALERT_POSTCONDITION_POLL_S, settle_deadline - time.monotonic()))
+
+            verified = modal_gone and button_gone
+            base_result["postcondition"] = {"originalModalNoLongerVisible": modal_gone,
+                                            "originalButtonNoLongerVisible": button_gone}
+            base_result["postconditionObservations"] = observations
+            base_result["postconditionElapsedMs"] = round((time.monotonic() - settle_started) * 1000, 3)
+            base_result["postconditionVerified"] = verified
+            base_result["effectVerified"] = verified
+            base_result["action"]["effectVerified"] = verified
+            base_result["queryMs"] = round((time.monotonic() - started) * 1000, 3)
+            if not verified:
+                base_result["status"] = "alert_postcondition_failed"
+                base_result["postconditionFailure"] = "original-modal-or-button-still-visible"
+            return base_result
+
+        if operation == "input":
+            input_options = {**SNAPSHOT_OPTIONS,
+                             "attributes": [*SNAPSHOT_ATTRS, 3002]}
+            native = await read(2, {"parameter": input_options}, root)
+            await validate_snapshot_selection()
+            match, before_value = resolve_input_target(native, root, selectors)
+            token, native_attrs, node = match["token"], match["native"], match["node"]
+            await validate_snapshot_selection()
+
+            # Recheck the target's live state and exact hit before invoking the
+            # existing CLI, which owns clipboard mutation and keyboard delivery.
+            before_live = await read(5, {"attributes": [21, 25, 27, 32]}, token)
+            expected_identifier = (args.identifier if "identifier" in selectors
+                                   else native_attrs.get(5019))
+            if (not isinstance(before_live, dict) or
+                    (expected_identifier is not None and before_live.get(25) != expected_identifier)):
+                raise ValueError("AX input target native identifier changed; no input submitted")
+            if before_live.get(21) != native_attrs.get(2003):
+                raise ValueError("AX input target frame changed; no input submitted")
+            if any(type(before_live.get(key)) not in (bool, int) or before_live[key] != 1
+                   for key in (27, 32)):
+                raise ValueError("AX input target is not known enabled and visible; no input submitted")
+            rect = node.get("frame")
+            if not rect or rect["width"] <= 0 or rect["height"] <= 0:
+                raise ValueError("AX input target has no usable frame; no input submitted")
+            center = (rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2)
+            if identity(await hit(center)) != identity(token):
+                raise ValueError("AX input target is not the frame-centre hit element; no input submitted")
+            if identity(await hit(hit_point))[0] != root["pid"]:
+                raise ValueError("AX displayed process changed; no input submitted")
+            async with DeviceInfoService(rsd) as service:
+                if display_geometry(await asyncio.wait_for(service.get_display_info(), 4)) != display:
+                    raise ValueError("AX display changed; no input submitted")
+
+            # A final fresh snapshot verifies the selector, actual responder,
+            # same process, and current string value immediately before input.
+            final_native = await read(2, {"parameter": input_options}, root)
+            await validate_snapshot_selection()
+            final_match, final_value = resolve_input_target(final_native, root, selectors)
+            if identity(final_match["token"]) != identity(token):
+                raise ValueError("AX input target changed before submission; no input submitted")
+            if final_value != before_value:
+                raise ValueError("AX input target value changed before submission; no input submitted")
+            token, native_attrs, node = final_match["token"], final_match["native"], final_match["node"]
+            final_live = await read(5, {"attributes": [21, 25, 27, 32]}, token)
+            if (not isinstance(final_live, dict) or
+                    (expected_identifier is not None and final_live.get(25) != expected_identifier) or
+                    final_live.get(21) != native_attrs.get(2003) or
+                    any(type(final_live.get(key)) not in (bool, int) or final_live[key] != 1
+                        for key in (27, 32))):
+                raise ValueError("AX input target state changed before submission; no input submitted")
+            rect = node.get("frame")
+            if not rect or rect["width"] <= 0 or rect["height"] <= 0:
+                raise ValueError("AX input target has no usable frame; no input submitted")
+            center = (rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2)
+            if identity(await hit(center)) != identity(token):
+                raise ValueError("AX input target is not the frame-centre hit element; no input submitted")
+            if identity(await hit(hit_point))[0] != root["pid"]:
+                raise ValueError("AX displayed process changed; no input submitted")
+            async with DeviceInfoService(rsd) as service:
+                if display_geometry(await asyncio.wait_for(service.get_display_info(), 4)) != display:
+                    raise ValueError("AX display changed; no input submitted")
+
+            args.input_state = "submitted"
+            try:
+                child_exit = await run_input_child(args.input_cli, args.device_id, args.text)
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                args.input_state = "child-unknown"
+                return {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
+                        "application": {"pid": root["pid"], "selection": selection},
+                        "scope": "native-first-responder-input", "selectors": dict(selectors),
+                        "action": {"name": "replace-all-input", "childExitCode": None,
+                                   "textLength": len(args.text), "childErrorType": type(error).__name__},
+                        "before": {"identifier": node.get("identifier"), "label": node.get("label"),
+                                   "frame": node.get("frame"), "valueAvailable": type(before_value) is str},
+                        "after": None, "postconditionVerified": False,
+                        "status": "child_outcome_unknown",
+                        "postconditionFailure": "child-timeout-or-launch-failure",
+                        "atomic": False, "cleanup": cleanup,
+                        "queryMs": round((time.monotonic() - started) * 1000, 3),
+                        "deviceAPIVersion": api}
+            args.input_exit_code = child_exit
+            args.input_state = "child-exited-zero" if child_exit == 0 else "child-exited-nonzero"
+
+            post_native = await read(2, {"parameter": input_options}, root)
+            await validate_snapshot_selection()
+            _, post_by_handle = snapshot_nodes(post_native, root)
+            post_records = native_records_for_identity(post_native, identity(token))
+            post = None
+            verified = False
+            failure = None
+            if not post_records:
+                failure = "target-not-found-after-input"
+            elif identity(post_records[0][ELEMENT])[0] != root["pid"]:
+                failure = "target-process-changed-after-input"
+            elif any(record[NATIVE_ATTRS].get(2006) != args.text or
+                     type(record[NATIVE_ATTRS].get(2006)) is not str for record in post_records):
+                failure = "exact-value-not-observed-after-input"
+            else:
+                post_node = post_by_handle[identity(token)][0]
+                post = {key: post_node[key] for key in
+                        ("id", "parentId", "depth", "identifier", "label", "frame", "frameUnavailable")
+                        if key in post_node}
+                if "nativeAttributes" in post_node:
+                    post["nativeAttributes"] = dict(post_node["nativeAttributes"])
+                post_live = await read(5, {"attributes": [21, 25, 27, 32]}, token)
+                expected_post_identifier = (args.identifier if "identifier" in selectors
+                                            else post_node.get("identifier"))
+                if (not isinstance(post_live, dict) or
+                        (expected_post_identifier is not None and
+                         post_live.get(25) != expected_post_identifier) or
+                        post_live.get(21) != post_node.get("frame") or
+                        any(type(post_live.get(key)) not in (bool, int) or post_live[key] != 1
+                            for key in (27, 32))):
+                    failure = "target-state-not-verified-after-input"
+                else:
+                    rect = post_node.get("frame")
+                    if not rect or rect["width"] <= 0 or rect["height"] <= 0:
+                        failure = "target-frame-not-usable-after-input"
+                    else:
+                        center = (rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2)
+                        if identity(await hit(center)) != identity(token):
+                            failure = "target-center-hit-changed-after-input"
+                        else:
+                            await validate_snapshot_selection()
+                            verified = True
+            result = {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
+                      "application": {"pid": root["pid"], "selection": selection},
+                      "scope": "native-first-responder-input", "selectors": dict(selectors),
+                      "action": {"name": "replace-all-input", "childExitCode": child_exit,
+                                 "textLength": len(args.text)},
+                      "before": {"identifier": node.get("identifier"), "label": node.get("label"),
+                                 "frame": node.get("frame"), "valueAvailable": type(before_value) is str},
+                      "after": post, "postconditionVerified": verified,
+                      "atomic": False, "cleanup": cleanup,
+                      "queryMs": round((time.monotonic() - started) * 1000, 3),
+                      "deviceAPIVersion": api}
+            if child_exit != 0:
+                result["status"] = "child_failed"
+                result["postconditionFailure"] = failure
+            elif not verified:
+                result["status"] = "postcondition_failed"
+                result["postconditionFailure"] = failure
+            return result
+
+        if operation == "press":
             native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
-            token, native_attrs, target = snapshot_target(native, root, args.identifier)
+            token, native_attrs, node = resolve_native_target(native, root, selectors, operation="AX press")
+            if identity(token)[0] != root["pid"]:
+                raise ValueError("AX press target belongs to another process; no action sent")
+            if "label" in selectors or "value" in selectors or "className" in selectors:
+                # Selector qualifiers are re-resolved from a second observation
+                # immediately before the existing live-state/hit/display guards.
+                confirmed_native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+                confirmed_token, native_attrs, node = resolve_native_target(
+                    confirmed_native, root, selectors, operation="AX press")
+                if identity(confirmed_token) != identity(token):
+                    raise ValueError("AX press selector target changed; no action sent")
+                if identity(confirmed_token)[0] != root["pid"]:
+                    raise ValueError("AX press target belongs to another process; no action sent")
+                token = confirmed_token
+            target = {key: node[key] for key in
+                      ("identifier", "label", "frame", "frameUnavailable", "nativeAttributes")
+                      if key in node}
             confirmed = await read(5, {"attributes": [21, 25, 27, 32]}, token)
-            if not isinstance(confirmed, dict) or confirmed.get(25) != args.identifier:
-                raise ValueError("AX press target identifier changed; no action sent")
+            expected_identifier = (args.identifier if "identifier" in selectors
+                                   else native_attrs.get(5019))
+            if (not isinstance(confirmed, dict) or
+                    (expected_identifier is not None and confirmed.get(25) != expected_identifier)):
+                raise ValueError("AX press target native identifier changed; no action sent")
             if 2003 in native_attrs and confirmed.get(21) != native_attrs[2003]:
                 raise ValueError("AX press target frame changed; no action sent")
             if any(type(confirmed.get(key)) not in (bool, int) or confirmed[key] != 1 for key in (27, 32)):
@@ -414,13 +979,133 @@ async def capture(rsd, args):
                 args.press_state = "refused"
                 raise ValueError("AX native press refused the element")
             args.press_state = "accepted"
+            action = {"name": "press", "nativeAccepted": True, "effectVerified": False}
+            if "identifier" in selectors:
+                action["identifier"] = args.identifier
+            if "label" in selectors or "value" in selectors or "className" in selectors:
+                action["selectors"] = dict(selectors)
             return {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
                     "application": {"pid": root["pid"], "selection": selection},
-                    "action": {"name": "press", "identifier": args.identifier,
-                               "nativeAccepted": True, "effectVerified": False},
+                    "action": action,
                     "target": target, "coordinateSpace": "device-logical-points",
                     "cleanup": cleanup, "queryMs": round((time.monotonic() - started) * 1000, 3),
                     "deviceAPIVersion": api}
+
+        if operation == "scroll-to-visible":
+            native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+            await validate_snapshot_selection()
+            _, matches = native_matches(native, root, selectors)
+            if len(matches) != 1:
+                raise ValueError(f"AX scroll-to-visible selector matches={len(matches)}; exactly one native element is required")
+            match = matches[0]
+            token, native_attrs, node = match["token"], match["native"], match["node"]
+            if identity(token)[0] != root["pid"]:
+                raise ValueError("AX scroll-to-visible target belongs to another process; no action sent")
+            if "label" in selectors or "value" in selectors or "className" in selectors:
+                confirmed_native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+                await validate_snapshot_selection()
+                _, confirmed_matches = native_matches(confirmed_native, root, selectors)
+                if len(confirmed_matches) != 1:
+                    raise ValueError(f"AX scroll-to-visible selector changed or became ambiguous: matches={len(confirmed_matches)}")
+                confirmed_match = confirmed_matches[0]
+                if identity(confirmed_match["token"]) != identity(token):
+                    raise ValueError("AX scroll-to-visible selector target changed; no action sent")
+                if identity(confirmed_match["token"])[0] != root["pid"]:
+                    raise ValueError("AX scroll-to-visible target belongs to another process; no action sent")
+                match = confirmed_match
+                token, native_attrs, node = match["token"], match["native"], match["node"]
+
+            frame_rect = node.get("frame")
+            if not frame_rect or frame_rect["width"] <= 0 or frame_rect["height"] <= 0:
+                raise ValueError("AX scroll-to-visible target has no usable frame; no action sent")
+            snapshot_visible = native_attrs.get(2025)
+            if type(snapshot_visible) not in (bool, int) or snapshot_visible not in (0, 1):
+                raise ValueError("AX scroll-to-visible target visibility is unavailable; no action sent")
+            before_live = await read(5, {"attributes": [21, 25, 27, 32]}, token)
+            if not isinstance(before_live, dict):
+                raise ValueError("AX scroll-to-visible target state unavailable; no action sent")
+            expected_identifier = (args.identifier if "identifier" in selectors
+                                   else native_attrs.get(5019))
+            if expected_identifier is not None and before_live.get(25) != expected_identifier:
+                raise ValueError("AX scroll-to-visible target identifier changed; no action sent")
+            if 2003 not in native_attrs or before_live.get(21) != native_attrs[2003]:
+                raise ValueError("AX scroll-to-visible target frame changed; no action sent")
+            enabled = before_live.get(27)
+            visible = before_live.get(32)
+            if type(enabled) not in (bool, int) or enabled not in (0, 1) or not enabled:
+                raise ValueError("AX scroll-to-visible target is not known enabled; no action sent")
+            if (type(visible) not in (bool, int) or visible not in (0, 1) or
+                    bool(visible) != bool(snapshot_visible)):
+                raise ValueError("AX scroll-to-visible target visibility is unavailable or changed; no action sent")
+            await validate_snapshot_selection()
+            before = public_scroll_state(match, before_live)
+
+            native_result = await read(7, None, token, action=11)
+            if type(native_result) not in (bool, int) or native_result not in (0, 1):
+                raise ValueError("AX scroll-to-visible returned no known native result; do not retry automatically")
+            args.scroll_state = "native-true" if bool(native_result) else "native-false"
+
+            post_native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+            await validate_snapshot_selection()
+            _, post_matches = native_matches(post_native, root, selectors)
+            post, post_reason = None, None
+            postcondition_verified = False
+            if len(post_matches) == 0:
+                post_reason = "target-not-found-after-action"
+            elif len(post_matches) != 1:
+                post_reason = "target-ambiguous-after-action"
+            else:
+                post_match = post_matches[0]
+                post = public_matches([post_match])[0]
+                if identity(post_match["token"]) != identity(token):
+                    post_reason = "target-identity-changed-after-action"
+                else:
+                    after_live = await read(5, {"attributes": [21, 25, 27, 32]}, token)
+                    if not isinstance(after_live, dict):
+                        raise ValueError("AX scroll-to-visible post-action target state unavailable; do not retry automatically")
+                    post = public_scroll_state(post_match, after_live)
+                    await validate_snapshot_selection()
+                    after_identifier = (args.identifier if "identifier" in selectors
+                                        else post_match["native"].get(5019))
+                    after_enabled = after_live.get(27)
+                    after_visible = after_live.get(32)
+                    frame_after = after_live.get(21)
+                    if after_identifier is not None and after_live.get(25) != after_identifier:
+                        post_reason = "target-identifier-changed-after-action"
+                    elif (not isinstance(frame_after, dict) or
+                          frame_after != post_match["native"].get(2003)):
+                        post_reason = "target-frame-unavailable-or-changed-after-action"
+                    elif type(after_enabled) not in (bool, int) or after_enabled not in (0, 1) or not after_enabled:
+                        post_reason = "target-not-known-enabled-after-action"
+                    else:
+                        native_after_visible = post_match["native"].get(2025)
+                        if (type(after_visible) not in (bool, int) or after_visible not in (0, 1) or
+                                not after_visible or type(native_after_visible) not in (bool, int) or
+                                native_after_visible not in (0, 1) or not native_after_visible):
+                            post_reason = "target-not-known-visible-after-action"
+                        elif not frame_within_display(frame_after, display):
+                            post_reason = "target-frame-outside-display-after-action"
+                        else:
+                            center = (frame_after["x"] + frame_after["width"] / 2,
+                                      frame_after["y"] + frame_after["height"] / 2)
+                            if identity(await hit(center)) != identity(token):
+                                post_reason = "target-center-hit-changed-after-action"
+                            else:
+                                await validate_snapshot_selection()
+                                postcondition_verified = True
+
+            result = {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
+                      "application": {"pid": root["pid"], "selection": selection},
+                      "scope": "native-scroll-to-visible", "selectors": dict(selectors),
+                      "nativeResult": bool(native_result), "before": before, "after": post,
+                      "postconditionVerified": postcondition_verified,
+                      "atomic": False, "cleanup": cleanup,
+                      "queryMs": round((time.monotonic() - started) * 1000, 3),
+                      "deviceAPIVersion": api}
+            if not postcondition_verified:
+                result["status"] = "postcondition_failed"
+                result["postconditionFailure"] = post_reason
+            return result
 
         seen = {}
         if args.deep:
@@ -582,24 +1267,67 @@ def unit_interval(text):
     return number
 
 
+def positive_timeout(text):
+    try:
+        number = float(text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("timeout must be a number in (0, 15]") from error
+    if not math.isfinite(number) or not 0 < number <= 15:
+        raise argparse.ArgumentTypeError("timeout must be a number in (0, 15]")
+    return number
+
+
 def report_failure(args, error, code):
     """A nonzero exit after action submission must never invite an action replay."""
     state = getattr(args, "press_state", "not-sent")
+    scroll_state = getattr(args, "scroll_state", "not-sent")
+    input_state = getattr(args, "input_state", "not-sent")
     message = str(error) or ("AX query cancelled" if isinstance(error, asyncio.CancelledError) else
                              "AX query timed out; no partial result emitted" if isinstance(error, TimeoutError) else
                              "AX operation failed")
-    if getattr(args, "operation", None) == "press" and state != "not-sent":
-        status = "native press accepted" if state == "accepted" else "native press refused" if state == "refused" else "press submitted; outcome unknown"
+    if getattr(args, "operation", None) in ("press", "alert-press") and state != "not-sent":
+        prefix = "native alert press" if getattr(args, "operation", None) == "alert-press" else "native press"
+        submitted = "alert press submitted; outcome unknown" if prefix == "native alert press" else "press submitted; outcome unknown"
+        status = f"{prefix} accepted" if state == "accepted" else f"{prefix} refused" if state == "refused" else submitted
         print(f"ipb ui: {status}; {type(error).__name__}: {message}; do not retry automatically", file=sys.stderr)
+        return 6
+    if getattr(args, "operation", None) == "scroll-to-visible" and scroll_state != "not-sent":
+        native = {"native-true": "true", "native-false": "false"}.get(scroll_state, "unknown")
+        print(f"ipb ui: scroll-to-visible submitted; native result {native}; "
+              f"{type(error).__name__}: {message}; do not retry automatically", file=sys.stderr)
+        return 6
+    if getattr(args, "operation", None) == "input" and input_state != "not-sent":
+        exit_code = getattr(args, "input_exit_code", None)
+        if exit_code is None:
+            status = "input submitted; outcome unknown"
+        elif exit_code != 0:
+            status = (f"replace-all child exited {exit_code}; clipboard may have changed and input delivery "
+                      "may be partial")
+        else:
+            status = "replace-all child exited 0; exact-value postcondition is unverified"
+        print(f"ipb ui: {status}; {type(error).__name__}: {message}; do not retry automatically",
+              file=sys.stderr)
         return 6
     print("ipb ui: " + type(error).__name__ + ": " + message, file=sys.stderr)
     return code
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="ipb ui", description="Read AX elements or press an exact identifier; no XCTest or phone app.")
-    parser.add_argument("operation", nargs="?", choices=("press", "hit-test"), help="press a fresh identifier or read the actual element at a point")
-    parser.add_argument("--identifier", help="exact accessibility identifier required by press")
+    parser = argparse.ArgumentParser(prog="ipb ui", description="Read, locate, wait for, press, scroll or input through fresh AX elements; no XCTest or phone app.")
+    parser.add_argument("operation", nargs="?", choices=("press", "alert-press", "scroll-to-visible", "input", "hit-test", "locate", "wait"),
+                        help="press once, press one observed SpringBoard modal button, scroll an element into view, input to a current text responder, read a point, locate fresh native AX matches, or wait for presence/absence")
+    parser.add_argument("--identifier", help="exact native accessibility identifier selector (conjunctive)")
+    parser.add_argument("--label", help="exact native AX label selector (conjunctive)")
+    parser.add_argument("--value", help="exact native AX value selector (conjunctive string only)")
+    parser.add_argument("--class", dest="class_name", help="exact native AX class selector (conjunctive)")
+    parser.add_argument("--alert-label", help="exact visible native alert title; only for alert-press")
+    parser.add_argument("--text", help="text for ui input; never echoed by this command")
+    parser.add_argument("--replace-all", action="store_true",
+                        help="required explicit confirmation to replace the current text value")
+    parser.add_argument("--wait-for", choices=("present", "absent"),
+                        help="wait for one unique match or for no matches (default: present)")
+    parser.add_argument("--timeout", type=positive_timeout,
+                        help="wait deadline in seconds, at most 15 (default: 5)")
     selector = parser.add_mutually_exclusive_group()
     selector.add_argument("--pid", type=int, help="read this application's PID explicitly")
     selector.add_argument("--point", type=unit_interval, nargs=2, default=(0.5, 0.5), metavar=("X", "Y"),
@@ -611,14 +1339,47 @@ def main():
     if args.full_state and (not args.deep or args.operation is not None):
         parser.error("--full-state requires a --deep dump")
     args.press_state = "not-sent"
+    args.scroll_state = "not-sent"
+    args.input_state = "not-sent"
+    args.input_exit_code = None
     if args.operation is not None and args.deep:
         parser.error("--deep is only used by a dump")
-    if args.operation == "press" and not args.identifier:
-        parser.error("press requires a nonempty --identifier")
+    selector_values = (args.identifier, args.label, args.value, args.class_name)
+    selector_operations = ("press", "alert-press", "scroll-to-visible", "input", "locate", "wait")
+    if args.operation in selector_operations and not any(value is not None for value in selector_values):
+        parser.error(f"{args.operation} requires at least one of --identifier, --label, --value, or --class")
     if args.operation == "hit-test" and args.pid is not None:
         parser.error("hit-test uses --point, not --pid")
-    if args.operation != "press" and args.identifier is not None:
-        parser.error("--identifier is only used by press")
+    if args.operation not in selector_operations and any(value is not None for value in selector_values):
+        parser.error("AX selectors require press, alert-press, scroll-to-visible, input, locate, or wait")
+    if args.operation == "alert-press":
+        if args.pid is None:
+            parser.error("alert-press requires --pid")
+        if not args.alert_label:
+            parser.error("alert-press requires a non-empty --alert-label")
+        if not args.label:
+            parser.error("alert-press requires a non-empty --label")
+        if any(value is not None for value in (args.identifier, args.value, args.class_name)):
+            parser.error("alert-press accepts only --label, not identifier/value/class selectors")
+        if not args.json:
+            parser.error("alert-press requires --json")
+    elif args.alert_label is not None:
+        parser.error("--alert-label is only used by alert-press")
+    if args.operation == "input":
+        if args.text is None or args.text == "":
+            parser.error("input requires a non-empty --text")
+        if not args.replace_all:
+            parser.error("input requires explicit --replace-all")
+        args.input_cli = os.environ.get("IPB_AX_CLI")
+        if not args.input_cli or not os.path.isabs(args.input_cli):
+            parser.error("input requires an absolute IPB_AX_CLI path")
+    elif args.text is not None or args.replace_all:
+        parser.error("--text and --replace-all are only used by input")
+    if args.operation != "wait" and (args.wait_for is not None or args.timeout is not None):
+        parser.error("--wait-for and --timeout are only used by wait")
+    if args.operation == "wait":
+        args.wait_for = args.wait_for or "present"
+        args.timeout = args.timeout if args.timeout is not None else 5.0
     args.device_id = os.environ.get("IPB_AX_DEVICE_ID")
     args.udid = os.environ.get("IPB_AX_UDID")
     if not args.device_id or not args.udid:
@@ -657,7 +1418,22 @@ def main():
     elif args.operation == "hit-test":
         print("AX hit-test PID " + str(result["application"]["pid"]) + ": " + json.dumps(result["target"], ensure_ascii=False))
     elif args.operation == "press":
-        print("AX press accepted for " + json.dumps(args.identifier, ensure_ascii=False) + "; UI effect is not verified; observe again")
+        target = (json.dumps(args.identifier, ensure_ascii=False) if args.identifier is not None
+                  else json.dumps({key: getattr(args, key) for key in ("label", "value", "class_name")
+                                   if getattr(args, key) is not None}, ensure_ascii=False))
+        print("AX press accepted for " + target + "; UI effect is not verified; observe again")
+    elif args.operation == "scroll-to-visible":
+        print(f'AX scroll-to-visible nativeResult={str(result["nativeResult"]).lower()} '
+              f'postconditionVerified={str(result["postconditionVerified"]).lower()}')
+    elif args.operation == "input":
+        print(f'AX input childExitCode={result["action"]["childExitCode"]} '
+              f'postconditionVerified={str(result["postconditionVerified"]).lower()}')
+    elif args.operation == "locate":
+        print(f'AX locate: {result["matchCount"]} native match(es); unique={str(result["unique"]).lower()}')
+        for match in result["matches"]:
+            print("  " + json.dumps(match, ensure_ascii=False))
+    elif args.operation == "wait":
+        print(f'AX wait {result["status"]}: {result["waitFor"]}; {result["matchCount"]} native match(es)')
     else:
         print(f'AX PID {result["application"]["pid"]}: {result["nodeCount"]} nodes, depth {result["maxDepth"]}; non-atomic read')
         by_id = {node["id"]: node for node in result["nodes"]}
@@ -674,6 +1450,27 @@ def main():
         error = supplemental["error"]
         print(f"ipb ui: supplemental AX {error['type']}: {error['message']}; complete native snapshot emitted", file=sys.stderr)
         return supplemental["exitCode"]
+    if result.get("status") == "timed_out":
+        return 5
+    if result.get("status") == "postcondition_failed":
+        print(f'ipb ui: {args.operation} postcondition is not verified; do not retry automatically',
+              file=sys.stderr)
+        return 6
+    if result.get("status") == "child_failed":
+        print("ipb ui: replace-all child failed; clipboard may have changed and input delivery may be partial; "
+              "do not retry automatically", file=sys.stderr)
+        return 6
+    if result.get("status") == "child_outcome_unknown":
+        print("ipb ui: replace-all child outcome is unknown; clipboard may have changed or input may be partial; "
+              "do not retry automatically", file=sys.stderr)
+        return 6
+    if result.get("status") == "native_refused":
+        print("ipb ui: native alert press was refused; do not retry automatically", file=sys.stderr)
+        return 6
+    if result.get("status") == "alert_postcondition_failed":
+        print("ipb ui: native alert press was accepted, but the original modal/button disappearance was not verified; "
+              "do not retry automatically", file=sys.stderr)
+        return 6
     return 0
 
 

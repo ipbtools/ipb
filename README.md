@@ -11,17 +11,20 @@ location, screenshots.
 
 In this source revision, `ipb ui --deep` reads an application's native deep accessibility tree,
 numerical element frames over the DevicesApp raw DTX service. `ui hit-test` reads
-the actual element at a point; `ui press --identifier ID` resolves and presses a fresh element
-once. `v0.4.0` includes the deep snapshots and element actions introduced in v0.3.0 and makes
-`--deep` a native-only observation (JSON schema 2); `--deep --full-state` adds separately
+the actual element at a point; `ui press` resolves and presses a fresh element
+once. v0.5.0 adds exact locators/waits, selector-qualified press, text replacement that
+checks the actual first responder, one-shot scroll-to-visible and explicitly selected
+system-alert buttons. Since v0.4.0, `--deep` is a native-only observation
+(JSON schema 2); `--deep --full-state` adds separately
 reported state/role reads under `supplementalAX`. A failed supplementary read returns
 nonzero while preserving a validated native tree after successful cleanup. Default
 `ipb ui` retains the ordinary AXChildren graph and JSON schema 1. It uses an optional host Python
 backend; it installs nothing on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
 
 The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
-service when `UHID_SERVICE_ID=auto`. `v0.4.0` ships the native snapshot reliability update after AX device controls,
-host/package and Homebrew checks. The full supported physical-device
+service when `UHID_SERVICE_ID=auto`. The maintainer authorized v0.5.0 publication after
+Opus 5.5 review and host/package/Homebrew checks, without further physical-device testing.
+Existing scoped12mini controls remain separate evidence. The full supported physical-device
 gate remains open; this release does not claim full device acceptance. See
 [current verification scope](docs/verification.md#open-items--current-state-living-section).
 For `ui press`, exit **6** means failure after submission: the diagnostic preserves accepted,
@@ -49,18 +52,20 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 ## Installation channels
 
-[v0.4.0](https://github.com/ipbtools/ipb/releases/tag/v0.4.0) includes
-[PR #5](https://github.com/ipbtools/ipb/pull/5): native-only deep trees/rectangles and
-separate supplemental state (deep JSON schema 2), plus the deep AX, point hit testing
-and guarded identifier press introduced in v0.3.0. Stable installs use the precompiled
+The v0.5.0 source revision adds the runner-free element
+operations in [PR #9](https://github.com/ipbtools/ipb/pull/9). It retains v0.4.0's
+native-only deep trees/rectangles and separate supplemental state (deep JSON schema 2),
+ordinary schema1 and identifier-only press output. Stable installs use the precompiled
 macOS 27 ARM64 package; source/HEAD installs build locally. The supported physical-device
-gate remains open; the maintainer authorized this release using the scoped AX device
-controls and host/package/Homebrew verification. It does not claim full acceptance. See
+gate remains open; the maintainer authorized this release after Opus5.5 review and
+host/package/Homebrew verification, without additional device testing. It does not claim full acceptance. See
 [release verification](docs/releasing.md#current-channels).
+Published archives are listed on the [latest stable Release](https://github.com/ipbtools/ipb/releases/latest);
+version preparation and CI packages do not publish or update the stable tap automatically.
 
 | Channel | What it installs | Update path |
 | --- | --- | --- |
-| Stable Homebrew | Pinned prebuilt `v0.4.0` archive | `ipb update` or `brew upgrade ipbtools/ipb/ipb` |
+| Stable Homebrew | Pinned archive from the latest published stable release | `ipb update` or `brew upgrade ipbtools/ipb/ipb` |
 | Homebrew HEAD | Source from `main`, including the merged UI and mirror additions | `brew install --HEAD ipbtools/ipb/ipb`; `ipb update` keeps it current |
 | Release archive | Selected version with checksum/build metadata | Download a newer Release; keep bin/libexec/share together |
 | PR CI test package | Temporary precompiled development package | Download a newer Actions artifact |
@@ -205,6 +210,10 @@ bin/ipb ui --deep --json                     # native application hierarchy
 bin/ipb ui --deep --full-state --json        # separate supplementalAX state/role (slower)
 bin/ipb ui hit-test --point 0.15 0.55 --json
 bin/ipb ui press --identifier Seven --json   # Calculator; re-read to verify effect
+bin/ipb ui locate --label '7' --json         # exact native label
+bin/ipb ui wait --identifier Seven --timeout 5 --json # bounded read-only wait
+bin/ipb ui input --class UISearchBarTextField --text Battery --replace-all --json # requires actual keyboard focus
+bin/ipb ui scroll-to-visible --identifier com.apple.settings.general --json # one native scroll, then observe
 bin/ipb displays --json
 bin/ipb capabilities --json
 bin/ipb apps | bin/ipb ps | bin/ipb lock-state | bin/ipb orientation
@@ -232,6 +241,10 @@ bin/ipb key escape
 bin/ipb button 0x0c 0x40
 bin/ipb raw com.apple.coredevice.feature.remote.universalhidservice cd_uhid_tap 0x101 0.5 0.5
 ```
+
+v0.5.0 includes locator, input, scroll-to-visible and explicit system-alert operations.
+See [the element guide](docs/ui.md) for exact selectors, paste prompts,
+`alert-press`, nonzero outcomes and the tested device/host boundary.
 
 ### Choosing a device
 

@@ -2,6 +2,25 @@
 
 ## Current channels
 
+The v0.5.0 source revision contains the runner-free element operations in [PR#9](https://github.com/ipbtools/ipb/pull/9):
+exact locators/waits and qualified press, clipboard/HID replacement that checks the
+actual first responder, one-shot native scroll-to-visible and explicitly selected
+SpringBoard modal buttons. It preserves ordinary/deep dump contracts and identifier-only
+press output. The product installs no Runner or phone App and starts no XCTest session.
+Optional host Python dependencies and macOS27 ARM64 prebuilt requirements are unchanged.
+
+On 2026-10-21 the maintainer explicitly decided to skip additional physical-device
+verification for this version and to merge/update the release after Opus5.5 review
+without unresolved blocking findings. This version-specific decision permits formal
+publication and Homebrew update after successful host/package/Homebrew checks. Existing
+scoped12mini controls remain evidence; the full native macOS27/Xcode27/iOS27 matrix and
+never-authorized first use remain unverified. This decision does not waive future gates.
+See [the element guide](ui.md) and [current verification](verification.md#open-items--current-state-living-section).
+The [latest stable Release](https://github.com/ipbtools/ipb/releases/latest) is the authority
+for published archives; source/version preparation alone does not publish or update the tap.
+
+## Previous v0.4.0 release
+
 [v0.4.0](https://github.com/ipbtools/ipb/releases/tag/v0.4.0) contains the merged [PR #5](https://github.com/ipbtools/ipb/pull/5) at
 `cdaf77c089881477bc07ed70c7f2844154b6eb47`. Native deep trees and rectangles now come
 from one native snapshot; optional later state is separate. Deep JSON changes to
@@ -173,7 +192,7 @@ handoff and condensed verification record.
 4. Update VERSION, user guides and release notes for the reviewed version. Record an exact
    candidate SHA; complete review before selecting the commit to tag.
 
-The full supported physical matrix remains open. The explicit v0.2.0, v0.3.0 and v0.4.0 publication decisions
+The full supported physical matrix remains open. The explicit v0.2.0, v0.3.0, v0.4.0 and v0.5.0 publication decisions
 are recorded above; standard Release status does not certify physical acceptance.
 
 ## Prepare and publish the reviewed version

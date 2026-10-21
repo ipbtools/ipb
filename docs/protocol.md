@@ -3714,3 +3714,108 @@ Our exact-centre guard is conservative; it is not the full XCTest computation.
 non-Calculator direct action effects, secure/rotated/WebView coverage and global
 atomicity. Mac-M2 helper tests through USB forwarding do not close native CoreDevice
 selection/HID/media acceptance; its native inventory still lacks this13Pro.
+
+## Runner-free state, responder and modal controls (2026-10-21)
+
+**Sources/seed:** runtime on the exclusively allocated USB iPhone12mini
+(`iPhone13,1`, iOS27.0/24A437), supplementary macOS26.5.1/25F80,
+CoreDevice642.15, with Xcode27B6 installed. Static sources below are the matching
+24A437 DeviceSupport frameworks. These controls do not extend the supported host
+matrix. Local raw references are under
+`~/.local/state/ipb/20261021-runner-free-elements/`.
+
+### Automation Mode is a separate, observable state
+
+`AutomationMode.framework/AutomationMode`, UUID
+`4867BF17-FF7C-3D4D-A08F-C601FF4021F8`, resolves its default reader service to
+`com.apple.dt.automationmode.reader`: `_XAMAutomationModeReaderMachServiceName`
+at0x255aa3920, `_XAMIsAutomationModeEnabled` at0x255aa3d00 and
+`-[XAMObserver currentAutomationModeEnabledStateFromDaemon]` at0x255aa4118.
+The latter sends `requestAutomationModeEnabledStateWithReply:` at0x255aa41cc;
+the reply block has BOOL argument encoding `v12@?0B8`. This is a phone-local
+NSXPC reader, not an established host-forwarded RSD endpoint. Developer Mode
+and an empty directory listing are not substitutes for this BOOL.
+
+With the user's approval, a temporary ordinary signed diagnostic App queried
+only that reader. It links neither XCTest nor a test/control service and is not
+an ipb dependency. Unknown/error/timeout is distinct from false. On12mini a
+bounded background observation recorded27 real BOOL replies, all false, from
+03:19:25.995Z through03:19:40.537Z. This interval overlaps native Settings reads,
+Back, Calculator reads, SidebarButton press and the resulting History overlay.
+No test session or Mode-setting request was started. This disproves a requirement
+for **currently enabled** Automation Mode on those paths and this seed; it does
+not prove first-use behavior on a phone that has never authorized XCTest.
+Earlier13Pro false bookends precede a peer's later separate authorization work
+and must not be reused to describe that phone's later state.
+
+### First responder is not AX focus
+
+Matching `AXRuntime.framework/AXRuntime` disassembly (UUID
+`6A0D8F1C-E84D-3040-90DC-881A282774AF`, under the24A437 DeviceSupport
+`Symbols/System/Library/PrivateFrameworks/` tree) gives `-[AXElement firstResponder]`
+at0x18f85e8a8 native attribute3002, and `firstResponderForFocus`
+at0x18f85e8b0 attribute3023. `hasTextEntry` tests the traits mask0x200000;
+the traits getter uses native2004. These are native IDs, not guessed AXP field
+numbers or a complete editable/secure-field taxonomy.
+
+A native type2 snapshot explicitly requesting3002 returns a nested snapshot
+record at the application root. While Settings search receives keyboard input,
+its nested element identity equals the tree's `UISearchBarTextField`; after
+pressing the observed search Close button, root3002 and3023 are nil. The earlier
+AXP28/assistive-technology focus is not used as keyboard-responder proof.
+Input-only requests add3002; ordinary and default deep requests are unchanged.
+
+Literal replacement reuses the existing39-byte complete-held KeyboardReports.
+It prepends `{Command}`, `{Command,A}`, `{A}`, `{}` to the existing
+`{Command}`, `{Command,V}`, `{V}`, `{}` paste sequence on one keyboard connection.
+This is one intentional select-all/paste operation after one clipboard copy;
+it is not the AX whole-value setter. On12mini Settings, the actual query changed
+from `ipb-old-中文🙂` to `Battery` and Battery search results appeared. A later
+element-targeted Unicode replacement was blocked by a paste modal; after an
+explicit separate modal action, the exact query and No Results state appeared.
+Child exit0 alone therefore does not establish insertion or app business behavior.
+
+### Native scroll result and observed postcondition
+
+The existing matching APT action handler maps action11 to `scrollToVisible`
+at0x24fe0f194–0x24fe0f1a8. A one-shot type7/action11 control on Settings General
+returned error0/resultData=true and moved its frame from `(16,806,343,52)` to
+`(16,389,343,52)`, with native visibility false→true. A new tree, exact centre hit
+and independent screenshot confirm the resulting visible row. A second explicit
+call on the already visible row returned error0/resultData=false, unchanged
+geometry and a passing visibility/hit postcondition. False is preserved as the
+native result; it is neither universally called failure nor assumed success.
+This action can target only elements already present in the bounded snapshot;
+it does not discover an arbitrary row in an unmaterialized virtual list.
+
+### System modal tree and explicit semantic action
+
+A real Settings paste prompt is owned by SpringBoard. Its133-record native
+snapshot contains three terminal foreign-PID `AXRemoteElement` references;
+each has an exact native5003 class and consistent zero children/count. The old
+all-PID-equal validation rejected the whole otherwise usable tree. Native parsing
+now preserves only this proven terminal-reference shape, marking its process and
+external reference explicitly. Foreign containers or other foreign classes still
+fail, and ordinary AXChildren retains its same-process contract. Such references
+are not actionable targets and do not invent remote child trees.
+
+The visible modal's observed class is `_UIAlertControllerPhoneTVMacView`;
+Allow Paste has class `_UIInterfaceActionCustomViewRepresentationView` and frame
+`(43.6667,409,288,48)`. Global type6 hit tests return error8 both at screen centre
+and at that button. A separate app-scoped type6 experiment returned error7;
+the actual root/element tokens contain nil `rawElementData`. This does not justify
+fabricating token data or changing the ordinary press hit guard.
+
+A separate, explicitly selected semantic-action experiment used two fresh
+SpringBoard snapshots, one visible modal with its exact observed title, its
+unique same-process button, stable identities/frames, live enabled/visible state,
+root/display checks and full frame containment. It sent one type7/action5 with
+that fresh button token, **without claiming point-hit proof**. The reply was
+error0/resultData=true; a subsequent88-record SpringBoard tree contains neither
+the visible modal nor Allow Paste. Settings then contains the exact Unicode
+query and No Results state. This grounds a distinct explicit modal operation;
+it is not permission to auto-accept alerts, replay input or weaken ordinary press.
+The integrated `ui alert-press` controls on source and isolated installation also
+confirm disappearance. Its postcondition observation is bounded to2s and read-only:
+the immediate snapshot can still contain a closing modal after native acceptance.
+Unknown/read-error/timeout is never interpreted as disappearance.

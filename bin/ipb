@@ -60,7 +60,8 @@ input
   power [hold_seconds]                         side button: locks a lit screen, wakes a dark one
   lock | wake                                  the same press, under the name you want
   key <usage_or_name> [hold_seconds] [service_id]        one keyboard key
-  text <text>                                   replace device clipboard and paste into focused field
+  text <text>                                   paste at caret/selection; replaces device clipboard
+  text --replace-all <text>                     select all, then paste; replaces device clipboard
   key-down <usage_or_name> [service_id]        hold a key (paired with key-up)
   key-up [usage_or_name] [service_id]          release it, or all keys
   button <usage_page> <usage_code> [hold_seconds]        a hardware button by HID usage
@@ -75,7 +76,24 @@ screen
   mirror [--seconds S] [--csv PATH]            live screen, mouse, keyboard and text clipboard (GUI)
   ui [--deep [--full-state]] [--json] [--pid PID | --point X Y] read AX tree/frames; --full-state adds separate state (USB)
   ui hit-test [--point X Y] [--json]           read the actual AX element at a point
-  ui press --identifier ID [--json]           resolve a fresh element and press once
+  ui locate <selectors> [--json]               find exact native matches in a fresh snapshot
+  ui wait <selectors> [--wait-for present|absent] [--timeout SECONDS] [--json]
+                                               wait up to 15 seconds; never sends an action
+  ui press <selectors> [--json]                resolve one fresh element and press once
+  ui scroll-to-visible <selectors> [--json]    send one native scroll action; verify its postcondition
+  ui alert-press --pid PID --alert-label TITLE --label BUTTON --json
+                                               explicitly press one visible SpringBoard alert button;
+                                               inspect first with: ui --deep --pid PID
+  ui input <selectors> --text TEXT --replace-all [--json]
+                                               replace all text only in the already-focused native first responder;
+                                               no automatic focus; verify exact post-value, never auto-repeat
+
+  <selectors> = [--identifier ID] [--label TEXT] [--value TEXT] [--class CLASS]
+  Selectors are exact and conjunctive; ambiguous matches fail. --class uses native AX attribute 5003.
+  Repeated labels (for example a button and its child label) can be ambiguous; use an observed
+  identifier or combine known selectors. No fuzzy matching or automatic coordinate fallback.
+  alert-press is a separate semantic action (not a point press); it requires exact alert title and
+  button labels, with no automatic dialog handling, retry, or HID fallback.
 
 apps and processes (devicectl)
   apps                                         installed apps
@@ -471,7 +489,8 @@ PY
   )" || rc=$?
   rm -f "$json"
   (( rc == 0 )) || return $rc
-  PYTHONDONTWRITEBYTECODE=1 IPB_AX_DEVICE_ID="$DEVICE" IPB_AX_UDID="$udid" "$interpreter" "$script" "$@"
+  PYTHONDONTWRITEBYTECODE=1 IPB_AX_DEVICE_ID="$DEVICE" IPB_AX_UDID="$udid" IPB_AX_CLI="$SELF" \
+    "$interpreter" "$script" "$@"
 }
 
 descriptor_output() {
@@ -1057,18 +1076,33 @@ case "$cmd" in
     run_uhid cd_key "$service_id" "$usage_code" "${2:-0.08}"
     ;;
   text)
-    [[ $# -eq 1 && -n "$1" ]] || { print -u2 'usage: ipb text <non-empty text>'; exit 2; }
-    # Discover before changing the clipboard. Copy exactly once, then submit the
-    # captured Command+V sequence. No automatic retry of a partially sent paste.
+    if [[ $# -eq 1 && -n "$1" ]]; then
+      paste_text="$1"
+      paste_kind=cd_paste
+      paste_mode=paste
+    elif [[ $# -eq 2 && "$1" == --replace-all && -n "$2" ]]; then
+      paste_text="$2"
+      paste_kind=cd_replace_paste
+      paste_mode=replace-all
+    else
+      print -u2 'usage: ipb text <non-empty text> | ipb text --replace-all <non-empty text>'
+      exit 2
+    fi
+    # Discover before changing the clipboard. Copy exactly once, then submit one
+    # captured keyboard sequence. No automatic retry of a partially sent action.
     service_id="$(resolve_service_id keyboard)"
-    print -rn -- "$1" | devicectl device pasteboard copy --device "$DEVICE" --timeout 30 --quiet || {
+    print -rn -- "$paste_text" | devicectl device pasteboard copy --device "$DEVICE" --timeout 30 --quiet || {
       print -u2 'ipb text: clipboard write failed; paste was not sent'; exit 1;
     }
-    run_uhid cd_paste "$service_id" || {
+    run_uhid "$paste_kind" "$service_id" || {
       paste_rc=$?
-      print -u2 'ipb text: clipboard was written, but paste failed; do not blindly retry'; exit $paste_rc;
+      print -u2 "ipb text: clipboard was written, but $paste_mode failed; do not blindly retry"; exit $paste_rc;
     }
-    print -u2 'ipb text: paste submitted; clipboard replaced. Verify the focused field to confirm insertion.'
+    if [[ "$paste_mode" == replace-all ]]; then
+      print -u2 'ipb text: replace-all paste submitted; clipboard replaced. Verify the focused field to confirm insertion.'
+    else
+      print -u2 'ipb text: paste submitted at the focused field caret/selection; clipboard replaced. Verify the field to confirm insertion.'
+    fi
     ;;
   key-down|keyboard-down)
     [[ $# -ge 1 && $# -le 2 ]] || { usage; exit 2; }

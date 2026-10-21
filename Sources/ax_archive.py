@@ -87,7 +87,7 @@ def decode(data):
 
 
 def request(kind, parameters, *, translation=None, action=0):
-    """Encode proven reads and one native element press; never replay an action."""
+    """Encode proven reads and the supported one-shot native actions."""
     objects = ["$null"]
     classes = {}
 
@@ -129,8 +129,8 @@ def request(kind, parameters, *, translation=None, action=0):
         raise ValueError("unverified AX request type")
     if kind == 2 and translation is None:
         raise ValueError("AX snapshot requires an element")
-    if kind == 7 and (translation is None or type(action) is not int or action != 5):
-        raise ValueError("AX press requires an element and action 5")
+    if kind == 7 and (translation is None or type(action) is not int or action not in (5, 11)):
+        raise ValueError("AX action requires an element and action 5 or 11")
     if kind != 7 and action != 0:
         raise ValueError("AX read cannot carry an action")
     root = add({"requestType": kind, "clientType": 0, "actionType": action, "attributeType": 52 if kind == 2 else 0,
