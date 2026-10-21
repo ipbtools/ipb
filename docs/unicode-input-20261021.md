@@ -1,6 +1,6 @@
 # 无剪贴板 Unicode 输入调研与实现方案
 
-> 状态：正常系统授权及六类独立控件的 Unicode/业务提交已验证；PocketAgent 正在接入显式实验方法及取消保护，产品验收未完成。最后核对：2026-10-21。
+> 状态：正常系统授权及六类独立控件的 Unicode/业务提交已验证；PocketAgent 已实现显式实验方法，四类原生控件共享执行器及取消/未知保护已验证，正式 App 设置页准备/释放及构建、IPA 检查完成。最后核对：2026-10-21。
 > 范围：沿 ipb 已有原生插入/会话准入结果继续研究；通路成立后接入 PocketAgent 并实机验收。
 
 ## 1. 需求与关联资料
@@ -23,7 +23,9 @@
 
 显式请求触发真正的系统密码授权页。先前一次在约 320 秒返回 LocalAuthentication -1003；客户端等待上限不能代表系统提示有效期。用户就绪后重新触发并在设备上完成授权，orientation readiness 成功。随后独立 UIKit 单/多行、SwiftUI TextField/TextEditor、Web input/textarea 均通过 Unicode、普通业务回调及实际提交；Web 检查 trusted input 和 UIKit 首响应者，不能只把 DOM activeElement 当系统焦点。SwiftUI backing 不能退回业务模型。Web 内容 AX PID 与宿主不同，验证器使用每次运行的唯一可访问标识，不能错误要求所有 Web 元素属于宿主 PID。
 
-取消实验复现了新的产品阻断：以每秒五字符发送 140 个合成 ASCII 字符，0.8 秒后关闭本地连接，独立接收端仍继续收到全部字符。静态 session invalidate 清理未找到取消 performer/event stream 的明确调用链；运行结果证明断连不是中止输入。PocketAgent 正接入只在设置页准备、每回合租用的显式 Unicode 方法，取消排空当前 completion；超时/断连未知结果必须停用后续手机动作、禁止自动切回助手，并保留本地持久未知标记。首版限制普通可读字段、非空整字段替换和 256 UTF-16 单元，拒绝 secure/追加/未知值。产品构建、共享执行器与真机保护路径尚未验收。
+取消实验复现了新的产品阻断：以每秒五字符发送 140 个合成 ASCII 字符，0.8 秒后关闭本地连接，独立接收端仍继续收到全部字符。静态 session invalidate 清理未找到取消 performer/event stream 的明确调用链；运行结果证明断连不是中止输入。PocketAgent 正接入只在设置页准备、每回合租用的显式 Unicode 方法，取消排空当前 completion；超时/断连未知结果必须停用后续手机动作、禁止自动切回助手，并保留本地持久未知标记。首版限制普通可读字段或已识别的空 TextView、非空整字段替换和 256 UTF-16 单元，拒绝 secure/追加/其他未知值、换行、控制字符及功能键。placeholder 和省略值不证明空字段，最终必须核对输入后的非占位实际值。共享 PhoneExecutor 已通过四类 UIKit/SwiftUI 控件的正常回调、业务模型及实际提交；200 字符 Stop 等待终态回包后才切回助手，断连、丢完成回包及进程重启均保持未知隔离。原始材料留在 Git 外，产品设计及问题修复在 PocketAgent 的 devicehub-control.md 维护。
+
+PocketAgent 的 Web 产品试验在输入前被现有 AXChildren 观察缺口阻断：初始树没有网页输入节点，独立接收端未变化。它不推翻六控件底层 sendString 的 Web 成果，也不否定 ipb 已有的 native deep tree；该观察路径尚未接入 PocketAgent。最终 Opus 5.5 静态复查发现 Swift 的宽松 TextField 映射与 native 普通 subrole 判定不一致，可能在拒绝前先清空；产品在清空前增加同源普通字段标记并补映射回归。长字符串期间的 AX 通知累积曾导致 unsubscribe 的 acknowledgement budget 错误，产品在最后目标校验后先关闭自己的 AX 订阅，再发送文字，之后重新观察；同一 Stop 回归已无此警告。
 
 另一候选的 Unicode stream 已追到 Recap/IOKit。匹配服务端对非零连接类型的虚拟 service 创建及通用 event dispatch 检查 `com.apple.private.hid.client.event-dispatch` 对应 bit；当前探针有效签名没有此 key。尚未做直接 Recap 设备输入，不把这条链宣称为可用的免授权替代，也不遗漏 type-zero 分支或通过修改系统策略/附加 Apple 内部 entitlement 来推进。
 
@@ -31,7 +33,7 @@
 
 | 候选 | 当前依据 | 下一判别式 |
 | --- | --- | --- |
-| 手机本地 NSXPC | 正常授权后的独立业务效果已成立；断连仍继续输入 | 产品取消排空、未知隔离与共享执行器验收 |
+| 手机本地 NSXPC | 正常授权后的独立业务效果已成立；断连仍继续输入 | 共享执行器与取消保护已验证；正式设置页已验证；其他签名/版本矩阵仍待覆盖 |
 | 合法远程 automation 序列 | DDI 有保参 handler，但过去 bootstrap 未完成 | 仅在找到新客户端序列/明确 gate 证据后做新控制 |
 | 非 usage 的 Unicode 输入事件 | 待核对现有 HID/开发服务真实接口 | 必须找到保留字符串的实际接收链，不能由 selector 或服务广告推断 |
 
@@ -45,7 +47,7 @@
 <details><summary>影响、集成与验证</summary>
 
 - ipb：协议与准入研究；该路线需要手机本地客户端和 XCTest daemon，不能作为现有无手机服务 ipb 的隐式输入实现。
-- PocketAgent iOS/native：可行后接入同一 PhoneExecutor；先无模型的共享执行器验收，再真实模型回合。
+- PocketAgent iOS/native：已接入同一 PhoneExecutor；无模型的实际工具执行器验收已覆盖，真实外部模型自行选择该方法的回合仍未覆盖。
 - Android、眼镜 BT/ISP/Wi-Fi、schema、rpc、lt-vad：不受影响；这是 Apple 开发服务输入契约，不涉及眼镜通信或音频。
 - 顺序：静态 receiver/权限核对 → 手机本地只读 peer → 无剪贴板 Unicode 独立业务控制 → 产品实现/回归 → iOS build、IPA 检查、同身份/隔离设备验收。
 - 验收：UIKit 单行/多行、SwiftUI TextField/TextEditor、Web input/textarea；ASCII、中文、emoji、多行及选区操作按接口真实支持范围逐项验证。secure 值不回显；取消/不确定效果不重放。构建/发送成功单独记录，不能替代业务验收。
@@ -60,4 +62,4 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 保参入口与准入调研 | ipb/开发服务 | Codex 主查、Opus 5.5 复核 | 待确认 | codex/unicode-input-20261021 | 待确认 | 本地 peer/正常授权可用；断连继续输入已复现 | 匹配静态映像、已配对设备 |
 | Unicode 业务对照 | 独立 iOS 接收端 | 待确认 | 待确认 | 同上 | 待确认 | 六类控件已完成；取消行为已确认 | 可用签名与实际 peer |
-| 产品接入与回归 | PocketAgent iOS/native | 待确认 | 待确认 | 待可行后确定 | 待确认 | 正在实现；产品验收待完成 | 独立业务验收及取消隔离 |
+| 产品接入与回归 | PocketAgent iOS/native | Codex 实现、Opus 5.5 复核 | 待确认 | codex/pr1-compatibility-fixes | 待确认 | 四类原生控件/取消/未知/重启及正式设置页已验证 | 正常授权、开发签名；Web 观察仍缺口 |

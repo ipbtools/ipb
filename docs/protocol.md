@@ -4621,7 +4621,11 @@ Recap app input control has run, and the type-zero admission branch must not
 be omitted from the analysis. Framework dependencies or symbol presence alone
 do not establish effective permission.
 
-The remaining acceptance is independent receiver backing text, normal business
-callbacks/model and a real submit action across UIKit, SwiftUI and Web controls.
-At this checkpoint no new Unicode action has been sent and no product input
-route/default has changed. See [the current plan](unicode-input-20261021.md).
+Runtime acceptance now distinguishes the primitive and the product: all six
+independent controls have real backing/callback/model/submit confirmation for
+the local sendString primitive. PocketAgent has an explicit experimental method
+and exercises four UIKit/SwiftUI controls through its actual serial executor,
+including Stop drain and durable unknown isolation. Its existing AXChildren
+observation omits the receiver Web field, so that product trial refuses before
+input. No default route changes, automatic replay, serverless ipb implementation
+or live provider-driven acceptance follows. See [the current plan](unicode-input-20261021.md).

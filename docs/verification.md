@@ -9,11 +9,12 @@ business matrix, static/runtime proof boundaries and next discriminators. The ph
 
 ### Unicode input authorization control (2026-10-21)
 
-Recommendation: complete the guarded PocketAgent integration and its actual-device gate. The user already authorized implementation and device validation; no new architecture approval or passcode entry is currently pending.
+Recommendation: retain the guarded experimental PocketAgent route. Its formal setup-page preparation/release is checked; integrate the existing native deep observation separately if product Web support is required. The user already authorized implementation and device validation; no new architecture approval or passcode entry is currently pending.
 
 - **Confirmed:** ordinary development-signed local NSXPC admission, normal human UI Automation authorization and independent six-control Unicode/business submission. This still uses DDI XCTest daemon components.
 - **Confirmed blocker in the naive design:** disconnecting the local client 0.8 seconds into a 140-character send does not stop it; the independent receiver continues to the full string. Session teardown is not input cancellation.
-- **Agent work:** explicit foreground preparation/turn lease, terminal-reply draining on Stop, durable unknown-outcome protection and no automatic assistant activation while unknown; then core/native/iOS build, IPA and exact-device product gates. Secure/append/unknown-value fields are outside the initial experimental product contract.
+- **Implemented/selected-device checked:** explicit foreground preparation/one-use turn lease, four native-control shared-executor business effects, terminal-reply draining on Stop, durable unknown isolation including restart, and suppressed assistant activation while unknown. Ordinary development signing only; live external-model selection, other seeds/signing and unplugged operation remain open.
+- **Confirmed compatibility boundary:** product AXChildren observation omits the Web receiver field and refuses before text, despite primitive Web input/callback success and ipb native deep capability. Native deep integration is agent work; secure/append/other unknown-value fields remain outside the first contract.
 - **Device allocation:** this task uses 13 Pro; the separate ipb task uses 12 mini. No operation on the other phone is authorized here.
 
 The [current input plan](unicode-input-20261021.md) and
@@ -8104,3 +8105,21 @@ artifacts and local handoff stay outside Git.
 ## 2026-10-21 — Local Unicode disconnect does not cancel injection
 
 On the stated iOS 27.0/24A437 and Xcode 27 beta 6 DDI seed, an ordinary development-signed local client sends 140 synthetic ASCII characters at maximumFrequency=5 to an independent UIKit receiver. Invalidating only its own NSXPC connection at 0.8 seconds should not be used as a stop primitive: the receiver continues normal callbacks and reaches all 140 characters after the connection has closed. Static session teardown identifies no direct performer cancellation. The product integration must retain the terminal reply for Stop, isolate unknown results, suppress automatic assistant return and never replay input. Product regression of that protection remains open; raw probes and local references are outside Git.
+
+
+## 2026-10-21 — PocketAgent Web observation boundary
+
+On the same allocated iOS27.0/24A437 development-signed setup, the independent
+local sendString primitive has normal Web input callbacks and business model
+updates. The actual PocketAgent PhoneExecutor Web trial instead observes only
+the receiver's surrounding label, submit button and status; its AXChildren tree
+contains no editor node. It fails before type_text, and independent backing,
+model, callback and submission state remain empty. This is a product observation
+integration gap, not failed Unicode dispatch or proof that ipb's native deep
+snapshot lacks the field. No automatic alternate input was attempted.
+
+The guarded product's current design and condensed compatibility fixes are
+maintained in PocketAgent's devicehub-control.md; [the input plan](unicode-input-20261021.md)
+records the integration boundary. No ipb CLI input implementation, supported
+macOS27 smoke gate or release update follows from this supplementary experiment.
+Raw receiver/tool results remain outside version control.
