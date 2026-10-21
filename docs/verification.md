@@ -2,7 +2,53 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-10-14. This section is overwritten; dated records below are append-only.**
+**Updated 2026-10-21. This section is overwritten; dated records below are append-only.**
+
+### Runner-free element work (2026-10-21, unreleased branch)
+
+The user authorized implementation and a PR, without a phone Runner. Device allocation
+is explicit: this task uses12mini; “Review PR 1 兼容性” uses13Pro. No operation on the
+peer-owned13Pro is part of current acceptance. The peer reports removing this task's
+temporary read-only probe there (来源：peer); our12mini probe is also removed and its
+absence checked in fresh app inventory/process observations.
+
+**Current Automation Mode negative control established on12mini:** a user-approved
+ordinary diagnostic App receives27 actual reader BOOL replies, all DISABLED, overlapping
+native Settings/Calculator reads and Back/History actions on iOS27.0/24A437. It uses the
+phone-local reader, not XCTest, testmanagerd or a Mode setter. This establishes current
+Mode independence for those paths, while never-authorized first use remains untested.
+The final reader reply at04:23:08.614Z is also DISABLED. The removed diagnostic App
+is not a product dependency.
+
+Exact fresh identifier/label/value/class locators, bounded waits, qualified native press,
+one-shot scroll-to-visible and explicit HID select-all/paste are implemented.12mini controls
+verify History close/presence/absence, native search focus, Unicode input and Battery search
+business results, plus an offscreen General row moving y806→389. An already visible scroll
+returns native false with a true observed postcondition; no automatic replay occurs.
+Element input additionally checks native firstResponder3002 and actual text-entry traits.
+A paste prompt correctly leaves insertion unverified/nonzero until explicitly handled.
+
+**Confirmed fixes:** SpringBoard's real paste tree contains three terminal foreign-PID
+AXRemoteElement references; accepting only that proven leaf shape permits the complete tree
+and button frames. Other foreign shapes and foreign action targets remain rejected. The
+real modal and child UILabel repeat the same title, so the explicit modal operation matches
+the unique visible container's own title. Immediate post-action trees can still show a
+closing modal after native acceptance; the bounded2s read-only settle now verifies
+disappearance in source and isolated-install controls, without another action.
+Ordinary press keeps its exact centre-hit guard.
+
+87 AX tests and complete local host checks pass. Isolated-install AX-only smoke passes
+14 ordinary/142 native/142 full-state records, complete graph contracts and cleanup.
+An unfocused-input control fails before submission and preserves the clipboard.
+The phone is restored to Settings with keyboard closed.
+
+**Agent-fixable work in progress:** finish documentation, Draft PR and CI.
+**Unverified hardware boundary:** the
+full native macOS27/Xcode27/iOS27 HID/media gate remains open; the allocated phone is attached
+to supplementary macOS26.5.1/25F80/CoreDevice642.15, not natively enumerated on Mac-M2.
+Past release-specific exceptions do not close this branch's gate. No new release, merge,
+Homebrew update or default local reinstall is authorized/performed here. Local references:
+`~/.local/state/ipb/20261021-runner-free-elements/` and `docs/runner-free-elements.md`.
 
 ### Native deep observation update (2026-10-14, v0.4.0 released)
 
@@ -7487,3 +7533,58 @@ The earlier scoped13Pro Bilibili/local/forwarded AX evidence remains valid for t
 backend. The full supported native HID/media/interactive matrix remains open; publication
 does not certify it. Raw hashes/logs/downloads/screenshots and handoff are retained outside
 Git at `~/.local/state/ipb/20261014-v0.4.0-release/`.
+
+## Runner-free element controls, 2026-10-21 — current Mode off, selectors, input, scroll and modal
+
+Implementation `c4f29f2`, based on main3842611/release0.4.0; ordinary and deep
+same-process dump contracts and identifier-only press output are retained. Source and
+isolated installation use the same optional pmd11.10.2 environment. Host is supplementary
+macOS26.5.1/25F80, active Xcode26.5/17F42/CoreDevice642.15, native build with Xcode27B6.
+Allocated phone is USB12mini/iPhone13,1/iOS27.0/24A437, Developer Mode enabled.13Pro
+belongs to the independent compatibility task and is not used after allocation.
+
+The user approved a temporary ordinary read-only App to query the local Automation Mode
+reader BOOL, without XCTest linkage/tests/control service.27 real replies during the
+03:19:25.995Z–03:19:40.537Z interval are DISABLED, overlapping Settings184-node read,
+Back, Calculator45-node read, SidebarButton and History95-node read/screenshot. Final
+one-shot reader reply at04:23:08.614Z is also DISABLED. No product/acceptance call starts
+XCTest, a Runner or a Mode setter. This establishes current-Mode independence for the
+recorded paths on a previously authorized phone, not never-authorized first-use proof.
+
+Physical controls locate/wait/press History Close and verify its absence; an intentionally
+missing target returns timed_out/exit5. Native General scroll moves `(16,806,343,52)` to
+`(16,389,343,52)` with false→true visibility and screenshot confirmation; a later explicit
+already-visible call preserves native false and independently passes the postcondition.
+Native search focus is corroborated by root3002's exact responder identity; closing search
+makes it nil. An installed unfocused-input call exits1 before submission, with the Battery
+clipboard unchanged.
+
+Clipboard/HID replacement updates actual Settings queries, including Chinese/emoji and
+Battery/Bluetooth result lists. Element-targeted input submits once, then reports rc6 when
+an observed paste prompt prevents readback; it does not send the text again. Explicit
+source/installed alert-press selects the exact SpringBoard modal title and Allow Paste
+button, returns nativeAccepted/effectVerified/postconditionVerified=true and confirms both
+original elements gone. Fresh field reads show the intended Battery/Bluetooth value and
+independent screenshots show updated search results. This is business-effect proof for
+Settings search only, not a universal app callback claim.
+
+The real133-record SpringBoard tree required a narrow foreign terminal AXRemoteElement
+parser fix. Its container and child UILabel repeat the same title; matching the container's
+own title avoids false ambiguity. One immediate post-action read still sees the closing
+modal despite native acceptance, motivating the2s bounded read-only settle; no action is
+replayed. Maintained fixtures cover these triggers, stale/ambiguous/foreign/unknown guards,
+refusal/timeout/cleanup states and real owned child-process cancellation/reaping.
+
+`make check-host XCODE_PATH=/Applications/Xcode-27.0.0-Beta.6.app` passes all87AX and
+existing host/CLI/keyboard/report/smoke fixtures. The independent frozen-source review
+reports no new confirmed issues. Isolated `make install` passes; installed AX-only smoke
+returns14 ordinary/142 native/142 full-state records with closed graphs and complete cleanup.
+These are local source/install/AX gates, not full native supported HID/media acceptance.
+That macOS27/Xcode27/iOS27 hardware gate remains open, pending native phone availability.
+
+The12mini diagnostic App is uninstalled and absent from fresh app/process observations;
+Settings is restored with keyboard closed. The peer reports its13Pro copy removed and
+its own probes preserved (来源：peer; cleanup references remain in that task's local state).
+No new release, Homebrew/default install update or merge is performed. Raw JSON/screenshots,
+commands/build/host/install logs, probe sources and local handoff are kept outside Git at
+`~/.local/state/ipb/20261021-runner-free-elements/`.

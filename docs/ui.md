@@ -4,7 +4,10 @@ v0.4.0 provides `ipb ui --deep` to read an application's native
 deep accessibility snapshot and numerical element frames over DevicesApp raw DTX.
 v0.4.0 separates later state reads from the native observation;
 `v0.3.0` still uses the earlier ordinary/native reconciliation described in its tagged guide.
-`ui hit-test` reads the element at a point; `ui press` activates a freshly resolved identifier.
+`ui hit-test` reads the element at a point. Branch builds add exact locators and waits,
+qualified press, one-shot scroll-to-visible and guarded text replacement. These additions
+are unreleased; supplementary12mini controls are distinct from the still-open supported
+macOS27 native device gate. Same-process ordinary and deep dump schemas are unchanged.
 Default `ipb ui` retains the ordinary AXChildren graph. `v0.3.0` includes the
 deep/state/action additions; earlier `v0.2.0` has only ordinary AXChildren reads.
 See the [installation channels](../README.md#installation-channels) for stable and `--HEAD`
@@ -58,6 +61,11 @@ Native fields include label, hint, identifier, value, frame, traits and AX visib
 keys under `nativeAttributes`. These do not define XCTest element types. Unavailable
 properties are omitted; `CGRectNull` is reported as `frameUnavailable`. Structural records
 may have no text or state. The text renderer shows native Label, Identifier, then class.
+
+A native tree can contain a terminal `AXRemoteElement` reference to another process.
+Only its proven zero-child shape is accepted. Such nodes add `processIdentifier` and
+`externalProcessReference=true`; their remote descendants are not synthesized and actions
+cannot target them. Other cross-process shapes fail. Ordinary AXChildren remains same-process.
 
 `ui --deep` obtains the tree and rectangles from one native response. It does not require
 separately read ordinary handles, rectangles or root children to match that observation.
@@ -127,11 +135,13 @@ automatic retry. Success reports `nativeAccepted=true`, `effectVerified=false`: 
 the page again to establish the effect. `SMOKE_AX=1` adds the read gate
 for both ordinary and deep output to the normal smoke matrix; `SMOKE_AX_ONLY=1` runs only that gate.
 
-## Hit testing and pressing an element
+## Locating, waiting for, and pressing an element
 
 ```sh
 ipb -s '13 Pro' ui hit-test --point 0.15 0.55 --json
 ipb -s '13 Pro' ui --deep --json
+ipb -s '13 Pro' ui locate --label 'Seven' --json
+ipb -s '13 Pro' ui wait --identifier Seven --wait-for present --timeout 5 --json
 ipb -s '13 Pro' ui press --identifier Seven --json
 ipb -s '13 Pro' ui --deep --json
 ```
@@ -140,22 +150,105 @@ ipb -s '13 Pro' ui --deep --json
 and checks the same hit identity/display again. It is read-only. It does not compute XCTest's
 `isHittable`. Portrait selection restrictions still apply; `hit-test` cannot use `--pid`.
 
-`press` resolves the displayed app and a fresh native snapshot. The exact accessibility
-identifier must match one native handle; repeated paths of that same handle are allowed.
-It confirms identifier/frame, known enabled/visible state, actual frame-centre hit identity,
-foreground PID and display before sending one native press. Missing/ambiguous/hidden/disabled,
-zero-frame or centre-occluded targets fail before sending. This conservative guard can reject
-some valid targets whose centre hits a child or whose AX visibility is false. It is not an
-XCTest hittability implementation. A previous dump's `n…` IDs cannot be used for actions.
-There is no label match, automatic replay or HID fallback. `--deep`/`--full-state` are dump
-options and cannot be combined with either operation. The single native reply confirms
-acceptance, not a generic UI transition; re-read or inspect a screenshot after success.
+`locate` reads one fresh native snapshot and returns every public match, its match count,
+uniqueness, and snapshot-local path IDs. It does not expose or retain native object IDs. The
+`identifier`, `label`, string `value`, and native `--class` selectors are exact and conjunctive: every supplied
+field must match the same native element. There is no fuzzy matching or automatic first match.
+For example, a repeated button label and its child UILabel may both match `--label 'Continue'`;
+use an identifier observed in the tree, or combine the label with another known exact field.
+`--class` matches native attribute5003, not an invented XCTest element type.
+Repeated paths to one native handle are reported as path IDs for that single match.
 
-Calculator digits and the History button have real-device effect checks. Press still lacks
-fresh-device authorization A/B and broader app coverage: the tested 13 Pro previously enabled
-XCTest Automation Mode for the reference comparison. Removing/stopping the task-owned Runner
-still permits the product action; whether prior Automation Mode is necessary is unresolved.
-The product itself installs no Runner and starts no XCTest session.
+`wait` polls fresh snapshots after device setup for one unique match (`present`) or no matches
+(`absent`). Its requested deadline is at most 15 seconds (default 5); an ambiguous selector or
+read/validation error fails rather than being treated as absence. The overall command watchdog
+is 30 seconds, including setup. A timed-out wait reports `timed_out` and exits nonzero. Neither
+operation changes the UI or reuses a handle from an earlier snapshot.
+
+`press` accepts one or more exact `--identifier`, `--label`, `--value`, and `--class` selectors. It resolves
+one distinct native element in a fresh snapshot; label/value/class-qualified selections are resolved
+again from a second native snapshot immediately before the live-state checks. It then confirms
+the identifier when present, frame stability, known enabled/visible state, usable frame,
+frame-centre hit identity, foreground PID, and display before sending one native press. Missing,
+ambiguous, changed, hidden/disabled, zero-frame, or centre-occluded targets fail before sending.
+This conservative guard can reject some valid targets whose centre hits a child; it is not an
+XCTest hittability implementation. Snapshot-local `n…` path IDs are never action tokens.
+
+After action submission, failures preserve accepted/refused/unknown status and warn against
+automatic retry; there is no HID-coordinate fallback. A successful native reply means the press
+was accepted, not that the expected UI transition occurred. Re-read with `locate`/`wait` or
+inspect a screenshot to check the effect. `--deep`/`--full-state` are dump options and cannot be
+combined with these operations. These new commands remain unreleased pending physical-device
+acceptance on the supported native host matrix; their existence does not expand seed support.
+
+Calculator digits/History, Settings navigation and search focus have real-device effect checks.
+On a previously authorized12mini, a temporary user-approved read-only diagnostic App recorded
+27 actual Automation Mode BOOL replies, all false, overlapping native reads and direct actions.
+Thus those paths do not require currently enabled Automation Mode on iOS27.0/24A437.
+First-use behavior on a never-authorized phone is still untested. The diagnostic App is not an
+ipb dependency; the product installs no Runner and starts no XCTest session.
+
+## Text replacement and scroll-to-visible
+
+```sh
+ipb -s '12 mini' ui press --class UISearchBarTextField --json
+ipb -s '12 mini' ui input --class UISearchBarTextField --text 'Battery' --replace-all --json
+ipb -s '12 mini' ui scroll-to-visible --identifier com.apple.settings.general --json
+```
+
+`input` requires an explicit nonempty whole-field replacement. It resolves a unique fresh
+text-entry element and checks that native attribute3002 identifies it as the application's
+actual first responder. AX focus alone is insufficient. It does not focus another control
+automatically. Two fresh observations and live state/frame/hit/PID/display checks precede one
+invocation of the same installation's `text --replace-all` command. That command copies the
+device clipboard once and sends Command-A followed by Command-V on the existing HID path.
+It does not use the AX whole-value setter. Input-only snapshots request3002; normal dumps do not.
+
+The result verifies exact fresh value readback on the same native identity, rather than
+reusing an old value selector. It does not prove every app's business callback. A paste prompt,
+changed target, child failure or uncertain outcome exits nonzero and must not trigger an
+automatic repeat. The clipboard or field may already have changed. Explicitly handle the
+observed prompt and read the page again before deciding what to do next. The text argument is
+not echoed in input output. `text <text>` remains the current-caret/selection primitive;
+`text --replace-all <text>` explicitly selects the whole focused field first.
+
+`scroll-to-visible` sends one native action11 to an element already present in a fresh native
+snapshot. It allows an offscreen target, checks stable identity/frame and known state, then
+observes the result. `nativeResult` preserves Apple's BOOL; `postconditionVerified` separately
+requires the same unique target, fresh enabled/visible state, full frame inside the display
+and an exact centre hit. An already visible target can return native false and still satisfy
+that postcondition. Failure exits nonzero without another scroll or coordinate fallback.
+This cannot find a virtual-list row that has not been materialized in the snapshot.
+
+## Explicit system alert buttons
+
+Read the observed SpringBoard PID from `ipb ps`, then inspect its native tree. For example,
+replace1234 below with that PID and use the exact alert/button labels from the current tree:
+
+```sh
+ipb -s '12 mini' ps
+ipb -s '12 mini' ui --deep --pid 1234 --json
+ipb -s '12 mini' ui alert-press --pid 1234 \
+  --alert-label '“Settings” would like to paste from “dtpasteboardd”' \
+  --label 'Allow Paste' --json
+```
+
+`alert-press` is a separate explicit semantic action for the tested SpringBoard native
+UIAlert container/button classes. It requires PID, exact container title, exact button label
+and JSON output; it accepts no other selectors. Two fresh observations must agree on the
+unique visible modal, descendant button, identities and frames. Live enabled/visible state,
+full display containment, SpringBoard identity and display are checked before one native
+action5. A child UILabel may repeat the title without becoming a second modal. Foreign
+references, another app root, unknown classes, ambiguous or changed targets fail before sending.
+
+This operation does **not** claim point hittability: `hitTestVerified=false` is explicit.
+On the real12mini paste prompt, global point hit tests return error8 despite usable native
+modal/button records. Ordinary `press` keeps its point-hit guard. After an accepted semantic
+action, read-only observations wait at most two seconds for the original modal and button
+to disappear or become known invisible. Unknown visibility, read errors, timeout or persistent
+visibility never count as disappearance. Native acceptance and verified disappearance are
+separate results; neither authorizes another press, an input replay or automatic alert handling.
+This covers the tested modal shape, not every system sheet, WebView alert or credential page.
 
 ## AX and XCTest coverage
 
