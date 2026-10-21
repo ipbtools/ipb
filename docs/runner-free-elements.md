@@ -107,8 +107,11 @@ control fails before input and leaves the Battery clipboard unchanged. The final
 reader reply at04:23:08.614Z is DISABLED. The12mini probe is uninstalled, absent from
 fresh app inventory/process observations, and Settings is restored with keyboard closed.
 The peer reports removing our13Pro probe (来源：peer); this task does not contact that
-device. Implementation commit is `c4f29f2`; prepare a Draft PR and run CI while the
-supported native hardware gate remains open. No merge, release or default reinstall.
+device. Implementation commit is `c4f29f2`, reviewed in
+[Draft PR#9](https://github.com/ipbtools/ipb/pull/9). Keep it Draft while the supported
+native hardware gate remains open; CI build/package checks are separate host gates,
+with current results on the PR and raw references outside Git. No merge, release or
+default reinstall.
 
 ## Implementation constraints
 

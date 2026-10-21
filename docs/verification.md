@@ -42,7 +42,9 @@ Ordinary press keeps its exact centre-hit guard.
 An unfocused-input control fails before submission and preserves the clipboard.
 The phone is restored to Settings with keyboard closed.
 
-**Agent-fixable work in progress:** finish documentation, Draft PR and CI.
+**Review:** [Draft PR#9](https://github.com/ipbtools/ipb/pull/9) contains the implementation
+and current protocol/guide updates. CI build/package checks are host gates; their
+current result is on the PR and cannot replace the physical gate below.
 **Unverified hardware boundary:** the
 full native macOS27/Xcode27/iOS27 HID/media gate remains open; the allocated phone is attached
 to supplementary macOS26.5.1/25F80/CoreDevice642.15, not natively enumerated on Mac-M2.
