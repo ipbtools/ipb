@@ -420,6 +420,9 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                     state["snapshot_reads"] += 1
                     if mode == "snapshot-timeout":
                         raise TimeoutError("fixture type-2 transport timeout")
+                    if (operation == "wait" and mode == "wait-deadline-during-snapshot" and
+                            state["snapshot_reads"] > 1):
+                        await asyncio.Event().wait()
                     if (operation == "scroll-to-visible" and mode in
                             ("scroll-post-snapshot-timeout", "scroll-native-false-post-timeout") and
                             state["action_submissions"]):
@@ -604,6 +607,8 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                         if mode == "wait-absent":
                             present = state["snapshot_reads"] == 1
                         if mode == "wait-timeout":
+                            present = False
+                        if mode == "wait-deadline-during-snapshot":
                             present = False
                         if mode == "wait-snapshot-error":
                             raise RuntimeError("fixture native snapshot failed")
@@ -1497,6 +1502,59 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("fixture native snapshot failed", str(error))
         self.assertEqual(state["snapshot_reads"], 1)
         self.assertTrue(state["closed"] and state["dtx_closed"])
+
+    def test_wait_deadline_during_snapshot_emits_timeout_json_and_keeps_last_result(self):
+        async def fake_run(args):
+            result, state, error = await SessionTests().run_capture(
+                "wait-deadline-during-snapshot", operation="wait", pid=args.pid,
+                identifier=args.identifier, wait_for=args.wait_for, timeout=args.timeout)
+            self.state = state
+            if error:
+                raise error
+            return result
+
+        async def no_sleep(_delay):
+            return None
+
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch("sys.argv", ["ipb ui", "wait", "--pid", "42", "--identifier", "fixture-id",
+                                "--wait-for", "present", "--timeout", "0.05", "--json"]), \
+             patch.dict("os.environ", {"IPB_AX_DEVICE_ID": "fixture-device", "IPB_AX_UDID": "fixture-udid"}), \
+             patch.object(ipb_ax, "version", return_value="11.10.2"), \
+             patch.object(ipb_ax, "run", new=fake_run), \
+             patch.object(ipb_ax.asyncio, "sleep", new=no_sleep), \
+             redirect_stdout(stdout), redirect_stderr(stderr):
+            code = ipb_ax.main()
+
+        self.assertEqual(code, 5)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "timed_out")
+        self.assertEqual(payload["matchCount"], 0)
+        self.assertTrue(payload["snapshotId"])
+        self.assertEqual(self.state["snapshot_reads"], 2)
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_wait_read_timeout_is_reported_as_failure_not_overall_wait_timeout(self):
+        async def fake_run(args):
+            result, _, error = await SessionTests().run_capture(
+                "snapshot-timeout", operation="wait", pid=args.pid,
+                identifier=args.identifier, wait_for=args.wait_for, timeout=args.timeout)
+            if error:
+                raise error
+            return result
+
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch("sys.argv", ["ipb ui", "wait", "--pid", "42", "--identifier", "fixture-id",
+                                "--wait-for", "present", "--timeout", "1", "--json"]), \
+             patch.dict("os.environ", {"IPB_AX_DEVICE_ID": "fixture-device", "IPB_AX_UDID": "fixture-udid"}), \
+             patch.object(ipb_ax, "version", return_value="11.10.2"), \
+             patch.object(ipb_ax, "run", new=fake_run), \
+             redirect_stdout(stdout), redirect_stderr(stderr):
+            code = ipb_ax.main()
+
+        self.assertEqual(code, 5)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("attribute=52 timed out", stderr.getvalue())
 
     async def test_wait_rejects_ambiguity_instead_of_treating_it_as_presence(self):
         result, state, error = await self.run_capture("wait-ambiguous", operation="wait", pid=42,

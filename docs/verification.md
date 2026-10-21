@@ -43,20 +43,28 @@ closing modal after native acceptance; the bounded2s read-only settle now verifi
 disappearance in source and isolated-install controls, without another action.
 Ordinary press keeps its exact centre-hit guard.
 
+Opus5.5's fixed-source review at `01f0d9a` returns ACCEPT with a pre-tag correction:
+`ui wait --json` could lose its structured `timed_out` result when the overall wait
+deadline interrupted a snapshot read. A host fixture reproduces empty stdout/exit5.
+The wait now catches only its own expired deadline, retains the last complete observation
+and emits JSON/exit5; a request's independent timeout still fails without a result.
+The two new regression controls and all89 AX tests pass. No new device test was run.
+
 87 AX tests and complete local host checks pass. Isolated-install AX-only smoke passes
 14 ordinary/142 native/142 full-state records, complete graph contracts and cleanup.
 An unfocused-input control fails before submission and preserves the clipboard.
 The phone is restored to Settings with keyboard closed.
 
 **Review:** [PR#9](https://github.com/ipbtools/ipb/pull/9) contains the implementation
-and current protocol/guide updates. Opus5.5 reviews the fixed implementation before
-merge; CI build/package checks remain required host gates and are not physical proof.
+and current protocol/guide updates. Opus5.5 reviewed the scheme and implementation;
+the small wait correction receives a focused follow-up before merge. CI build/package
+checks remain required host gates and are not physical proof.
 **Unverified hardware boundary:** the
 full native macOS27/Xcode27/iOS27 HID/media gate remains open; the allocated phone is attached
 to supplementary macOS26.5.1/25F80/CoreDevice642.15, not natively enumerated on Mac-M2.
 Past release-specific exceptions do not close this branch's gate. The user's new v0.5.0
 decision is the authority for publishing without that additional test. Review/publication
-is in progress; default local installation remains outside this task. Local references:
+status is recorded by the latest published Release; default local installation remains outside this task. Local references:
 `~/.local/state/ipb/20261021-runner-free-elements/` and `docs/runner-free-elements.md`.
 
 ### Native deep observation update (2026-10-14, v0.4.0 released)

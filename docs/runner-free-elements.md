@@ -18,7 +18,7 @@ on 2026-10-21, in this order:
    cover clipboard/HID and separately proven AX capabilities without automatic fallback.
 4. Add bounded scroll-to-target and explicit alert discovery/button actions.
 5. Exercise the affected flows, run applicable host/installed/smoke checks and create a PR.
-   On2026-10-21 the user subsequently waived additional physical testing and authorized
+   On 2026-10-21 the user subsequently waived additional physical testing and authorized
    merge/publication after Opus5.5 review without unresolved blocking findings. Prepare
    v0.5.0 and update stable Homebrew under that version-specific decision; keep the full
    supported native device matrix explicitly unverified.
@@ -113,8 +113,12 @@ The peer reports removing our13Pro probe (来源：peer); this task does not con
 device. Implementation commit is `c4f29f2`, reviewed in
 [PR#9](https://github.com/ipbtools/ipb/pull/9). The user's subsequent decision removes
 the additional-device-test hold for v0.5.0; it does not mark that matrix as passed.
-Opus5.5 reviews the fixed implementation before merge, with host/package/Homebrew checks
-as the remaining publication gates. Current review/build results and raw references stay
+Opus5.5's review of `01f0d9a` returns ACCEPT, requesting a pre-tag fix for a wait
+deadline interrupting an in-flight read. Host-only regression reproduces the missing JSON;
+the correction preserves the last complete observation and distinguishes an independent
+request timeout. All89 AX tests pass after the correction. The small correction receives
+a focused follow-up review before merge, with host/package/Homebrew checks as publication
+gates. Review/build results and raw references stay
 outside Git. Default local installation is outside this release task.
 
 ## Implementation constraints

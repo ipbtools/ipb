@@ -52,7 +52,7 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 ## Installation channels
 
-[v0.5.0](https://github.com/ipbtools/ipb/releases/tag/v0.5.0) adds the runner-free element
+The v0.5.0 source revision adds the runner-free element
 operations in [PR #9](https://github.com/ipbtools/ipb/pull/9). It retains v0.4.0's
 native-only deep trees/rectangles and separate supplemental state (deep JSON schema 2),
 ordinary schema1 and identifier-only press output. Stable installs use the precompiled
@@ -60,10 +60,12 @@ macOS 27 ARM64 package; source/HEAD installs build locally. The supported physic
 gate remains open; the maintainer authorized this release after Opus5.5 review and
 host/package/Homebrew verification, without additional device testing. It does not claim full acceptance. See
 [release verification](docs/releasing.md#current-channels).
+Published archives are listed on the [latest stable Release](https://github.com/ipbtools/ipb/releases/latest);
+version preparation and CI packages do not publish or update the stable tap automatically.
 
 | Channel | What it installs | Update path |
 | --- | --- | --- |
-| Stable Homebrew | Pinned prebuilt `v0.5.0` archive | `ipb update` or `brew upgrade ipbtools/ipb/ipb` |
+| Stable Homebrew | Pinned archive from the latest published stable release | `ipb update` or `brew upgrade ipbtools/ipb/ipb` |
 | Homebrew HEAD | Source from `main`, including the merged UI and mirror additions | `brew install --HEAD ipbtools/ipb/ipb`; `ipb update` keeps it current |
 | Release archive | Selected version with checksum/build metadata | Download a newer Release; keep bin/libexec/share together |
 | PR CI test package | Temporary precompiled development package | Download a newer Actions artifact |

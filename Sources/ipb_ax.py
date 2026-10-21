@@ -620,9 +620,15 @@ async def capture(rsd, args):
                 if remaining <= 0:
                     status = "timed_out"
                     break
-                async with asyncio.timeout(remaining):
-                    native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
-                    await validate_snapshot_selection()
+                try:
+                    async with asyncio.timeout(remaining) as budget:
+                        native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+                        await validate_snapshot_selection()
+                except TimeoutError:
+                    if not budget.expired():
+                        raise
+                    status = "timed_out"
+                    break
                 _, matches = native_matches(native, root, selectors)
                 if len(matches) > 1:
                     raise ValueError(f"AX wait selector is ambiguous: matches={len(matches)}")

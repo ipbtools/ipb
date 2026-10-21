@@ -129,9 +129,10 @@ remaining native/supplementary failures are recorded in [verification](verificat
 
 For `ui`, exit 2 means usage/Python/dependency failure, 3 means device selection or
 UUID-to-USB resolution failure, 5 means timeout/cancellation, and 1 means tunnel,
-protocol, changed/incomplete graph or cleanup failure. For `ui press`, any failure after
-submission returns **6**, preserving accepted/refused/unknown status and warning against
-automatic retry. Success reports `nativeAccepted=true`, `effectVerified=false`: observe
+protocol, changed/incomplete graph or cleanup failure. For `press`, `input`,
+`scroll-to-visible` and `alert-press`, any failure after submission returns **6**,
+preserving accepted/refused/unknown status and warning against automatic retry.
+A successful ordinary press reports `nativeAccepted=true`, `effectVerified=false`: observe
 the page again to establish the effect. `SMOKE_AX=1` adds the read gate
 for both ordinary and deep output to the normal smoke matrix; `SMOKE_AX_ONLY=1` runs only that gate.
 
@@ -204,6 +205,9 @@ automatically. Two fresh observations and live state/frame/hit/PID/display check
 invocation of the same installation's `text --replace-all` command. That command copies the
 device clipboard once and sends Command-A followed by Command-V on the existing HID path.
 It does not use the AX whole-value setter. Input-only snapshots request3002; normal dumps do not.
+Keep other controllers and manual focus changes idle during input: wrapper startup and
+clipboard transfer happen after the final focus check. If focus changes in that interval,
+HID can reach another field; later checks can report failure but cannot undo the input.
 
 The result verifies exact fresh value readback on the same native identity, rather than
 reusing an old value selector. It does not prove every app's business callback. A paste prompt,
@@ -249,6 +253,8 @@ action, read-only observations wait at most two seconds for the original modal a
 to disappear or become known invisible. Unknown visibility, read errors, timeout or persistent
 visibility never count as disappearance. Native acceptance and verified disappearance are
 separate results; neither authorizes another press, an input replay or automatic alert handling.
+Here `effectVerified` means the original modal/button disappeared or became known invisible;
+it does not establish that the button's application-specific consequence succeeded.
 This covers the tested modal shape, not every system sheet, WebView alert or credential page.
 
 ## AX and XCTest coverage
