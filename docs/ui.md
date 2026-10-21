@@ -165,6 +165,10 @@ Repeated paths to one native handle are reported as path IDs for that single mat
 read/validation error fails rather than being treated as absence. The overall command watchdog
 is 30 seconds, including setup. A timed-out wait reports `timed_out` and exits nonzero. Neither
 operation changes the UI or reuses a handle from an earlier snapshot.
+If the deadline interrupts the first snapshot, `snapshotId=null` means no complete observation
+is available; its empty matches do not establish absence. Otherwise the result retains the
+last complete snapshot. Request errors, the overall watchdog and cleanup failures remain
+failures without a wait result.
 
 `press` accepts one or more exact `--identifier`, `--label`, `--value`, and `--class` selectors. It resolves
 one distinct native element in a fresh snapshot; label/value/class-qualified selections are resolved

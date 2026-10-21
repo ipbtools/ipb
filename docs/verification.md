@@ -50,14 +50,15 @@ The wait now catches only its own expired deadline, retains the last complete ob
 and emits JSON/exit5; a request's independent timeout still fails without a result.
 The two new regression controls and all89 AX tests pass. No new device test was run.
 
-87 AX tests and complete local host checks pass. Isolated-install AX-only smoke passes
+The earlier 87 AX tests and complete local host checks pass. Isolated-install AX-only smoke passes
 14 ordinary/142 native/142 full-state records, complete graph contracts and cleanup.
 An unfocused-input control fails before submission and preserves the clipboard.
 The phone is restored to Settings with keyboard closed.
 
 **Review:** [PR#9](https://github.com/ipbtools/ipb/pull/9) contains the implementation
 and current protocol/guide updates. Opus5.5 reviewed the scheme and implementation;
-the small wait correction receives a focused follow-up before merge. CI build/package
+its focused follow-up at `d3ba9bd` also returns ACCEPT, confirming both review items
+resolved and no remaining blocking findings within that source-only scope. CI build/package
 checks remain required host gates and are not physical proof.
 **Unverified hardware boundary:** the
 full native macOS27/Xcode27/iOS27 HID/media gate remains open; the allocated phone is attached
@@ -7628,3 +7629,12 @@ installation/test. These are host gates, not the waived device matrix. Release-s
 state and remaining limits are described in `releasing.md`; raw reviews, model metadata,
 reproduction and check logs remain outside Git at
 `~/.local/state/ipb/20261021-v0.5.0-release/`.
+
+## 2026-10-21 — Opus correction follow-up (source only)
+
+Genuine Opus5.5 model usage confirms a read-only focused review of `d3ba9bd`, returning
+ACCEPT with F1/F2 resolved and no remaining source-review blocker. The later `1b12c0c`
+changes verification documentation only and passes [CI39572932020](https://github.com/ipbtools/ipb/actions/runs/39572932020).
+No additional device validation was performed; first-read timeout JSON has no complete
+observation when snapshotId is null, and cleanup failures still suppress output. Raw
+review/invocation metadata remains in the local v0.5.0 release state directory above.

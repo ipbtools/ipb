@@ -116,9 +116,10 @@ the additional-device-test hold for v0.5.0; it does not mark that matrix as pass
 Opus5.5's review of `01f0d9a` returns ACCEPT, requesting a pre-tag fix for a wait
 deadline interrupting an in-flight read. Host-only regression reproduces the missing JSON;
 the correction preserves the last complete observation and distinguishes an independent
-request timeout. All89 AX tests pass after the correction. The small correction receives
-a focused follow-up review before merge, with host/package/Homebrew checks as publication
-gates. Review/build results and raw references stay
+request timeout. All89 AX tests pass after the correction. Opus5.5's focused follow-up
+at `d3ba9bd` also returns ACCEPT, confirming both items resolved without remaining
+source-review blockers. Host/package/Homebrew checks remain publication gates.
+Review/build results and raw references stay
 outside Git. Default local installation is outside this release task.
 
 ## Implementation constraints
