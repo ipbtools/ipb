@@ -4,7 +4,7 @@
 
 **Updated 2026-10-21. This section is overwritten; dated records below are append-only.**
 
-### Runner-free element work (2026-10-21, v0.5.0 preparation)
+### Runner-free element work (2026-10-21, v0.5.0 released)
 
 The maintainer subsequently decided: no further physical-device verification for this
 version; have Opus5.5 review the scheme, then merge/update the release if no blocking
@@ -95,6 +95,26 @@ maintainer has now authorized merge and v0.4.0 publication after candidate host/
 Homebrew checks, retaining the full native matrix as open. VERSION and current guides
 now describe the published version; candidate and stable tap checks pass. Raw local references and
 exact scope are in the appended October14 records.
+
+### v0.5.0 publication (checked 2026-10-21)
+
+Merged [PR#9](https://github.com/ipbtools/ipb/pull/9) at
+`c59ac002223ec5e6e72a557c2b3f66b36127473f` is tagged and published as the
+[standard Latest Release v0.5.0](https://github.com/ipbtools/ipb/releases/tag/v0.5.0).
+[Candidate39573884727](https://github.com/ipbtools/ipb/actions/runs/39573884727) and
+[merged-main CI39573834052](https://github.com/ipbtools/ipb/actions/runs/39573834052)
+pass host build/tests, packaging and actual precompiled Homebrew installation/test.
+Independent candidate/public downloads match all five assets and14 payload hashes,
+with packaged Python/wrapper/completion matching the tagged source.
+[Tap prepare39574229614](https://github.com/ipbtools/homebrew-ipb/actions/runs/39574229614)
+passes published metadata/tag/main/payload/install checks;
+[tap PR#6](https://github.com/ipbtools/homebrew-ipb/pull/6) passes
+[CI39574491943](https://github.com/ipbtools/homebrew-ipb/actions/runs/39574491943) and
+merges at `ac9c454a111b662a9de1742968dd30d90c6e9fe2`. Its main formula is byte-identical
+to the Release asset. Stable and source/HEAD channels retain their respective behavior.
+No new physical run or default local installation is part of publication. The supported
+native device matrix remains open under the version-specific user decision above.
+Raw reviews, hashes, assets and handoff: `~/.local/state/ipb/20261021-v0.5.0-release/`.
 
 ### Distribution and documentation scope (checked 2026-10-14)
 
@@ -7638,3 +7658,25 @@ changes verification documentation only and passes [CI39572932020](https://githu
 No additional device validation was performed; first-read timeout JSON has no complete
 observation when snapshotId is null, and cleanup failures still suppress output. Raw
 review/invocation metadata remains in the local v0.5.0 release state directory above.
+
+## 2026-10-21 — v0.5.0 formal publication and stable tap
+
+Tag/source `c59ac002223ec5e6e72a557c2b3f66b36127473f` includes the previously
+12mini-tested implementation plus the host-only wait deadline fix. Opus5.5's full and
+focused reviews both return ACCEPT. The version-specific user waiver permits publication
+without more device testing; never-authorized first use and full native HID/media smoke
+remain unverified. No phone operation or default local product reinstall occurred.
+
+Candidate39573884727 and mainCI39573834052 pass on macOS27.0.1/Xcode27.0/CoreDevice651.19,
+including89AX/host regressions, build/package/signature/startup checks and precompiled
+Homebrew install/test. Independent public assets match all five candidate files and14
+product hashes; source Python/wrapper/completion match the tag. The archive SHA256 is
+`7dfd6122943261ba30192329f2775faf5050370504a2fb1c394da87264846d0f`. The Release is
+standard Latest, not draft or prerelease.
+
+Tap prepare39574229614 passes public/tag/main/payload and actual installation checks.
+Formula-only PR#6 passes CI39574491943 and merges at
+`ac9c454a111b662a9de1742968dd30d90c6e9fe2`; the fetched main formula matches the public
+Release asset exactly. Full reports/downloads and model-usage metadata remain outside Git
+in the local v0.5.0 release state directory. This record documents publication, not
+new physical acceptance.

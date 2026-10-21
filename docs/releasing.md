@@ -19,6 +19,23 @@ See [the element guide](ui.md) and [current verification](verification.md#open-i
 The [latest stable Release](https://github.com/ipbtools/ipb/releases/latest) is the authority
 for published archives; source/version preparation alone does not publish or update the tap.
 
+### v0.5.0 publication result
+
+[v0.5.0](https://github.com/ipbtools/ipb/releases/tag/v0.5.0) is published as standard
+Latest at source `c59ac002223ec5e6e72a557c2b3f66b36127473f`. Opus5.5's full and
+focused reviews returned ACCEPT; the wait-deadline correction is included.
+[Candidate39573884727](https://github.com/ipbtools/ipb/actions/runs/39573884727) and
+[merged-main CI39573834052](https://github.com/ipbtools/ipb/actions/runs/39573834052)
+pass build/89AX/host/package checks and precompiled Homebrew install/test. Independent
+public downloads match all five candidate assets and14 payload hashes.
+[Tap prepare39574229614](https://github.com/ipbtools/homebrew-ipb/actions/runs/39574229614)
+passes public metadata/tag/main/payload/install checks;
+[tap PR#6](https://github.com/ipbtools/homebrew-ipb/pull/6) passes CI and merges at
+`ac9c454a111b662a9de1742968dd30d90c6e9fe2`. Its main formula is identical to the Release
+asset. Run `ipb update` for the existing installation's channel, or
+`brew upgrade ipbtools/ipb/ipb` for a stable Homebrew installation. Publication does not
+change the default local installation or close the unverified device matrix.
+
 ## Previous v0.4.0 release
 
 [v0.4.0](https://github.com/ipbtools/ipb/releases/tag/v0.4.0) contains the merged [PR #5](https://github.com/ipbtools/ipb/pull/5) at
