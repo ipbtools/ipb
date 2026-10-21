@@ -4599,8 +4599,13 @@ single NSError argument is nil. An explicit local Automation Mode request
 reaches the real system "Enable UI Automation" passcode sheet. Only the human
 handles that authorization. No successful authorization, Unicode delivery or
 business callback is inferred from displaying the sheet. The first short probe
-deadline expired without sending input; a bounded, manually controlled probe
-replaces it for the pending human-operated control.
+deadline expired without sending input. A manually controlled probe then keeps
+its client alive longer, but this system authorization returns
+`com.apple.LocalAuthentication/-1003` (authentication timeout) after about
+320 seconds. This is a system authentication result, not a new NSXPC admission
+failure. The client closes its connection; no text action is sent. A future
+control requires a fresh prompt when the human is ready; extending the client
+deadline alone does not establish the system sheet's lifetime.
 
 The lower Unicode chain is also present: the gesture performer selects keyboard
 sender properties, then the event-stream action calls

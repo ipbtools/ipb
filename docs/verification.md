@@ -2,11 +2,36 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-10-14. This section is overwritten; dated records below are append-only.**
+**Updated 2026-10-21. This section is overwritten; dated records below are append-only.**
 
 The [current protocol/AX findings index](ax-p0-research.md) groups F01–F22, the six-control
 business matrix, static/runtime proof boundaries and next discriminators. This documentation
 PR adds no input run; the no-Runner preserving-value recipient remains unestablished.
+
+### Unicode input authorization control (2026-10-21)
+
+Recommendation: complete one human-ready system authorization, then verify the
+independent receiver's backing text, business callbacks/model and submit behavior
+before introducing a product route. The user has already authorized implementation
+and real-device validation if this works; no architecture approval is pending.
+
+- **Confirmed:** an ordinary development-signed phone app establishes a local
+  testmanagerd XCTestSession without linking XCTest or starting a separate Runner.
+  An incomplete exported callback interface caused client cancellation; an untyped
+  NSError reply caused dropped authorization errors. Both probe defects are fixed.
+  Unenabled UI Automation returns error 41. The explicit request reaches the system
+  passcode sheet, but the longer-lived control returns LocalAuthentication -1003
+  after about 320 seconds; displaying the sheet is not authorization success.
+- **Human action:** a fresh 13 Pro system passcode authorization when the user is
+  ready. Do not enter or reuse an expired prompt. Device ownership is allocated:
+  this research uses 13 Pro, the separate ipb task uses 12 mini.
+- **Agent work after that dependency:** readiness, clipboard-free Unicode and six
+  independent control/business checks, then product integration and its delivery
+  gates. No text action was sent in this control and no product route changed.
+
+The [current input plan](unicode-input-20261021.md) and
+[local protocol/gate investigation](protocol.md#phone-originated-local-nsxpc-admission-and-ui-automation-gate-2026-10-21)
+separate this path from the prior host-Mach failures and direct Recap/HID permissions.
 
 ### Native deep observation update (2026-10-14, v0.4.0 released)
 
@@ -8061,3 +8086,29 @@ macOS27 smoke gate is claimed. Local scripts, original host replies/DTX bytes, m
 extracts, screenshots, decoded summaries and handoff remain outside Git at
 `/private/tmp/ipb-nsxpc-12mini-20261014/`. The next unresolved item is a concrete admitted
 host-to-local or independent preserving-value endpoint, not another ordinary UUID initiation.
+
+
+## 2026-10-21 — Phone-local input session and authorization timeout
+
+Scope: supplementary macOS26.5.1, Xcode27 beta6/CoreDevice642.15, allocated
+iPhone13Pro on iOS27.0/24A437. This is an isolated development-signed probe,
+not an ipb product update, separate Runner or supported macOS27 gate.
+
+The initial local NSXPC probe cancels its own connection on an undeclared
+`_XCT_applicationWithBundleID:didUpdatePID:andState:` callback. Declaring the
+matching exported method allows capabilities exchange. A subsequent orientation
+request reaches the daemon and returns authorization error41; untyped `id,id`
+reply parameters omit NSError from the client's allowed classes and drop that
+error. The corrected NSNumber/NSError declaration preserves the real reply.
+
+An explicit enableAutomationMode request reaches the real system passcode
+sheet. The short client deadline expires first; a manually controlled client
+with a longer deadline then receives LocalAuthentication/-1003 after about
+320 seconds. Its owned connection closes. No Unicode input is sent, so there is
+no new business-callback or product-input acceptance result. A fresh prompt must
+be coordinated with human readiness rather than automatically repeated.
+
+The separate receiving app preserves business model updates exclusively in
+normal UIKit/SwiftUI/Web callbacks and records backing state separately. Those
+controls remain pending authorization, not passed. Probe/source/signing/runtime
+artifacts and local handoff stay outside Git.

@@ -1,6 +1,6 @@
 # 无剪贴板 Unicode 输入调研与实现方案
 
-> 状态：手机本地 NSXPC 会话准入已验证；输入授权与业务效果尚未成立。最后核对：2026-10-21。
+> 状态：手机本地 NSXPC 会话准入已验证；系统认证超时，等待用户就绪后重新授权。Unicode 业务效果与产品接入尚未成立。最后核对：2026-10-21。
 > 范围：沿 ipb 已有原生插入/会话准入结果继续研究；通路成立后接入 PocketAgent 并实机验收。
 
 ## 1. 需求与关联资料
@@ -13,13 +13,17 @@
 
 ## 2. 技术调研结论
 
-已有结论保持：AXAudit 丢弃 action 的文本 value；APT59 是 getter；普通远程 IDE/control initiation 不等于 AX-capable XCTestSession；宿主按 Mach 名请求 socket 未取得本地 peer。以上路径不重复变换 payload。新的候选是由手机自己的开发签名助手进程创建手机本地 NSXPC peer；现有记录未覆盖此路径，其可达性、Automation Mode 条件和输入效果均待验证。Opus 5.5 独立核对候选通路和可证伪实验，主循环核验并执行。
+已有结论保持：AXAudit 丢弃 action 的文本 value；APT59 是 getter；普通远程 IDE/control initiation 不等于 AX-capable XCTestSession；宿主按 Mach 名请求 socket 未取得本地 peer。以上路径不重复变换 payload。新的候选由手机自己的开发签名助手进程创建手机本地 NSXPC peer；本轮已验证本地可达性，Automation Mode 授权后的输入效果仍待验证。Opus 5.5 独立核对候选通路和可证伪实验，主循环核验并执行。
 
 本轮已把本地准入与输入授权分开：仅链接 Foundation/UIKit、使用普通开发签名及合法 `get-task-allow` 的独立应用，可以连接 `com.apple.dt.testmanagerd.runner`，建立 `XCTestSession` 并完成 capabilities 交换。初版客户端漏声明 daemon 主动发送的进程状态回调，导致客户端自行取消连接；补上对应导出协议后此问题消失。这推翻的是“普通开发应用无法建立本地 peer”，不改变宿主到手机 Mach 桥此前失败的结论。
 
 随后只读 orientation 调用在 daemon 端明确返回 error 41（未授权 UI testing）。匹配 DDI 的 `allowsUITestControl` 检查 internal-client 或 Automation Mode；开发签名不能跳过后者。旧探针把 reply 写成两个 `id`，又使 NSError 不在 NSXPC 解码允许类内，客户端丢弃错误；必须使用实际 `NSNumber * / NSError *` 类型并将协议错误与系统授权错误分别报告。尚无本轮 Unicode 发送、独立业务回调或产品验收结果。
 
 候选字符串入口是 `_XCT_sendString:maximumFrequency:completion:`，先过同一 readiness gate，再调用 gesture performer 的 `typeString:keysPerSecond:completion:`；本地 completion 为单个 nullable NSError。该路线不需 client 链接 XCTest framework，也不需独立 `.xctrunner`，但依赖 DDI 中的 XCTest daemon 及系统 UI Automation 授权，不能称为“完全不依赖 XCTest/Automation Mode”。`loadAccessibility` 的 reply 为 BOOL/NSError，`enableAutomationMode` 的 reply 为单 NSError；均已按匹配镜像复核，不能混用 DTX 包装后的 returnValue/error 形式。
+
+显式请求已触发真正的系统密码授权页。客户端保活等待延长后，系统本次仍在约 320 秒返回 `com.apple.LocalAuthentication/-1003`（认证超时）；客户端超时设置不能被当成系统提示的有效期。已关闭对应本地连接，输入发送次数仍为零。后续只在用户确认能操作手机时发起新请求，不重复使用旧提示。独立六控件接收端和受保护发送探针留在 Git 外；先完成授权、只读 readiness 和独立业务对照，再按用户“可行的话直接实现并实机验证”的授权接入产品。
+
+另一候选的 Unicode stream 已追到 Recap/IOKit。匹配服务端对非零连接类型的虚拟 service 创建及通用 event dispatch 检查 `com.apple.private.hid.client.event-dispatch` 对应 bit；当前探针有效签名没有此 key。尚未做直接 Recap 设备输入，不把这条链宣称为可用的免授权替代，也不遗漏 type-zero 分支或通过修改系统策略/附加 Apple 内部 entitlement 来推进。
 
 <details><summary>候选与拒绝原因</summary>
 
@@ -52,6 +56,6 @@
 
 | 模块 | 端/仓库 | 负责人 | 人日 | 分支 | 版本/提测 | 当前状态 | 依赖 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 保参入口与准入调研 | ipb/开发服务 | Codex 主查、Opus 5.5 复核 | 待确认 | codex/unicode-input-20261021 | 待确认 | 本地 peer 已建立；授权待实测 | 匹配静态映像、已配对设备 |
+| 保参入口与准入调研 | ipb/开发服务 | Codex 主查、Opus 5.5 复核 | 待确认 | codex/unicode-input-20261021 | 待确认 | 本地 peer 已建立；系统授权超时，待用户就绪 | 匹配静态映像、已配对设备 |
 | Unicode 业务对照 | 独立 iOS 接收端 | 待确认 | 待确认 | 同上 | 待确认 | 准入后执行 | 可用签名与实际 peer |
 | 产品接入与回归 | PocketAgent iOS/native | 待确认 | 待确认 | 待可行后确定 | 待确认 | 尚未实现 | 独立业务验收通过 |
