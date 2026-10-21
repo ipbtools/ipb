@@ -4,9 +4,9 @@ v0.4.0 provides `ipb ui --deep` to read an application's native
 deep accessibility snapshot and numerical element frames over DevicesApp raw DTX.
 v0.4.0 separates later state reads from the native observation;
 `v0.3.0` still uses the earlier ordinary/native reconciliation described in its tagged guide.
-`ui hit-test` reads the element at a point. Branch builds add exact locators and waits,
-qualified press, one-shot scroll-to-visible and guarded text replacement. These additions
-are unreleased; supplementary12mini controls are distinct from the still-open supported
+`ui hit-test` reads the element at a point. v0.5.0 adds exact locators and waits,
+qualified press, one-shot scroll-to-visible, guarded text replacement and explicit modal
+button actions. Supplementary12mini controls are distinct from the still-open supported
 macOS27 native device gate. Same-process ordinary and deep dump schemas are unchanged.
 Default `ipb ui` retains the ordinary AXChildren graph. `v0.3.0` includes the
 deep/state/action additions; earlier `v0.2.0` has only ordinary AXChildren reads.
@@ -178,8 +178,9 @@ After action submission, failures preserve accepted/refused/unknown status and w
 automatic retry; there is no HID-coordinate fallback. A successful native reply means the press
 was accepted, not that the expected UI transition occurred. Re-read with `locate`/`wait` or
 inspect a screenshot to check the effect. `--deep`/`--full-state` are dump options and cannot be
-combined with these operations. These new commands remain unreleased pending physical-device
-acceptance on the supported native host matrix; their existence does not expand seed support.
+combined with these operations. The maintainer authorized v0.5.0 publication after
+Opus5.5 review and host/package checks, without further device testing. The supported
+native physical matrix remains unverified; publication does not expand seed support.
 
 Calculator digits/History, Settings navigation and search focus have real-device effect checks.
 On a previously authorized12mini, a temporary user-approved read-only diagnostic App recorded

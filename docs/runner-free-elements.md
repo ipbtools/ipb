@@ -17,8 +17,11 @@ on 2026-10-21, in this order:
 3. Add element-targeted input with explicit edit semantics and effect observation;
    cover clipboard/HID and separately proven AX capabilities without automatic fallback.
 4. Add bounded scroll-to-target and explicit alert discovery/button actions.
-5. Exercise the affected flows on physical devices, run applicable host/installed/smoke
-   checks and create a PR. Do not merge or release as part of this request.
+5. Exercise the affected flows, run applicable host/installed/smoke checks and create a PR.
+   On2026-10-21 the user subsequently waived additional physical testing and authorized
+   merge/publication after Opus5.5 review without unresolved blocking findings. Prepare
+   v0.5.0 and update stable Homebrew under that version-specific decision; keep the full
+   supported native device matrix explicitly unverified.
 
 ## Current evidence and first discriminator
 
@@ -108,10 +111,11 @@ reader reply at04:23:08.614Z is DISABLED. The12mini probe is uninstalled, absent
 fresh app inventory/process observations, and Settings is restored with keyboard closed.
 The peer reports removing our13Pro probe (来源：peer); this task does not contact that
 device. Implementation commit is `c4f29f2`, reviewed in
-[Draft PR#9](https://github.com/ipbtools/ipb/pull/9). Keep it Draft while the supported
-native hardware gate remains open; CI build/package checks are separate host gates,
-with current results on the PR and raw references outside Git. No merge, release or
-default reinstall.
+[PR#9](https://github.com/ipbtools/ipb/pull/9). The user's subsequent decision removes
+the additional-device-test hold for v0.5.0; it does not mark that matrix as passed.
+Opus5.5 reviews the fixed implementation before merge, with host/package/Homebrew checks
+as the remaining publication gates. Current review/build results and raw references stay
+outside Git. Default local installation is outside this release task.
 
 ## Implementation constraints
 
@@ -138,8 +142,9 @@ open; a successful previously authorized device is not a substitute for that con
 Use maintained host fixtures for selector ambiguity/freshness and action boundaries.
 Real-device flows must verify visible/effective outcomes and cleanup, with raw artifacts
 outside Git. The full supported macOS27/Xcode27/iOS27 smoke remains distinct from
-supplementary local or USB-forwarded AX controls. Only request PR acceptance after
-the requested physical flows have passed within their declared scope.
+supplementary local or USB-forwarded AX controls. For v0.5.0 the user explicitly
+waived additional physical testing and authorized publication after Opus5.5 review
+and host/package checks. Do not resume device operations or infer a general waiver.
 
 ## Rejected alternatives
 

@@ -4,7 +4,13 @@
 
 **Updated 2026-10-21. This section is overwritten; dated records below are append-only.**
 
-### Runner-free element work (2026-10-21, unreleased branch)
+### Runner-free element work (2026-10-21, v0.5.0 preparation)
+
+The maintainer subsequently decided: no further physical-device verification for this
+version; have Opus5.5 review the scheme, then merge/update the release if no blocking
+issue remains. This version-specific decision authorizes v0.5.0 and its stable Homebrew
+update after review/host/package checks. It waives the additional device step, not the
+truth of the unverified matrix below. No new phone operation is part of publication.
 
 The user authorized implementation and a PR, without a phone Runner. Device allocation
 is explicit: this task uses12mini; “Review PR 1 兼容性” uses13Pro. No operation on the
@@ -42,14 +48,15 @@ Ordinary press keeps its exact centre-hit guard.
 An unfocused-input control fails before submission and preserves the clipboard.
 The phone is restored to Settings with keyboard closed.
 
-**Review:** [Draft PR#9](https://github.com/ipbtools/ipb/pull/9) contains the implementation
-and current protocol/guide updates. CI build/package checks are host gates; their
-current result is on the PR and cannot replace the physical gate below.
+**Review:** [PR#9](https://github.com/ipbtools/ipb/pull/9) contains the implementation
+and current protocol/guide updates. Opus5.5 reviews the fixed implementation before
+merge; CI build/package checks remain required host gates and are not physical proof.
 **Unverified hardware boundary:** the
 full native macOS27/Xcode27/iOS27 HID/media gate remains open; the allocated phone is attached
 to supplementary macOS26.5.1/25F80/CoreDevice642.15, not natively enumerated on Mac-M2.
-Past release-specific exceptions do not close this branch's gate. No new release, merge,
-Homebrew update or default local reinstall is authorized/performed here. Local references:
+Past release-specific exceptions do not close this branch's gate. The user's new v0.5.0
+decision is the authority for publishing without that additional test. Review/publication
+is in progress; default local installation remains outside this task. Local references:
 `~/.local/state/ipb/20261021-runner-free-elements/` and `docs/runner-free-elements.md`.
 
 ### Native deep observation update (2026-10-14, v0.4.0 released)
