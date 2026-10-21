@@ -4597,15 +4597,9 @@ Do not use the remote DTX wrapper's NSNumber returnValue/NSError pair as the
 local `sendString` block ABI: the wrapper creates the Boolean from whether its
 single NSError argument is nil. An explicit local Automation Mode request
 reaches the real system "Enable UI Automation" passcode sheet. Only the human
-handles that authorization. No successful authorization, Unicode delivery or
-business callback is inferred from displaying the sheet. The first short probe
-deadline expired without sending input. A manually controlled probe then keeps
-its client alive longer, but this system authorization returns
-`com.apple.LocalAuthentication/-1003` (authentication timeout) after about
-320 seconds. This is a system authentication result, not a new NSXPC admission
-failure. The client closes its connection; no text action is sent. A future
-control requires a fresh prompt when the human is ready; extending the client
-deadline alone does not establish the system sheet's lifetime.
+handles that authorization. An earlier request timed out with LocalAuthentication -1003 after about 320 seconds; extending the client deadline is not proof of the system sheet lifetime. A later human-ready request completed authorization and orientation readiness. The ordinary development client then delivered Unicode with independent normal callbacks and actual business submission across the tested UIKit, SwiftUI and Web controls. This is feasibility on the stated seed, not a new supported ipb host/device matrix or a completely XCTest-independent route.
+
+**Confirmed cancellation boundary:** a controlled 140-character synthetic string at maximumFrequency=5 continued to its full length after the owned client invalidated its NSXPC connection at 0.8 seconds. Matching `-[XCTestSession invalidate]` (`0x10002e694`) cleans session/Automation Mode/provider state; no explicit in-flight performer cancellation was identified there. Therefore connection invalidation must not be treated as cancellation of an issued string. Keep the terminal completion channel while draining Stop. A missing terminal reply requires unknown outcome/no replay and isolation of later phone actions and assistant activation; it is not safe to switch focus merely because the client connection closed.
 
 The lower Unicode chain is also present: the gesture performer selects keyboard
 sender properties, then the event-stream action calls

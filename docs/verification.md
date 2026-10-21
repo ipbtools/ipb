@@ -5,29 +5,16 @@
 **Updated 2026-10-21. This section is overwritten; dated records below are append-only.**
 
 The [current protocol/AX findings index](ax-p0-research.md) groups F01–F22, the six-control
-business matrix, static/runtime proof boundaries and next discriminators. This documentation
-PR adds no input run; the no-Runner preserving-value recipient remains unestablished.
+business matrix, static/runtime proof boundaries and next discriminators. The phone-local Unicode route is now feasible with normal system authorization; a serverless/XCTest-independent ipb product route remains unestablished.
 
 ### Unicode input authorization control (2026-10-21)
 
-Recommendation: complete one human-ready system authorization, then verify the
-independent receiver's backing text, business callbacks/model and submit behavior
-before introducing a product route. The user has already authorized implementation
-and real-device validation if this works; no architecture approval is pending.
+Recommendation: complete the guarded PocketAgent integration and its actual-device gate. The user already authorized implementation and device validation; no new architecture approval or passcode entry is currently pending.
 
-- **Confirmed:** an ordinary development-signed phone app establishes a local
-  testmanagerd XCTestSession without linking XCTest or starting a separate Runner.
-  An incomplete exported callback interface caused client cancellation; an untyped
-  NSError reply caused dropped authorization errors. Both probe defects are fixed.
-  Unenabled UI Automation returns error 41. The explicit request reaches the system
-  passcode sheet, but the longer-lived control returns LocalAuthentication -1003
-  after about 320 seconds; displaying the sheet is not authorization success.
-- **Human action:** a fresh 13 Pro system passcode authorization when the user is
-  ready. Do not enter or reuse an expired prompt. Device ownership is allocated:
-  this research uses 13 Pro, the separate ipb task uses 12 mini.
-- **Agent work after that dependency:** readiness, clipboard-free Unicode and six
-  independent control/business checks, then product integration and its delivery
-  gates. No text action was sent in this control and no product route changed.
+- **Confirmed:** ordinary development-signed local NSXPC admission, normal human UI Automation authorization and independent six-control Unicode/business submission. This still uses DDI XCTest daemon components.
+- **Confirmed blocker in the naive design:** disconnecting the local client 0.8 seconds into a 140-character send does not stop it; the independent receiver continues to the full string. Session teardown is not input cancellation.
+- **Agent work:** explicit foreground preparation/turn lease, terminal-reply draining on Stop, durable unknown-outcome protection and no automatic assistant activation while unknown; then core/native/iOS build, IPA and exact-device product gates. Secure/append/unknown-value fields are outside the initial experimental product contract.
+- **Device allocation:** this task uses 13 Pro; the separate ipb task uses 12 mini. No operation on the other phone is authorized here.
 
 The [current input plan](unicode-input-20261021.md) and
 [local protocol/gate investigation](protocol.md#phone-originated-local-nsxpc-admission-and-ui-automation-gate-2026-10-21)
@@ -8112,3 +8099,8 @@ The separate receiving app preserves business model updates exclusively in
 normal UIKit/SwiftUI/Web callbacks and records backing state separately. Those
 controls remain pending authorization, not passed. Probe/source/signing/runtime
 artifacts and local handoff stay outside Git.
+
+
+## 2026-10-21 — Local Unicode disconnect does not cancel injection
+
+On the stated iOS 27.0/24A437 and Xcode 27 beta 6 DDI seed, an ordinary development-signed local client sends 140 synthetic ASCII characters at maximumFrequency=5 to an independent UIKit receiver. Invalidating only its own NSXPC connection at 0.8 seconds should not be used as a stop primitive: the receiver continues normal callbacks and reaches all 140 characters after the connection has closed. Static session teardown identifies no direct performer cancellation. The product integration must retain the terminal reply for Stop, isolate unknown results, suppress automatic assistant return and never replay input. Product regression of that protection remains open; raw probes and local references are outside Git.
