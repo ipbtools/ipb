@@ -4547,3 +4547,82 @@ No fixture is installed and no input is sent after failed bridge admission. All 
 subscriptions acknowledge stop and owned DTX/socket/tunnel/pair-cache resources close. The
 human handles the preexisting account sheet; final AX hit/label/screenshot show PocketAgent
 PID1295. No product code/default changes or supported macOS27 acceptance are claimed.
+
+### Phone-originated local NSXPC admission and UI Automation gate (2026-10-21)
+
+**Evidence/seed:** shipped iPhoneOS XCTestCore from Xcode 27 beta 6, and DDI
+`/usr/libexec/testmanagerd`, arm64e UUID
+`F154543F-6075-34E5-8ACF-C8245D4F2611`; runtime controls on iOS 27.0/24A437,
+macOS 26.5.1, CoreDevice 642.15. This is a phone-originated experiment, not a
+new host-to-local-Mach bridge or a supported-host matrix pass. The client links
+Foundation/UIKit only, with ordinary development signing and `get-task-allow`;
+no Apple-internal entitlement, XCTest framework, test bundle or separate Runner
+is installed by this experiment.
+
+The app can create a local NSXPC connection to
+`com.apple.dt.testmanagerd.runner`. The daemon constructs an actual
+`XCTestSession` and handles `_XCT_exchangeCapabilities:reply:`. The previous
+host FD failures therefore do not establish that an ordinary phone app cannot
+originate this local connection. It still implements the daemon's Runner-role
+client protocol and depends on XCTest components in the DDI; this is not a
+serverless ipb product implementation.
+
+Two probe defects have concrete diagnostic causes:
+
+- The daemon proactively calls
+  `_XCT_applicationWithBundleID:didUpdatePID:andState:`. An empty exported
+  `XCTMessagingChannel_DaemonToRunner` interface causes the client to reject the
+  selector and cancel its own connection. Declaring/implementing the method
+  with NSString, int PID and NSUInteger state fixes that observed handshake
+  failure. `_XCT_interfaceOrientationDidChange:` takes NSInteger. This is not
+  proof that these are every possible callback in a production session.
+- A read-only orientation request returns daemon error 41, "Not authorized for
+  performing UI testing actions", before Automation Mode is enabled. A probe
+  reply declared as two untyped `id` parameters then fails NSXPC's NSError
+  allowlist and drops this real error. Use the actual `NSNumber * / NSError *`
+  reply types; distinguish decoding failure, authorization refusal and an
+  owner-imposed deadline instead of reporting them as one admission failure.
+
+Matching daemon implementations establish the next sequence and ABI:
+
+| Selector/check | arm64e VM | Meaning |
+| --- | --- | --- |
+| `allowsUITestControl` | `0x10002f834` | Internal-client skip, otherwise `isAutomationModeEnabled`; development signing alone is not a skip |
+| `_XCT_enableAutomationModeWithReply:` | `0x100030340` | One nullable NSError reply; ordinary clients request system authorization |
+| `_XCT_loadAccessibilityWithTimeout:reply:` | `0x100032258` | Double timeout, BOOL/NSError reply; also requests Automation Mode unless skipped |
+| `_XCT_getInterfaceOrientationWithCompletion:` | `0x100034e08` | NSNumber/NSError reply after `ensureUITestingIsReadyWithError:` |
+| `_XCT_sendString:maximumFrequency:completion:` | `0x100034d4c` | NSString, NSUInteger and one nullable NSError completion; same readiness gate before `typeString:keysPerSecond:completion:` |
+
+Do not use the remote DTX wrapper's NSNumber returnValue/NSError pair as the
+local `sendString` block ABI: the wrapper creates the Boolean from whether its
+single NSError argument is nil. An explicit local Automation Mode request
+reaches the real system "Enable UI Automation" passcode sheet. Only the human
+handles that authorization. No successful authorization, Unicode delivery or
+business callback is inferred from displaying the sheet. The first short probe
+deadline expired without sending input; a bounded, manually controlled probe
+replaces it for the pending human-operated control.
+
+The lower Unicode chain is also present: the gesture performer selects keyboard
+sender properties, then the event-stream action calls
+`sendUnicodeStringByCharacters:durationBetweenEvents:` (`0x100018870`). Matching
+DeviceSupport `Recap.framework`, arm64e UUID
+`A5EAC64D-570F-3AEB-953A-57620796096D`, implements this selector on
+`RCPSyntheticEventStream` at `0x29bccb0a0`. Sender properties and the event
+stream are distinct objects. Matching DeviceSupport IOKit UUID
+`38DD6D30-4343-3F3F-8869-0938BF2CA23D` exposes an explicit lower gate:
+`__io_hideventsystem_create_virtual_service` (`0x18f0a6f30`) and
+`__io_hideventsystem_dispatch_event` (`0x18f10f270`) check connection entitlement
+bit 3 for nonzero connection types and name
+`com.apple.private.hid.client.event-dispatch` on refusal. Connection creation
+maps that key/internal variant to bit 3 (`0x18f086870–0x18f0868b4`). The tested
+app's effective signing entitlements contain neither HID event-dispatch nor
+XCTest internal-client. This is a concrete permission constraint to resolve,
+not proof that every Recap constructor/client type is impossible: no direct
+Recap app input control has run, and the type-zero admission branch must not
+be omitted from the analysis. Framework dependencies or symbol presence alone
+do not establish effective permission.
+
+The remaining acceptance is independent receiver backing text, normal business
+callbacks/model and a real submit action across UIKit, SwiftUI and Web controls.
+At this checkpoint no new Unicode action has been sent and no product input
+route/default has changed. See [the current plan](unicode-input-20261021.md).
