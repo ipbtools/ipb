@@ -76,7 +76,7 @@ Apple DDI 自有权限不受上述普通 App 结论直接约束。进一步对�
 
 <details><summary>影响、集成与验证</summary>
 
-- PocketAgent：不合目标的接入已经撤回，现有 paste/AX/物理键接口完整保留；独立 bootstrap 修复保留。PR #1 头为 `d93cf052eb954d1f83f0d257af17d291b3453c3f`，含既有兼容修复；本地另有 bootstrap 修复。产品 review 问题及处置集中于 PocketAgent 的 `docs/devicehub-control.md`，这里不重复归档。
+- PocketAgent：不合目标的接入已经撤回，现有 paste/AX/物理键接口完整保留。用户授权补入 bootstrap 修复和结论文档并合入；[PR #1](https://github.com/Borealin/PocketAgent/pull/1) 已以 `f7a2d3f1c2df9d7dd9b66f2054edca3d5f634a3e` 合入 main。兼容 review 基线为 `d93cf05`，最终补丁只改 host bootstrap、其回归和文档，手机运行代码保持；未引入已排除的 XCTest 候选。产品 review 问题及处置集中于 PocketAgent 的 `docs/devicehub-control.md`，这里不重复归档。
 - ipb：本次只覆盖当前研究方案和 verification living section；未增加 Unicode 或通用 AX 文本产品接口，不引入手机端 Runner/服务。
 - Android、眼镜 BT/ISP/Wi-Fi、schema、rpc、lt-vad：不受影响；没有眼镜通信或音频契约变化。
 - 当前设备状态：上一实机轮 13 Pro 准入/独立控件对照已结束并释放；临时 App 已移除，自有服务不存在，DDI 枚举恢复。原 PocketAgent 安装元数据保持，未操作 12 mini，未改 VPN 或 UI Automation 设置。本次仅静态定位/文档整理，没有新增设备操作、构建或安装，不能新增实机验收声明。
@@ -89,4 +89,4 @@ Apple DDI 自有权限不受上述普通 App 结论直接约束。进一步对�
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | createService 通路调研 | ipb/开发服务 | Codex 主查；DeepSeek Flash/Grok 4.7 脱敏咨询 | 待确认 | codex/unicode-input-20261021 | 暂缓/未排期 | 创建结果回复路径已定位，根因和修正未闭合；2026-10-22 | 合法创建报文及 reply 对象来源 |
 | 新 Unicode 业务回调对照 | 独立 iOS 接收端 | Codex | 待确认 | 同上 | 暂缓/未提测 | 物理 HID 正控成立；Unicode 未发送/未验收 | 合规可用的 Unicode sender |
-| 三种既有输入方式 | PocketAgent iOS/native | 维护负责人待确认 | 无新增开发估算 | codex/pr1-compatibility-fixes | 发布/提测待确认 | 接口已实现，保持既有验收范围；本次文档收敛 | 现有策略/目标/回调限制 |
+| 三种既有输入方式 | PocketAgent iOS/native | 维护负责人待确认 | 无新增开发估算 | codex/pr1-compatibility-fixes | 发布/提测待确认 | 接口已实现；bootstrap 修复及文档已随 PR #1 合入 main，保持既有实机验收范围 | 现有策略/目标/回调限制 |
