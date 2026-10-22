@@ -2,26 +2,24 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-10-21. This section is overwritten; dated records below are append-only.**
+**Updated 2026-10-22. This section is overwritten; dated records below are append-only.**
 
 The [current protocol/AX findings index](ax-p0-research.md) groups F01–F22, the six-control
-business matrix, static/runtime proof boundaries and next discriminators. The prior phone-local Unicode route requires XCTest and is excluded by the user's branch requirement; an XCTest-independent product route remains unestablished.
+business matrix, static/runtime proof boundaries and next discriminators. The prior phone-local Unicode route requires XCTest and is excluded. A new arbitrary-Unicode route with no clipboard and normal callbacks remains unestablished; the user now accepts PocketAgent's existing paste, physical keys and guarded AX replacement, with that research deferred.
 
-### Unicode input without XCTest (2026-10-21)
+### Input decision and deferred Unicode research (2026-10-22)
 
-The user explicitly requires removing XCTest dependencies. The local NSXPC
-candidate uses testmanagerd/XCTestSession and Automation Mode, so it is rejected
-and its PocketAgent integration is withdrawn. No further password authorization
-or optional product adapter is appropriate for this branch.
+The user accepts PocketAgent's three existing input methods: clipboard paste,
+physical keys and guarded AX whole-field replacement. The DDI path remains
+strictly independent of XCTest/testmanagerd/XCTestSession, a Runner and UI
+Automation authorization. The former NSXPC integration is withdrawn. No new
+Unicode interface or authorization flow is appropriate for this branch.
 
-- **Still unresolved:** clipboard-free Unicode with normal business callbacks and no XCTest/testmanagerd dependency.
-- **Agent work:** ordinary-app type-zero creation is admin-gated and the inspected nonzero dispatch receivers require event-dispatch permission. The UUID-pinned admission control confirms no type-zero server port. DDI self-owned permissions are a separate route; its raw createService controls currently fail before Unicode dispatch. Establish legitimate creation/reply framing and the text receiver before integration. Existing HID/IME evidence does not prove arbitrary Unicode.
-- **Retained research facts:** the excluded service can deliver normal callbacks, and disconnecting it does not cancel injection. These are not compliant-feature acceptance.
-- **Separate observation work:** ipb native deep trees exist; PocketAgent AXChildren omitted the receiver Web field. Deep-tree integration is not Unicode dispatch.
-- **Device state:** this continuation re-coordinated 13 Pro, removed its two temporary fixtures and confirmed the owned service absent plus DDI enumeration recovered. Original PocketAgent installation metadata is preserved; no 12 mini, VPN or UI Automation setting was changed. Recheck occupancy before future experiments.
-
-See [the current input plan](unicode-input-20261021.md) and
-[the rejected local protocol investigation](protocol.md#phone-originated-local-nsxpc-admission-and-ui-automation-gate-2026-10-21).
+- **Product decision, closed for this iteration:** keep the three existing APIs and frozen clipboard policy. This does not add an ipb AX-text product command. Paste may need target permission; physical keys depend on layout/IME; AX value confirmation does not prove callbacks/model/submission. No automatic route switch or replay follows partial/unknown effects.
+- **Research, deferred rather than a product blocker:** arbitrary Unicode with no clipboard, normal callbacks and no XCTest remains unresolved. Matching dtuhidd disassembly now locates the assertion in the create result's CreatedServiceID encode/sendReply path. Legal reply-object construction and service lifetime are still unproven. The one-way timeout is not a fix; no Unicode report was sent. Stop repeated crashing create requests.
+- **Agent-fixable discriminator if research resumes:** first obtain legitimate producer/receiver encoding and a successful creation/reply control. Ordinary-app type-zero admin and nonzero dispatch permission limits do not constrain the DDI daemon's own entitlements. See the [current research plan](unicode-input-20261021.md) for precise offsets and DeepSeek Flash/Grok 4.7 peer arbitration; no validated new implementation emerged.
+- **Separate observation work:** ipb native deep trees exist; PocketAgent's AXChildren adapter and callback limitations are separate integration concerns. Deep-tree integration does not solve Unicode dispatch.
+- **Validation/state:** this closeout is static and documentation-only. Prior 13 Pro controls and cleanup retain their original scope; the phone was released, fixtures removed and owned service absent. No new device operation, build/install or callback/submission acceptance is claimed. Recheck occupancy before a future experiment.
 
 ### Native deep observation update (2026-10-14, v0.4.0 released)
 
