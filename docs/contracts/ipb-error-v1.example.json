@@ -1,0 +1,18 @@
+{
+  "kind": "ipb.error",
+  "contractVersion": 1,
+  "operation": "ui.press",
+  "phase": "unknown",
+  "exitCode": 6,
+  "error": {
+    "type": "TimeoutError",
+    "message": "operation timed out after submission"
+  },
+  "action": {
+    "state": "submitted",
+    "native": "unknown",
+    "childExitCode": null
+  },
+  "retrySafe": false,
+  "result": null
+}
