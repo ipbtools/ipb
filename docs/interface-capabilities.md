@@ -1,6 +1,6 @@
 # 接口能力与规范补充
 
-> 状态：已决定待开发；最后核对：2026-10-27。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向B。
+> 状态：B0契约与兼容fixture已提交；B1待实现；最后核对：2026-10-27。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向B。
 
 ## 1. 需求与关联资料
 
@@ -74,4 +74,4 @@ Android/iOS业务App、BT/ISP/Wi-Fi固件、lt-vad/schema/rpc不受影响，原�
 | 结构化错误/text/support | 同一进程B | 同分支分段提交 | 可评审代码、主机测试和接线清单 | B0 | 待确认 |
 | RSD截图候选 | 同一进程B | 同分支独立实验提交 | 显式探针与mock验证、设备待办 | 已固定pmd11.10.2；设备验收未安排 | 待确认 |
 
-当前为开发方案，不声称新接口已落地或设备验证完成。
+B0已编写权威契约、v1错误schema、阶段映射fixture与基线字节级golden；后者从共同base `b3c1a63` 的Python main通过fake run捕获，不含设备数据。B1尚未实现，实机验收保持待办。共享对象的既有字段/语义未改；action.state保留原生阶段词汇，native已知时为boolean、未知为unknown。

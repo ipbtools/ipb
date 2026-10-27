@@ -1,0 +1,225 @@
+{
+  "scope": "host mapping fixtures; no device evidence",
+  "cases": [
+    {
+      "operation": "press",
+      "state": "not-sent",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "not-sent",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": true
+    },
+    {
+      "operation": "press",
+      "state": "submitted",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "submitted",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "press",
+      "state": "accepted",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "accepted",
+        "native": true,
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "press",
+      "state": "refused",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "refused",
+        "native": false,
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "alert-press",
+      "state": "not-sent",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "not-sent",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": true
+    },
+    {
+      "operation": "alert-press",
+      "state": "submitted",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "submitted",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "alert-press",
+      "state": "accepted",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "accepted",
+        "native": true,
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "alert-press",
+      "state": "refused",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "refused",
+        "native": false,
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "scroll-to-visible",
+      "state": "not-sent",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "not-sent",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": true
+    },
+    {
+      "operation": "scroll-to-visible",
+      "state": "submitted",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "submitted",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "scroll-to-visible",
+      "state": "native-true",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "native-true",
+        "native": true,
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "scroll-to-visible",
+      "state": "native-false",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "native-false",
+        "native": false,
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "input",
+      "state": "not-sent",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "not-sent",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": true
+    },
+    {
+      "operation": "input",
+      "state": "submitted",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "submitted",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "input",
+      "state": "child-exited-zero",
+      "childExitCode": 0,
+      "expectedAction": {
+        "state": "child-exited-zero",
+        "native": "unknown",
+        "childExitCode": 0
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "input",
+      "state": "child-exited-nonzero",
+      "childExitCode": 23,
+      "expectedAction": {
+        "state": "child-exited-nonzero",
+        "native": "unknown",
+        "childExitCode": 23
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "input",
+      "state": "child-unknown",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "unknown",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "input",
+      "state": "child-exited-nonzero",
+      "childExitCode": -15,
+      "expectedAction": {
+        "state": "unknown",
+        "native": "unknown",
+        "childExitCode": -15
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "input",
+      "state": "child-exited-nonzero",
+      "childExitCode": 143,
+      "expectedAction": {
+        "state": "unknown",
+        "native": "unknown",
+        "childExitCode": 143
+      },
+      "retrySafe": false
+    },
+    {
+      "operation": "input",
+      "state": "unrecognized",
+      "childExitCode": null,
+      "expectedAction": {
+        "state": "unknown",
+        "native": "unknown",
+        "childExitCode": null
+      },
+      "retrySafe": false
+    }
+  ]
+}
