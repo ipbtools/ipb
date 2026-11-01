@@ -16,7 +16,7 @@ from release_tag import parse_tag
 ROOT = Path(__file__).resolve().parents[1]
 INSTALL_FILES = {
     "bin/ipb", "libexec/ipb-helper", "libexec/ipb-video", "libexec/ipb-mirror",
-    "libexec/ipb-ax.py", "libexec/ax_archive.py", "share/ipb/requirements-ax.txt",
+    "libexec/ipb-ax.py", "libexec/ipb-support.py", "libexec/ax_archive.py", "share/ipb/requirements-ax.txt",
     "libexec/ipb_mcp.py", "libexec/ipb_mcp_adapter.py", "libexec/ipb_mcp_process.py",
     "share/ipb/VERSION", "share/ipb/smoke_matrix.sh", "share/ipb/smoke_assertions.zsh",
     "share/ipb/png_pixels_digest.py", "share/ipb/assert_search_text.swift",
@@ -24,7 +24,7 @@ INSTALL_FILES = {
 }
 EXTRAS = {"LICENSE", "BUILD_INFO.json", "TEST_PACKAGE.md"}
 BINARIES = ("ipb-helper", "ipb-video", "ipb-mirror")
-EXECUTABLES = {"bin/ipb", "libexec/ipb-ax.py", *("libexec/" + x for x in BINARIES),
+EXECUTABLES = {"bin/ipb", "libexec/ipb-ax.py", "libexec/ipb-support.py", *("libexec/" + x for x in BINARIES),
                "share/ipb/smoke_matrix.sh", "share/ipb/smoke_assertions.zsh",
                "share/ipb/png_pixels_digest.py"}
 
@@ -38,6 +38,13 @@ def files_under(prefix):
     if any(p.is_symlink() for p in paths):
         raise ValueError("unexpected symlink in package")
     return {p.relative_to(prefix).as_posix() for p in paths if p.is_file()}
+
+
+def verify_support(cli):
+    report = json.loads(run(str(cli), "support", "--json"))
+    if (not isinstance(report, dict) or report.get("kind") != "ipb.support"
+            or type(report.get("contractVersion")) is not int or report["contractVersion"] != 1):
+        raise ValueError("installed support contract mismatch")
 
 
 def verify(prefix):
@@ -135,6 +142,7 @@ CI package to update this extracted copy; `ipb update` does not upgrade it.
         run(str(cli), "help")
         run(str(cli), "help", "hid")
         run(str(cli), "mcp", "--help")
+        verify_support(cli)  # Static inventory only; never selects/queries a phone.
         # Start each Mach-O without device arguments; usage errors are expected,
         # but loader errors, crashes and missing private symbols must fail CI.
         for binary in BINARIES:

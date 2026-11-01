@@ -1277,6 +1277,92 @@ def positive_timeout(text):
     return number
 
 
+def error_action(args, result=None):
+    """Use in-process state/typed result fields, never stderr or an exit alone."""
+    operation = getattr(args, "operation", "unknown")
+    if operation in (None, "hit-test", "locate", "wait"):
+        return None
+    has_result = result is not None
+    state, native, child = "unknown", "unknown", None
+    result = result if isinstance(result, dict) else {}
+    action = result.get("action")
+    action = action if isinstance(action, dict) else {}
+    if operation in ("press", "alert-press"):
+        state = getattr(args, "press_state", "unknown")
+        if type(action.get("nativeAccepted")) is bool:
+            state = "accepted" if action["nativeAccepted"] else "refused"
+        if state not in ("not-sent", "submitted", "accepted", "refused"):
+            state = "unknown"
+        native = {"accepted": True, "refused": False}.get(state, "unknown")
+    elif operation == "scroll-to-visible":
+        state = getattr(args, "scroll_state", "unknown")
+        if type(result.get("nativeResult")) is bool:
+            state = "native-true" if result["nativeResult"] else "native-false"
+        if state not in ("not-sent", "submitted", "native-true", "native-false"):
+            state = "unknown"
+        native = {"native-true": True, "native-false": False}.get(state, "unknown")
+    elif operation == "input":
+        state = getattr(args, "input_state", "unknown")
+        child = action.get("childExitCode", getattr(args, "input_exit_code", None))
+        child = child if type(child) is int else None
+        if child is not None:
+            state = ("child-exited-zero" if child == 0 else "child-exited-nonzero"
+                     if 0 < child < 128 else "unknown")
+        elif state not in ("not-sent", "submitted"):
+            state = "unknown"
+    # A returned action failure without a typed receipt cannot establish that
+    # nothing was sent, even if the caller's initial state was not updated.
+    if has_result and state == "not-sent":
+        state = "unknown"
+    return {"state": state, "native": native, "childExitCode": child}
+
+
+def emit_error(args, code, error_type, message, *, phase="unknown", result=None):
+    operation = getattr(args, "operation", "unknown")
+    operation = "ui.dump" if operation is None else "ui." + operation
+    if operation not in ("ui.dump", "ui.hit-test", "ui.locate", "ui.wait", "ui.press",
+                          "ui.alert-press", "ui.input", "ui.scroll-to-visible"):
+        operation = "unknown"
+    action = error_action(args, result)
+    envelope = {"kind": "ipb.error", "contractVersion": 1,
+                "operation": operation, "phase": phase, "exitCode": code,
+                "error": {"type": error_type, "message": message}, "action": action,
+                "retrySafe": action is None or action["state"] == "not-sent", "result": result}
+    print(json.dumps(envelope, ensure_ascii=False, indent=2, allow_nan=False))
+    return code
+
+
+class AXArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        if os.environ.get("IPB_ERROR_FORMAT") == "json":
+            args = getattr(self, "error_context", argparse.Namespace(operation="unknown"))
+            emit_error(args, 2, "ArgumentError", message, phase="validation")
+            self.exit(2)
+        super().error(message)
+
+
+def result_failure(result):
+    """Classify explicit native result statuses before printing any JSON."""
+    supplemental = result.get("supplementalAX", {})
+    if supplemental.get("status") == "failed":
+        error = supplemental["error"]
+        return supplemental["exitCode"], "supplemental", error["type"], error["message"]
+    status = result.get("status")
+    if status == "timed_out":
+        return 5, "query", "TimeoutError", "wait deadline expired; last complete observation retained"
+    if status == "postcondition_failed":
+        return 6, "postcondition", "PostconditionError", "postcondition is not verified; do not retry automatically"
+    if status == "child_failed":
+        return 6, "submission", "ChildProcessError", "replace-all child failed; clipboard may have changed and input delivery may be partial"
+    if status == "child_outcome_unknown":
+        return 6, "submission", "ChildOutcomeUnknown", "replace-all child outcome is unknown; clipboard may have changed or input may be partial"
+    if status == "native_refused":
+        return 6, "submission", "NativeRefused", "native alert press was refused; do not retry automatically"
+    if status == "alert_postcondition_failed":
+        return 6, "postcondition", "PostconditionError", "native alert press was accepted, but original modal/button disappearance was not verified"
+    return None
+
+
 def report_failure(args, error, code):
     """A nonzero exit after action submission must never invite an action replay."""
     state = getattr(args, "press_state", "not-sent")
@@ -1285,6 +1371,11 @@ def report_failure(args, error, code):
     message = str(error) or ("AX query cancelled" if isinstance(error, asyncio.CancelledError) else
                              "AX query timed out; no partial result emitted" if isinstance(error, TimeoutError) else
                              "AX operation failed")
+    if os.environ.get("IPB_ERROR_FORMAT") == "json":
+        action = error_action(args)
+        if action is not None and action["state"] != "not-sent":
+            code = 6
+        return emit_error(args, code, type(error).__name__, message)
     if getattr(args, "operation", None) in ("press", "alert-press") and state != "not-sent":
         prefix = "native alert press" if getattr(args, "operation", None) == "alert-press" else "native press"
         submitted = "alert press submitted; outcome unknown" if prefix == "native alert press" else "press submitted; outcome unknown"
@@ -1313,7 +1404,7 @@ def report_failure(args, error, code):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="ipb ui", description="Read, locate, wait for, press, scroll or input through fresh AX elements; no XCTest or phone app.")
+    parser = AXArgumentParser(prog="ipb ui", description="Read, locate, wait for, press, scroll or input through fresh AX elements; no XCTest or phone app.")
     parser.add_argument("operation", nargs="?", choices=("press", "alert-press", "scroll-to-visible", "input", "hit-test", "locate", "wait"),
                         help="press once, press one observed SpringBoard modal button, scroll an element into view, input to a current text responder, read a point, locate fresh native AX matches, or wait for presence/absence")
     parser.add_argument("--identifier", help="exact native accessibility identifier selector (conjunctive)")
@@ -1336,12 +1427,13 @@ def main():
     parser.add_argument("--deep", action="store_true", help="read the native descendant tree and geometry without an AXChildren walk")
     parser.add_argument("--full-state", action="store_true", help="with --deep, read state/role separately into supplementalAX (extra per-handle requests)")
     args = parser.parse_args()
-    if args.full_state and (not args.deep or args.operation is not None):
-        parser.error("--full-state requires a --deep dump")
+    parser.error_context = args
     args.press_state = "not-sent"
     args.scroll_state = "not-sent"
     args.input_state = "not-sent"
     args.input_exit_code = None
+    if args.full_state and (not args.deep or args.operation is not None):
+        parser.error("--full-state requires a --deep dump")
     if args.operation is not None and args.deep:
         parser.error("--deep is only used by a dump")
     selector_values = (args.identifier, args.label, args.value, args.class_name)
@@ -1387,12 +1479,18 @@ def main():
     if args.pid is not None and args.pid <= 0:
         parser.error("--pid must be positive")
     if sys.version_info < (3, 11):
+        if os.environ.get("IPB_ERROR_FORMAT") == "json":
+            return emit_error(args, 2, "DependencyError", "Python 3.11+ is required; set IPB_AX_PYTHON", phase="dependency")
         print("ipb ui: Python 3.11+ is required; set IPB_AX_PYTHON", file=sys.stderr)
         return 2
     try:
         if version("pymobiledevice3") != "11.10.2":
             raise ValueError("ipb ui requires the verified pymobiledevice3 11.10.2")
     except Exception:
+        if os.environ.get("IPB_ERROR_FORMAT") == "json":
+            return emit_error(args, 2, "DependencyError",
+                              "install requirements-ax.txt in a Python 3.11+ environment and set IPB_AX_PYTHON to its interpreter",
+                              phase="dependency")
         print("ipb ui: install requirements-ax.txt in a Python 3.11+ environment and set IPB_AX_PYTHON to its interpreter", file=sys.stderr)
         return 2
     logging.basicConfig(level=logging.ERROR)
@@ -1413,6 +1511,11 @@ def main():
         return report_failure(args, error, 5)
     except Exception as error:
         return report_failure(args, error, 1)
+    if os.environ.get("IPB_ERROR_FORMAT") == "json":
+        failure = result_failure(result)
+        if failure is not None:
+            code, phase, error_type, message = failure
+            return emit_error(args, code, error_type, message, phase=phase, result=result)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
     elif args.operation == "hit-test":

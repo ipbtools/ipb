@@ -136,6 +136,36 @@ A successful ordinary press reports `nativeAccepted=true`, `effectVerified=false
 the page again to establish the effect. `SMOKE_AX=1` adds the read gate
 for both ordinary and deep output to the normal smoke matrix; `SMOKE_AX_ONLY=1` runs only that gate.
 
+### Opt-in structured errors and implementation inventory
+
+`IPB_ERROR_FORMAT=json` enables the [v1 error contract](contract.md) for failures
+handled inside the Python AX backend. It preserves the existing exit code and
+emits exactly one `ipb.error` JSON on stdout, even without `--json`. Success keeps
+its original schema 1/2 or text output. Without this environment variable, the
+old stdout/stderr/exit behavior remains unchanged.
+
+For a failed wait deadline or deep supplementary request, the complete result
+that was previously emitted is now in the error document's top-level `result`
+field, retaining the original schema and fields. A failed
+action may likewise retain its native result. Read errors have `action=null`;
+action receipts preserve submission, native true/false and child exit status.
+Neither native acceptance nor a zero child exit proves the UI effect. Exceptions
+without a known stage have `phase="unknown"`; no state is inferred from stderr.
+
+zsh device resolution/setup failures, raw `text`, native helpers and external
+process termination are outside this first error-envelope boundary. A nonzero
+exit without a recognized v1 document remains unknown; do not retry an action
+automatically. Handled cancellation preserves the known in-process submission
+state but does not establish descendant-process cleanup for a caller.
+
+`ipb support --json` reports a separate static `ipb.support` inventory without
+selecting or querying a device. It separates implementation, prerequisites,
+unknown advertisement and empty verification records. `-s` and `DEVICE_ID` do
+not cause a support query. No operation is marked available or verified by this
+report. `capabilities --json` retains its existing Apple-advertisement semantics.
+Both new interfaces are **implemented but device-unverified / pending acceptance**;
+host fixtures do not close the supported HID/media/AX device gate.
+
 ## Locating, waiting for, and pressing an element
 
 ```sh

@@ -31,6 +31,7 @@ _ipb_commands() {
     'version:ipb, macOS and CoreDevice versions'
     'update:update ipb in place'
     'mcp:stdio MCP server with explicit per-tool UUID selection'
+    'support:static ipb implementation inventory; no device query'
     'help:grouped command list (help hid for the HID commands)'
 
     'tap:a touch, down and up'
@@ -124,7 +125,7 @@ _ipb() {
         clipboard) _values 'action' get set ;;
         location) _values 'action' clear ;;
         orientation) _values 'orientation' portrait landscapeLeft landscapeRight portraitUpsideDown ;;
-        displays|capabilities) _values 'format' --json ;;
+        displays|capabilities|support) _values 'format' --json ;;
         stream) _values 'option' --dir --count --fps --seconds --stdout ;;
         mirror) _values 'option' --seconds --csv --service-id --help ;;
         mcp) _arguments '--state-dir[shared lock and isolation directory]:directory:_files -/' '--help[server help]' ;;
