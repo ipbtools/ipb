@@ -562,6 +562,10 @@ class ProcessTests(FixtureCase):
 
     async def test_spawn_intent_is_durable_and_unfinished_intent_survives_restart(self):
         observed = []
+        # Keep the child alive until its post-spawn identity has been inspected.
+        # A successful short command may legitimately exit before table().
+        self.configure(mode='sleep')
+        cancel = asyncio.Event()
         def pre_spawn(intent):
             observed.append(dict(intent))
             self.bridge.state.save(DEVICE, {'version': 1, 'active': intent, 'quarantine': None})
@@ -572,7 +576,8 @@ class ProcessTests(FixtureCase):
             self.assertIsNotNone(intent['pid'])
             self.assertIsNotNone(intent['start'])
             observed.append(dict(intent))
-        await processes.run_cli(str(self.fixture), ['devices'], asyncio.Event(), pre_spawn, post_spawn,
+            cancel.set()
+        await processes.run_cli(str(self.fixture), ['devices'], cancel, pre_spawn, post_spawn,
                                 timeout=2, grace=.25)
         self.assertEqual(len(observed), 2)
         # Pre-spawn intent alone is deliberately unresolved after crash.
