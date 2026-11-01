@@ -61,9 +61,9 @@ MVP工具范围：设备枚举、observe、locate、wait、press、input、scrol
 - 强杀后无法证明子进程回收时记unknown/orphanPossible，并持久化隔离该设备的后续修改。隔离不能因60秒到期、一次observe或server重启自行解除；恢复必须有明确终止证据或人工介入。
 - 只有“结果未知但确认进程全部回收”的情况可以通过一次成功、完整且匹配设备的观察解除observeRequired。无完整snapshotId的超时观察不能解除。
 
-M1作保守收窄：`orphanPossible`阻止该设备所有MCP请求，包括observe，避免未知残留期间再建立AX连接；只允许`observeRequired`用完整observe解除。进程身份预检失败时不启动CLI；运行中检查失败或强杀时保留`orphanPossible`。真实Darwin ps/sysctl权限与行为仍待主机验收；当前sandbox禁止`/bin/ps`，维护测试注入协作fake CLI的进程身份，不能替代该验收。
+M1作保守收窄：`orphanPossible`阻止该设备所有MCP请求，包括observe，避免未知残留期间再建立AX连接；只允许`observeRequired`用完整observe解除。进程身份预检失败时不启动CLI；运行中检查失败或强杀时保留`orphanPossible`。维护测试保留可注入的协作fake CLI身份，同时增加使用真实Darwin ps/sysctl的假CLI回归，覆盖正常退出、独立session子进程取消和外壳先退出；这些主机检查不替代手机验收。
 
-旧AX错误缺少receipt时，MCP不再单凭1/5认定not-sent；只有结构化已知状态、可证明未spawn或HID族明确的准备阶段映射才表明未发送。读取方向B已提交契约后，dump采用`operation=ui.dump`；child负值/≥128保留数值且状态unknown。此保守映射需父会话接线时复核，不改默认CLI输出或退出码。
+旧AX错误缺少receipt时，MCP不再单凭1/5认定not-sent；只有结构化已知状态、可证明未spawn或HID族明确的准备阶段映射才表明未发送。读取方向B已提交契约后，dump采用`operation=ui.dump`；child负值/≥128保留数值且状态unknown。已用方向B实际Python格式化输出做跨模块回归；不改默认CLI输出或退出码。
 
 维护fixture确认的可达主机问题：CLI的waitpid完成与pipe EOF可能相差一次调度；若即时把未读到EOF归类为孙进程残留，普通成功观察会被误判。实现先给予150ms有界尾部排空，再判定持续残留；外壳先退出且独立session孙进程仍持有pipe或已关闭pipe的场景仍触发回收/隔离。
 
@@ -75,7 +75,7 @@ MCP首期固定一个实际测试的协议revision，覆盖initialize、notifica
 
 ### 里程碑
 
-M1：已落源码与主机fixtures，协议握手/工具schema、薄CLI适配、紧凑observe、锁、失败/取消边界均有对应模块；真实主机/设备验收和父会话接线待处理。M2：保守语义diff和可选动作后观察/有限settle。M3：有预算的scroll-find/collect，页级来源、去重限制、结束证据和no-progress分开。M4：仅在实测瓶颈明确后设计连接复用。本轮未扩大到M2–M4。
+M1：已落源码与主机fixtures，协议握手/工具schema、薄CLI适配、紧凑observe、锁、失败/取消边界均有对应模块；CLI、安装包和主机检查已接通；设备验收待处理。M2：保守语义diff和可选动作后观察/有限settle。M3：有预算的scroll-find/collect，页级来源、去重限制、结束证据和no-progress分开。M4：仅在实测瓶颈明确后设计连接复用。本轮未扩大到M2–M4。
 
 ### 验证
 
@@ -92,6 +92,6 @@ M1：已落源码与主机fixtures，协议握手/工具schema、薄CLI适配、
 | MCP与结果适配 | 独立GPT6.1Sol进程A；人工负责人待确认 | codex/mcp-agent-experience | 可评审的实现提交、维护测试、docs/mcp.md和接线清单 | 冻结的B契约词汇；首期不等待B代码 | 待确认 |
 | diff/settle/list后续 | 同一进程持续跟进 | 同分支分阶段提交 | M1完成后另定增量 | M1结果/取消边界 | 待确认 |
 
-M1为已实现未验证状态；主机fixture不构成设备验收。不得自动发布、合入或升级默认本机安装。代码及文档仅在方向A工作树内；本地提交如受执行环境限制，阻塞和实际提交清单保留在本地STATUS/交接中，不用不存在的SHA声称完成。
+M1为已实现未验证状态；主机fixture不构成设备验收。不得自动发布、合入或升级默认本机安装。代码及文档仅在方向A工作树内；提交按MCP实现、产品接线和接口线集成分段保留，主机原始输出留本地，不提交成功日志。
 
 首期主机联调确认两项问题并作最小修正：`tools/list`原先拒绝合法通用`_meta`，现校验其为对象后忽略；Darwin `KERN_PROCARGS2`可能在进程退出后返回EINVAL，原先会把这个竞态判为权限缺失。现在只在再次读取进程身份确认该PID消失/身份变化时忽略读取失败；仍存活且不可读时继续在发送前失败。真实主机回归使用假CLI验证正常退出、取消独立session子进程及外壳先退场景，不代表手机清理通过。

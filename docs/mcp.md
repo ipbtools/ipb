@@ -27,6 +27,7 @@ development, `python3 Sources/ipb_mcp.py --cli /absolute/path/to/ipb` remains av
 All device tools require a **full CoreDevice UUID**; names, UDIDs and UUID prefixes are
 rejected before spawning. `devices` returns the six-column TSV from the existing CLI
 as named JSON fields. Enumeration does not choose a device or establish availability.
+Global `-s` and `DEVICE_ID` do not select a device for MCP tools.
 Pass the UUID as observed: its spelling is preserved for the legacy CLI's exact metadata
 comparison, while the lock key is normalized so case variants still share a lock.
 `launch` retains the CLI's `--terminate-existing --activate` behavior.
@@ -151,7 +152,7 @@ Run `PYTHONDONTWRITEBYTECODE=1 python3 scripts/test_mcp.py`. The test executable
 device metadata and process identity inspector are fixtures. Lifecycle tests launch real
 **fake CLI** processes/sessions and two real stdio servers sharing temporary locks; they
 never run ipb/devicectl or access a phone or clipboard. The injectable fixture inspector
-uses cooperating fake-process identities because the development sandbox denies `/bin/ps`.
+uses cooperating fake-process identities for environments whose development sandbox denies `/bin/ps`.
 A separate host regression exercises the production inspector with fake CLI processes,
 including nested independent sessions and early outer-process exit. It performs no phone operation.
 

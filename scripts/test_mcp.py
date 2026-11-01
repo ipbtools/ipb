@@ -42,6 +42,29 @@ def snapshot(device=DEVICE):
 
 
 class AdapterTests(unittest.TestCase):
+    def test_actual_python_error_receipts_keep_state_and_retained_result(self):
+        from test_interface_contract import invoke
+        fixtures = json.loads((Path(__file__).resolve().parents[1] /
+                               'docs/contracts/ax-default-v050.golden.json').read_text())
+        checked = 0
+        for case in fixtures['cases']:
+            observed = invoke(case, fixtures['results'], 'json')
+            if observed['code'] == 0:
+                continue
+            receipt = json.loads(observed['stdout'])
+            operation = receipt['operation']
+            if operation == 'unknown':
+                continue
+            name = 'observe' if operation == 'ui.dump' else operation[3:].replace('-', '_')
+            with self.subTest(case=case['name']):
+                result = adapter.adapt(name, DEVICE, observed['code'], observed['stdout'])
+                self.assertEqual(result['receipt'], receipt)
+                self.assertEqual(result['result'], receipt['result'])
+                self.assertEqual(result['action'], receipt['action'])
+                self.assertFalse(result['ok'])
+            checked += 1
+        self.assertGreater(checked, 0)
+
     def test_schema_and_argv_for_each_tool(self):
         cases = {
             'devices': {}, 'observe': {'device': DEVICE, 'pid': 42},
