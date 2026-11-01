@@ -1,6 +1,6 @@
 # MCP 与 agent 体验优化
 
-> 状态：已决定待开发；最后核对：2026-10-27。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向A。
+> 状态：M1已实现未验证（设备及真实Darwin进程检查待验收）；最后核对：2026-10-27。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向A。
 
 ## 1. 需求与关联资料
 
@@ -16,6 +16,10 @@ ipb已有完整native deep读取和受保护的单步操作，但agent仍需拼�
 ## 2. 技术调研结论
 
 首期采用薄stdio MCP进程，每次操作调用当前安装的ipb CLI，不直接import或复制AX后端。先交付新鲜观察、精确操作、机器可读结果和MCP间的设备互斥，再做diff、settle及跨页收集。MCP运行时与常驻DTX连接是不同能力，首期不复用DTX或缓存native handle。
+
+`Sources/ipb_mcp_adapter.py`集中定义有界工具schema、argv构造、v0.5.0按命令族的保守映射和v1错误样例消费。observe保留原生路径/字段，返回独立MCP envelope；底层schema1/2不变。当前开发和验证只使用主机fake数据，真实设备路径均待验收。
+
+M1入口为`python3 Sources/ipb_mcp.py --cli /absolute/path/to/ipb`，使用MCP revision 2025-11-25的有界stdio子集；工具和结果指南见[docs/mcp.md](mcp.md)。`Sources/ipb_mcp_process.py`拥有锁、持久化intent及取消回收；没有引入SDK/AX依赖，也没有改公共安装或CLI。后续M2–M4未实现。
 
 <details><summary>选择与约束</summary>
 
@@ -57,13 +61,21 @@ MVP工具范围：设备枚举、observe、locate、wait、press、input、scrol
 - 强杀后无法证明子进程回收时记unknown/orphanPossible，并持久化隔离该设备的后续修改。隔离不能因60秒到期、一次observe或server重启自行解除；恢复必须有明确终止证据或人工介入。
 - 只有“结果未知但确认进程全部回收”的情况可以通过一次成功、完整且匹配设备的观察解除observeRequired。无完整snapshotId的超时观察不能解除。
 
+M1作保守收窄：`orphanPossible`阻止该设备所有MCP请求，包括observe，避免未知残留期间再建立AX连接；只允许`observeRequired`用完整observe解除。进程身份预检失败时不启动CLI；运行中检查失败或强杀时保留`orphanPossible`。真实Darwin ps/sysctl权限与行为仍待主机验收；当前sandbox禁止`/bin/ps`，维护测试注入协作fake CLI的进程身份，不能替代该验收。
+
+旧AX错误缺少receipt时，MCP不再单凭1/5认定not-sent；只有结构化已知状态、可证明未spawn或HID族明确的准备阶段映射才表明未发送。读取方向B已提交契约后，dump采用`operation=ui.dump`；child负值/≥128保留数值且状态unknown。此保守映射需父会话接线时复核，不改默认CLI输出或退出码。
+
+维护fixture确认的可达主机问题：CLI的waitpid完成与pipe EOF可能相差一次调度；若即时把未读到EOF归类为孙进程残留，普通成功观察会被误判。实现先给予150ms有界尾部排空，再判定持续残留；外壳先退出且独立session孙进程仍持有pipe或已关闭pipe的场景仍触发回收/隔离。
+
+源码确认的旧CLI兼容边界：`bin/ipb`的query_ui按文本精确匹配枚举identifier。MCP仅规范化锁键，传入CLI的完整UUID保留调用者观察到的大小写；相同UUID的大小写变体仍共用锁，避免MCP自行小写化导致正常大写枚举UUID被旧CLI拒绝。
+
 持久化操作intent必须在spawn前落盘，随后补齐本请求pid/pgid/启动时间及唯一环境标记。server崩溃也要留下可判定或保守隔离的记录；不能只靠flock自动释放。不得把人工解除隔离暴露成MCP工具。进程标记检查只提取本请求nonce/身份，不输出或保存完整环境、argv和用户输入。共享同一canonical锁路径的其他checkout也受保护，使用不同状态目录的进程不受保护。
 
 MCP首期固定一个实际测试的协议revision，覆盖initialize、notifications/initialized、ping、tools/list、tools/call、notifications/cancelled。不支持的请求返回-32601；通知不发JSON-RPC响应。stdout仅NDJSON，日志放stderr，资源与参数有界。
 
 ### 里程碑
 
-M1：协议握手/工具schema、薄CLI适配、紧凑observe、锁、失败/取消边界。M2：保守语义diff和可选动作后观察/有限settle。M3：有预算的scroll-find/collect，页级来源、去重限制、结束证据和no-progress分开。M4：仅在实测瓶颈明确后设计连接复用。M1未完成前不扩大到M2–M4。
+M1：已落源码与主机fixtures，协议握手/工具schema、薄CLI适配、紧凑observe、锁、失败/取消边界均有对应模块；真实主机/设备验收和父会话接线待处理。M2：保守语义diff和可选动作后观察/有限settle。M3：有预算的scroll-find/collect，页级来源、去重限制、结束证据和no-progress分开。M4：仅在实测瓶颈明确后设计连接复用。本轮未扩大到M2–M4。
 
 ### 验证
 
@@ -80,4 +92,4 @@ M1：协议握手/工具schema、薄CLI适配、紧凑observe、锁、失败/取
 | MCP与结果适配 | 独立GPT6.1Sol进程A；人工负责人待确认 | codex/mcp-agent-experience | 可评审的实现提交、维护测试、docs/mcp.md和接线清单 | 冻结的B契约词汇；首期不等待B代码 | 待确认 |
 | diff/settle/list后续 | 同一进程持续跟进 | 同分支分阶段提交 | M1完成后另定增量 | M1结果/取消边界 | 待确认 |
 
-本方案不构成已实现/已验证声明。不得自动发布、合入或升级默认本机安装。
+M1为已实现未验证状态；主机fixture不构成设备验收。不得自动发布、合入或升级默认本机安装。代码及文档仅在方向A工作树内；本地提交如受执行环境限制，阻塞和实际提交清单保留在本地STATUS/交接中，不用不存在的SHA声称完成。
