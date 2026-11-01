@@ -79,6 +79,10 @@ submitted/unknown. `child-unknown` from the old input path maps to `unknown`.
 Known result fields (`nativeResult`, `action.nativeAccepted`,
 `action.childExitCode`) may recover the corresponding receipt when a complete
 result exists. Missing or ill-typed values never supply a success state.
+In particular, an action failure result without typed receipt fields cannot
+establish `not-sent` from an unchanged initial state. A nonzero semantic reply
+error with no known boolean reply stays `submitted`, rather than being inferred
+as a native false/refused reply.
 Only normal, handled Python failures use its in-process state; a caller must
 not apply that mapping to a killed/crashed CLI.
 
@@ -109,6 +113,11 @@ query must require an explicit target, retain query failure as `unknown` and
 never turn null advertisement into false. A `verified` record must include
 host, device, OS, command scope and an evidence reference; a host fixture or a
 single page never establishes the complete supported device matrix.
+Its schema is [ipb-support-v1.schema.json](contracts/ipb-support-v1.schema.json).
+`support` requires `--json`; other arguments fail locally. Global selectors are
+ignored for this report and `deviceQuery.deviceIdentifier` remains null. The
+inventory is intentionally not the complete CLI command list. Device query
+failure handling is not a newly implemented probe; B1 has no device query path.
 
 ## Maintenance and acceptance
 
@@ -116,7 +125,7 @@ Additive ignorable fields may be added without changing old semantics. Renaming,
 removing or reinterpreting a field needs a contract version change. Consumers
 recognize v1 only when both kind and version match. The default-output golden is
 synthetic, generated from committed baseline `b3c1a63` with fake `run`/dependency
-checks; it is a regression fixture, not device evidence. New errors and support
-are **implemented but device-unverified** once B1 lands. No new wire claim,
+checks; it is a regression fixture, not device evidence. B1 errors and support
+are **implemented but device-unverified / pending acceptance**. No new wire claim,
 Xcode-free support matrix, RSD screenshot integration or phone acceptance is
 established by these host tests.

@@ -47,6 +47,7 @@ device selection
   doctor                layered self-check: install, Apple stack, device, DDI, HID services
   version               ipb, macOS and CoreDevice versions
   update                host-only update of this Homebrew install or git checkout
+  support --json        static ipb implementation inventory; no device query
 
 input
   tap <x> <y>                                  a touch, down and up
@@ -843,11 +844,18 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror|ui|update) DEVICE="" ;;
+  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror|ui|update|support) DEVICE="" ;;
   *) DEVICE="$(resolve_device)" || exit 3 ;;
 esac
 
 case "$cmd" in
+  support)
+    [[ $# -eq 1 && "$1" == --json ]] || { print -u2 "usage: ipb support --json"; exit 2; }
+    support_script="$ROOT/Sources/ipb_support.py"
+    [[ -r "$ROOT/libexec/ipb-support.py" ]] && support_script="$ROOT/libexec/ipb-support.py"
+    [[ -r "$support_script" ]] || { print -u2 "ipb: support helper is missing; rebuild/install ipb"; exit 2; }
+    python3 "$support_script" --json
+    ;;
   ui)
     query_ui "$@"
     ;;

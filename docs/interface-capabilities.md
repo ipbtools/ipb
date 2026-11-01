@@ -1,10 +1,10 @@
 # 接口能力与规范补充
 
-> 状态：B0契约与兼容fixture已提交；B1待实现；最后核对：2026-10-27。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向B。
+> 状态：B0已提交；B1实现与产品接线已完成，设备未验证，待父会话review/提交/PR；最后核对：2026-11-02。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向B。
 
 ## 1. 需求与关联资料
 
-用户在2026-10-27授权：与Opus5.5讨论后，设立两个大方向，各由独立GPT6.1Sol/xhigh/Fast进程跟进。基线为main `bf3fcad375db5e11d5573a7ef11fa9a02c8cd1d7` / v0.5.0。产品继续只使用Apple自带服务；不安装手机Runner、不启动XCTest，不把过去版本的实机豁免继承为本次验收。当前两个进程先推进实现和主机回归，实机项保持未验证，未授权自动合入或发布。
+用户授权两个独立GPT6.1Sol/xhigh/Fast方向，基线为main `bf3fcad375db5e11d5573a7ef11fa9a02c8cd1d7` / v0.5.0。2026-11-02的交付范围为完成B1实现与产品接线后由父会话提交并提PR；不自动合入或发布。产品继续只使用Apple自带服务；不安装手机Runner、不启动XCTest，不继承过去版本的实机豁免。本次只做主机回归，不操作手机，设备矩阵仍未运行，不阻止用户请求的PR交付。
 
 ipb已有多个命令族和不同结果语义：发送被接受、实际效果、补充属性失败及清理失败不能互换。目标是明确能力与错误契约，再逐项补充有证据的接口，供脚本、MCP及后续客户端共用。
 
@@ -20,7 +20,7 @@ ipb已有多个命令族和不同结果语义：发送被接受、实际效果�
 <details><summary>证据边界与拒绝方案</summary>
 
 - AX与HID的失败码必须按命令族解释，不能拿全局exit码猜操作是否发送；裸text目前存在剪贴板阶段与粘贴阶段难区分的问题，应以主机可达fixture复现再修。
-- pmd ScreenCaptureService经 `com.apple.coredevice.screencaptureservice` / `com.apple.coredevice.feature.capturescreenshot` 返回PNG bytes，未见devicectl/XCTest依赖。首期只做显式Experiments探针和mock验证，不替换正式screenshot；实机前标为source-only/unverified。
+- pmd ScreenCaptureService是后续独立截图候选，源码存在不等于目标可用。本次不实现探针或替换正式screenshot，不升级固定11.10.2。
 - pmd HID keyboard usage codes不等于Unicode，raw createService曾有设备断言线索，不能盲发。slider/picker、多指、文本选择等需确切Apple接口证据与用户可达trigger后另行排期。
 - 拒绝方案：把源码/服务广告当已验证；覆盖原capabilities透传语义；用统一成功码或隐式fallback掩盖失败。
 
@@ -28,14 +28,14 @@ ipb已有多个命令族和不同结果语义：发送被接受、实际效果�
 
 ## 3. 技术方案总括
 
-B拥有 `docs/contract.md` 及机器可读契约/fixture、`Sources/ipb_ax.py`和必要的同属接口模块、`bin/ipb`、`scripts/test_ax.py`及新接口测试、`docs/ui.md`、`docs/protocol.md`、`docs/standalone-distribution.md`、`Experiments/rsd-screenshot/`与本方案。`Sources/ax_archive.py`仅在有具体wire证据且必要时改动。A的MCP代码和文档不由B修改。父会话统一处理Makefile/check_host/workflows/Formula/打包/README/docs索引/completions/VERSION，B只提交接线建议。
+B拥有契约/fixtures、Python AX入口、support模块、bin/ipb及相关接口回归和指南。当前额外授权B在本工作树完成Makefile安装support helper、check_host入口、package_test_build包清单与提取后support启动验证，以及README/docs索引/completions接线。A的MCP文件不修改；ax_archive、AX依赖和Apple wire不变。父会话处理Git提交、PR和CI结果；VERSION/Formula/工作流运行环境不在本次修改范围。
 
 <details><summary>共享契约、能力状态与集成</summary>
 
 
 ### 已冻结的最小错误对象
 
-共享示例为[docs/contracts/ipb-error-v1.example.json](contracts/ipb-error-v1.example.json)，是待实现的v1契约样例，不是既有产品输出或设备证据。结构固定为kind=ipb.error、contractVersion=1、operation、phase、exitCode、error(type/message)、action、retrySafe、result。
+共享示例为[docs/contracts/ipb-error-v1.example.json](contracts/ipb-error-v1.example.json)，是v1契约示例，不是设备证据。结构固定为kind=ipb.error、contractVersion=1、operation、phase、exitCode、error(type/message)、action、retrySafe、result。
 
 - 枚举未知时明确unknown；读操作action=null，无可保留结果时result=null。动作细节保留not-sent/submitted/accepted/refused、child-exited-zero/nonzero、native-true/false等原生信息，不把它们混成业务成功。
 - 非零退出时stdout最多一个ipb.error JSON；保留的完整native结果置于result，原始schema不改。退出0仍原schema1/2。首期结构化错误以Python路径为边界；zsh早期错误可能没有JSON，消费者必须保守兼容。
@@ -54,13 +54,13 @@ B拥有 `docs/contract.md` 及机器可读契约/fixture、`Sources/ipb_ax.py`�
 
 ### 里程碑与集成顺序
 
-B0：先提交contract与映射fixture，向父会话交付可引用SHA；A可按冻结约定独立实现旧输出适配。B1：Python路径opt-in结构化错误和support元数据/命令；wrapper未知状态保守处理。B2：text分阶段失败与纯RSD截图探针分开提交，更新旧standalone文档的未验证候选，实际设备前不接主命令。后续底层接口增量逐项有据推进。
+B0由父会话提交为 `eda742d`。B1包含Python opt-in错误、静态support和source/install/package接线；包清单明确包含support helper，提取后解析其kind/version，主机总入口纳入现有interface/support回归。父会话review后提交、提PR并检查CI。第一份交接的B1代码保持review baseline；本次没有新增状态/生命周期机制。B2裸text完整结构化阶段与RSD截图不在本次范围。
 
-A/B均只改归属文件，不能自行rebase/cherry-pick/修改对方工作区。交接必须提供commit/file:line与实际测试输出；接线和最终集成由父会话完成。未授权自动合入或发布。
+A/B均只改归属文件，不能自行rebase/cherry-pick/修改对方工作区。B完成本工作树授权的产品接线，跨方向集成与Git/PR/CI由父会话处理；不自动合入或发布。
 
 ### 验证
 
-主机fixtures覆盖默认输出和退出码golden兼容、opt-in每条可达错误分支、完整native结果保留、字段未知/类型边界、text复制失败/粘贴失败区分、support静态矩阵与查询失败、PNG字节/目标身份的mock验证。与已有89AX回归保持一致。实机待验是structured receipts对应真实阶段、具体seed support以及RSD截图真实返回；本阶段不得操作手机或把主机fixture写成设备验收。
+主机回归覆盖三个交付契约：默认/opt-in错误输出兼容与完整native结果保留；source/installed support静态元数据不触发设备查询且capabilities保持旧行为；临时PREFIX安装和归档提取后包含helper并通过support启动检查。既有AX源码与依赖未变，复用对应89项回归，不为接线重跑全套。默认golden只压缩排版，保留每个独立用例及全部预期字节。真实阶段receipt、设备断连/取消/清理及支持矩阵仍待设备验收，本次不运行。
 
 Android/iOS业务App、BT/ISP/Wi-Fi固件、lt-vad/schema/rpc不受影响，原因是其实现和通信契约不在本方向修改范围。
 
@@ -70,8 +70,7 @@ Android/iOS业务App、BT/ISP/Wi-Fi固件、lt-vad/schema/rpc不受影响，原�
 
 | 模块 | 执行 | 分支 | 首次交付 | 依赖 | 人日/版本/提测时间 |
 |---|---|---|---|---|---|
-| 契约与兼容回归 | 独立GPT6.1Sol进程B；人工负责人待确认 | codex/interface-capabilities | docs/contract.md、固定fixture与首个提交SHA | 当前v0.5.0行为 | 待确认 |
-| 结构化错误/text/support | 同一进程B | 同分支分段提交 | 可评审代码、主机测试和接线清单 | B0 | 待确认 |
-| RSD截图候选 | 同一进程B | 同分支独立实验提交 | 显式探针与mock验证、设备待办 | 已固定pmd11.10.2；设备验收未安排 | 待确认 |
+| 契约与兼容回归 | 独立GPT6.1Sol进程B；人工负责人待确认 | codex/interface-capabilities | B0已提交 `eda742d` | 当前v0.5.0行为 | 人日/版本/提测待确认 |
+| Python结构化错误/support（B1） | 同一进程B | codex/interface-capabilities | 实现与产品接线完成，设备未验证；2026-11-02核对 | B0；父会话review/提交/PR/CI | 人日/版本/提测待确认 |
 
-B0已编写权威契约、v1错误schema、阶段映射fixture与基线字节级golden；后者从共同base `b3c1a63` 的Python main通过fake run捕获，不含设备数据。B1尚未实现，实机验收保持待办。共享对象的既有字段/语义未改；action.state保留原生阶段词汇，native已知时为boolean、未知为unknown。
+B0 golden从共同base `b3c1a63` 的Python main通过fake run捕获，不含设备数据。B1默认输出和成功schema不改，未知异常阶段保持unknown；support不查询设备或声称available/verified。zsh早期错误和外部异常终止不承诺JSON。完整CI原生产物和设备矩阵需分别报告，临时安装中使用fake原生helper的主机回归不代替它们。

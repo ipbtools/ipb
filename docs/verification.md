@@ -2,7 +2,23 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-10-21. This section is overwritten; dated records below are append-only.**
+**Updated 2026-11-02. This section is overwritten; dated records below are append-only.**
+
+### Interface contracts and support inventory (development, 2026-11-02)
+
+The maintainer authorized implementation and PRs for interface contracts and MCP agent
+experience. The interface branch adds opt-in handled Python AX error receipts and a static
+`support --json` inventory. Default output/exit codes and Apple `capabilities` passthrough
+remain separate contracts. This is not a new device backend or a change to the supported
+matrix. See [contract](contract.md) and [current plan](interface-capabilities.md).
+
+**Open, agent-fixable validation:** actual device receipt/cleanup behavior and the full
+supported native host/device smoke matrix have not been exercised for this branch.
+Early shell/native/text failures and external termination still have no v1 error receipt;
+consumers must treat missing submission evidence as unknown. Static support metadata
+performs no target query and supplies no device availability or verification claim.
+The earlier v0.5.0 release-specific exception does not apply to these development PRs.
+No merge, release, Homebrew publication or default-install update is part of this work.
 
 ### Runner-free element work (2026-10-21, v0.5.0 released)
 
