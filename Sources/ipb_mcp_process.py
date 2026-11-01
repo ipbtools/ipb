@@ -119,7 +119,15 @@ class Owner:
                 except (FileNotFoundError, ProcessLookupError):
                     pass
                 except OSError:
-                    complete = False
+                    # Darwin may report EINVAL for a PID that exited after ps.
+                    # Only independent disappearance/identity evidence makes that
+                    # harmless; a live unreadable process still fails closed.
+                    try:
+                        current = table().get(pid)
+                        if current and current['start'] == row['start']:
+                            complete = False
+                    except (OSError, ValueError, subprocess.SubprocessError):
+                        complete = False
         # Retain observed descendants even if a helper drops environment on exec.
         changed = True
         while changed:

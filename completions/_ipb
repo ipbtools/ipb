@@ -30,6 +30,7 @@ _ipb_commands() {
     'doctor:layered self-check of every layer'
     'version:ipb, macOS and CoreDevice versions'
     'update:update ipb in place'
+    'mcp:stdio MCP server with explicit per-tool UUID selection'
     'help:grouped command list (help hid for the HID commands)'
 
     'tap:a touch, down and up'
@@ -126,6 +127,7 @@ _ipb() {
         displays|capabilities) _values 'format' --json ;;
         stream) _values 'option' --dir --count --fps --seconds --stdout ;;
         mirror) _values 'option' --seconds --csv --service-id --help ;;
+        mcp) _arguments '--state-dir[shared lock and isolation directory]:directory:_files -/' '--help[server help]' ;;
         text) _arguments '1:text or mode:(--replace-all)' '2:text:' ;;
         ui) _arguments '1:operation:(press alert-press scroll-to-visible input hit-test locate wait)' \
           '--identifier[exact native identifier selector]:identifier:' \

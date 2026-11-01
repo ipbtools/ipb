@@ -11,14 +11,19 @@ The MCP bridge invokes an existing ipb executable once per tool call. It does no
 the AX implementation or change ordinary schema 1, native deep schema 2, CLI exit codes,
 the local ipb installation or device selection in the CLI.
 
-Until packaging is connected, run from a checkout:
+Start the server from either a source checkout or an installed package:
 
 ```sh
-python3 Sources/ipb_mcp.py --cli /absolute/path/to/ipb
+ipb mcp
+# Choose Python explicitly if python3 is older than 3.11:
+IPB_MCP_PYTHON=/path/to/venv/bin/python ipb mcp
 ```
 
-The default executable is `ipb` resolved on PATH at server startup. `--cli` accepts one
-executable path, not a shell expression. Tools are executed with argv and stdin closed.
+The launcher uses the ipb executable from the same installation, never a second copy
+from PATH. It chooses `IPB_MCP_PYTHON`, then `IPB_AX_PYTHON`, then `python3`. Configure
+your MCP client with the absolute ipb path as `command` and `["mcp"]` as `args`. For
+development, `python3 Sources/ipb_mcp.py --cli /absolute/path/to/ipb` remains available;
+`--cli` is an executable path, not a shell expression. Tools use argv and stdin closed.
 All device tools require a **full CoreDevice UUID**; names, UDIDs and UUID prefixes are
 rejected before spawning. `devices` returns the six-column TSV from the existing CLI
 as named JSON fields. Enumeration does not choose a device or establish availability.
@@ -147,12 +152,13 @@ device metadata and process identity inspector are fixtures. Lifecycle tests lau
 **fake CLI** processes/sessions and two real stdio servers sharing temporary locks; they
 never run ipb/devicectl or access a phone or clipboard. The injectable fixture inspector
 uses cooperating fake-process identities because the development sandbox denies `/bin/ps`.
-It does not verify production Darwin ps/sysctl behavior.
+A separate host regression exercises the production inspector with fake CLI processes,
+including nested independent sessions and early outer-process exit. It performs no phone operation.
 
-Production Darwin process enumeration/marker permissions, actual cleanup duration,
-input's real nested text process, disconnect/cancel behavior, native observation latency
+Actual device cleanup duration, input's real nested text process, disconnect/cancel
+behavior, native observation latency
 and every device-facing tool are **implemented but unverified / pending acceptance**.
 Host tests and Python compilation do not satisfy the supported physical smoke matrix.
-Parent integration must install all `ipb_mcp*.py` modules together, connect the launcher,
-host check and documentation links, and review the shared B receipt contract. No default
-installation, Makefile, package, release or device gate is changed by this direction.
+The install/package includes all three `ipb_mcp*.py` modules, and `make check-host` runs
+the maintained host regressions. This branch does not update an existing default install,
+publish a release or claim the physical smoke gate passed.

@@ -1,10 +1,10 @@
 # MCP 与 agent 体验优化
 
-> 状态：M1已实现未验证（设备及真实Darwin进程检查待验收）；最后核对：2026-10-27。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向A。
+> 状态：M1已接入CLI/安装/主机检查；设备验收待完成；最后核对：2026-11-02。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向A。
 
 ## 1. 需求与关联资料
 
-用户在2026-10-27授权：与Opus5.5讨论后，设立两个大方向，各由独立GPT6.1Sol/xhigh/Fast进程跟进。基线为main `bf3fcad375db5e11d5573a7ef11fa9a02c8cd1d7` / v0.5.0。产品继续只使用Apple自带服务；不安装手机Runner、不启动XCTest，不把过去版本的实机豁免继承为本次验收。当前两个进程先推进实现和主机回归，实机项保持未验证，未授权自动合入或发布。
+用户在2026-10-27授权：与Opus5.5讨论后，设立两个大方向，各由独立GPT6.1Sol/xhigh/Fast进程跟进。基线为main `bf3fcad375db5e11d5573a7ef11fa9a02c8cd1d7` / v0.5.0。产品继续只使用Apple自带服务；不安装手机Runner、不启动XCTest，不把过去版本的实机豁免继承为本次验收。用户在2026-11-02进一步授权落地并提PR；本轮完成首期产品接线和主机回归，实机项保持未验证，不自动合入或发布。
 
 ipb已有完整native deep读取和受保护的单步操作，但agent仍需拼接CLI、处理输出和协调设备。目标是让agent通过小而明确的工具集获得新鲜页面、执行一次操作并理解结果。
 
@@ -17,9 +17,9 @@ ipb已有完整native deep读取和受保护的单步操作，但agent仍需拼�
 
 首期采用薄stdio MCP进程，每次操作调用当前安装的ipb CLI，不直接import或复制AX后端。先交付新鲜观察、精确操作、机器可读结果和MCP间的设备互斥，再做diff、settle及跨页收集。MCP运行时与常驻DTX连接是不同能力，首期不复用DTX或缓存native handle。
 
-`Sources/ipb_mcp_adapter.py`集中定义有界工具schema、argv构造、v0.5.0按命令族的保守映射和v1错误样例消费。observe保留原生路径/字段，返回独立MCP envelope；底层schema1/2不变。当前开发和验证只使用主机fake数据，真实设备路径均待验收。
+`Sources/ipb_mcp_adapter.py`集中定义有界工具schema、argv构造、v0.5.0按命令族的保守映射和v1错误样例消费。observe保留原生路径/字段，返回独立MCP envelope；底层schema1/2不变。当前开发和验证只使用主机fake数据，真实设备路径均待验收。2026-11-02重新核对六个参考仓库的默认分支；iPhone-use未变，其余更新没有改变本期无Runner方案。go-ios的[截图串行/取消边界](https://github.com/danielpaulus/go-ios/blob/51887da850dd19f4242c58a00262d06e006839cf/ios/screencapture/screencapture.go#L33-L47)与agent-device的[操作证据边界](https://github.com/callstack/agent-device/blob/32bf98def5e3b0c6d577ed96ac09309d4e7353f0/packages/apple-runner/src/runner-failure-diagnostics.ts#L23-L50)作为设计参考，不复制执行层或新增连接管理。
 
-M1入口为`python3 Sources/ipb_mcp.py --cli /absolute/path/to/ipb`，使用MCP revision 2025-11-25的有界stdio子集；工具和结果指南见[docs/mcp.md](mcp.md)。`Sources/ipb_mcp_process.py`拥有锁、持久化intent及取消回收；没有引入SDK/AX依赖，也没有改公共安装或CLI。后续M2–M4未实现。
+M1正式入口为`ipb mcp`（开发也可直接运行`python3 Sources/ipb_mcp.py --cli /absolute/path/to/ipb`），使用MCP revision 2025-11-25的有界stdio子集；工具和结果指南见[docs/mcp.md](mcp.md)。`Sources/ipb_mcp_process.py`拥有锁、持久化intent及取消回收；没有引入SDK/AX依赖，由父会话接通同一安装的CLI、三个Python模块及主机/包检查。后续M2–M4未实现。
 
 <details><summary>选择与约束</summary>
 
@@ -93,3 +93,5 @@ M1：已落源码与主机fixtures，协议握手/工具schema、薄CLI适配、
 | diff/settle/list后续 | 同一进程持续跟进 | 同分支分阶段提交 | M1完成后另定增量 | M1结果/取消边界 | 待确认 |
 
 M1为已实现未验证状态；主机fixture不构成设备验收。不得自动发布、合入或升级默认本机安装。代码及文档仅在方向A工作树内；本地提交如受执行环境限制，阻塞和实际提交清单保留在本地STATUS/交接中，不用不存在的SHA声称完成。
+
+首期主机联调确认两项问题并作最小修正：`tools/list`原先拒绝合法通用`_meta`，现校验其为对象后忽略；Darwin `KERN_PROCARGS2`可能在进程退出后返回EINVAL，原先会把这个竞态判为权限缺失。现在只在再次读取进程身份确认该PID消失/身份变化时忽略读取失败；仍存活且不可读时继续在发送前失败。真实主机回归使用假CLI验证正常退出、取消独立session子进程及外壳先退场景，不代表手机清理通过。

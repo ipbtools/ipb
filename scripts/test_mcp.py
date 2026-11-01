@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import struct
 import subprocess
 import sys
@@ -210,6 +211,100 @@ class AdapterTests(unittest.TestCase):
 
 
 class InspectorTests(unittest.TestCase):
+    def test_real_process_ownership_and_detached_cleanup(self):
+        """Exercise the production inspector, not the cooperating fixture table."""
+        async def exercise():
+            with tempfile.TemporaryDirectory(prefix='ipb-real-mcp-') as directory:
+                root = Path(directory)
+                cli = root / 'fake-cli'
+                cli.write_text('#!' + sys.executable + '\n' + '''import os, signal, subprocess, sys, time
+from pathlib import Path
+mode, ready = sys.argv[1:]
+if mode == 'child':
+    signal.signal(signal.SIGTERM, lambda *args: sys.exit(0))
+    Path(ready).write_text(str(os.getpid()))
+    time.sleep(30)
+elif mode == 'success':
+    print('fake result')
+else:
+    child = subprocess.Popen([sys.executable, __file__, 'child', ready], start_new_session=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    def stop(*args):
+        child.terminate()
+        child.wait(timeout=2)
+        sys.exit(5)
+    signal.signal(signal.SIGTERM, stop)
+    while not Path(ready).exists(): time.sleep(.01)
+    if mode == 'detached': sys.exit(0)
+    time.sleep(30)
+''')
+                cli.chmod(0o700)
+                for mode in ('success', 'cancel', 'detached'):
+                    ready = root / mode
+                    cancel = asyncio.Event()
+                    intents = []
+                    task = asyncio.create_task(processes.run_cli(str(cli), [mode, str(ready)],
+                        cancel, intents.append, intents.append, timeout=5, grace=2))
+                    if mode == 'cancel':
+                        for _ in range(200):
+                            if ready.exists() or task.done(): break
+                            await asyncio.sleep(.01)
+                        if not ready.exists():
+                            cancel.set()
+                            outcome = await asyncio.wait_for(task, 10)
+                            self.fail('fake child did not start: ' + str(outcome[2]))
+                        cancel.set()
+                    code, stdout, reason, complete, forced = await asyncio.wait_for(task, 10)
+                    self.assertTrue(complete, (mode, reason))
+                    self.assertFalse(forced, (mode, reason))
+                    self.assertEqual(code, 5 if mode == 'cancel' else 0, (mode, reason))
+                    self.assertEqual(reason, {'success': None, 'cancel': 'cancelled',
+                                             'detached': 'descendants-after-cli-exit'}[mode])
+                    owned, inspected = processes.Owner(intents[0]['nonce'], intents[0]['created']).scan()
+                    self.assertTrue(inspected)
+                    self.assertEqual(owned, {})
+        asyncio.run(exercise())
+
+    def test_exited_inspection_target_does_not_hide_live_permission_failure(self):
+        row = {'pid': 1234, 'ppid': 1, 'pgid': 1234, 'start': 'identity', 'born': time.time()}
+        for current, expected in (({}, True), ({1234: row}, False)):
+            with self.subTest(alive=bool(current)), \
+                 patch.object(processes, 'table', side_effect=[{1234: row}, current]), \
+                 patch.object(processes, 'has_marker', side_effect=OSError(22, 'process arguments unavailable')):
+                owned, complete = processes.Owner('request', row['born']).scan()
+                self.assertEqual(owned, {})
+                self.assertIs(complete, expected)
+
+    def test_source_and_installed_launcher_are_host_only(self):
+        root = Path(__file__).resolve().parents[1]
+        requests = [ProtocolTests.init_message(self),
+                    {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
+                    {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'}]
+        with tempfile.TemporaryDirectory(prefix='ipb-mcp-install-') as directory:
+            prefix = Path(directory)
+            (prefix / 'bin').mkdir()
+            (prefix / 'libexec').mkdir()
+            shutil.copyfile(root / 'bin/ipb', prefix / 'bin/ipb')
+            (prefix / 'bin/ipb').chmod(0o700)
+            for module in ('ipb_mcp.py', 'ipb_mcp_adapter.py', 'ipb_mcp_process.py'):
+                shutil.copyfile(root / 'Sources' / module, prefix / 'libexec' / module)
+            unexpected = prefix / 'unexpected'
+            trap = prefix / 'device-trap'
+            trap.write_text('#!/bin/sh\ntouch "' + str(unexpected) + '"\nexit 99\n')
+            trap.chmod(0o700)
+            env = {**os.environ, 'DEVICE_ID': 'no-device-selection', 'DEVICECTL': str(trap),
+                   'IPB_HELPER': str(trap), 'IPB_MCP_PYTHON': sys.executable,
+                   'PYTHONDONTWRITEBYTECODE': '1'}
+            for cli in (root / 'bin/ipb', prefix / 'bin/ipb'):
+                result = subprocess.run([str(cli), 'mcp', '--state-dir', str(prefix / 'state')],
+                    input=''.join(json.dumps(request) + '\n' for request in requests),
+                    text=True, capture_output=True, env=env, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                messages = [json.loads(line) for line in result.stdout.splitlines()]
+                self.assertEqual([message['id'] for message in messages], [1, 2])
+                self.assertEqual(messages[1]['result']['tools'], adapter.TOOLS)
+            self.assertFalse(unexpected.exists())
+
     def test_darwin_metadata_parser_uses_no_argv(self):
         row = f'{os.getuid()} 1234 1 1234 Tue Oct 27 12:00:00 2026 S\n'
         row += f'{os.getuid()} 1235 1 1235 Tue Oct 27 12:00:00 2026 Z\n'
@@ -555,6 +650,9 @@ class ProtocolTests(FixtureCase):
         await server.accept({'jsonrpc': '2.0', 'method': 'notifications/cancelled', 'params': {'requestId': []}})
         self.assertEqual(output, [])
         await server.accept({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'})
+        self.assertEqual(len(output.pop()['result']['tools']), len(adapter.TOOLS))
+        await server.accept({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list',
+                             'params': {'_meta': {'progressToken': 'ignored'}}})
         self.assertEqual(len(output.pop()['result']['tools']), len(adapter.TOOLS))
         await server.accept({'jsonrpc': '2.0', 'id': 3, 'method': 'resources/list'})
         self.assertEqual(output.pop()['error']['code'], -32601)

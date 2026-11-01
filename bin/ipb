@@ -47,6 +47,7 @@ device selection
   doctor                layered self-check: install, Apple stack, device, DDI, HID services
   version               ipb, macOS and CoreDevice versions
   update                host-only update of this Homebrew install or git checkout
+  mcp [--state-dir DIR]  stdio MCP server; tools select a full CoreDevice UUID
 
 input
   tap <x> <y>                                  a touch, down and up
@@ -843,11 +844,17 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror|ui|update) DEVICE="" ;;
+  service-ids|ids|help|-h|--help|version|--version|devices|doctor|mirror|ui|update|mcp) DEVICE="" ;;
   *) DEVICE="$(resolve_device)" || exit 3 ;;
 esac
 
 case "$cmd" in
+  mcp)
+    mcp_script="$ROOT/Sources/ipb_mcp.py"
+    [[ -r "$ROOT/libexec/ipb_mcp.py" ]] && mcp_script="$ROOT/libexec/ipb_mcp.py"
+    [[ -r "$mcp_script" ]] || { print -u2 "ipb: MCP helper is missing; rebuild/install ipb"; exit 2; }
+    exec "${IPB_MCP_PYTHON:-${IPB_AX_PYTHON:-python3}}" "$mcp_script" "$@" --cli "$SELF"
+    ;;
   ui)
     query_ui "$@"
     ;;

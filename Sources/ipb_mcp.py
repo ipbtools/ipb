@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded stdio MCP front end; run directly until parent-owned packaging is wired."""
+"""Bounded stdio MCP front end for ipb; no phone Runner or network listener."""
 import argparse
 import asyncio
 import json
@@ -150,7 +150,7 @@ class Server:
             self.rpc_error(request_id, -32600, 'Initialize and send notifications/initialized first')
             return
         if method == 'tools/list':
-            if params:
+            if params.keys() - {'_meta'} or ('_meta' in params and not isinstance(params['_meta'], dict)):
                 self.rpc_error(request_id, -32602, 'No cursor or list parameters supported')
             else:
                 self.response(request_id, {'tools': TOOLS})

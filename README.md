@@ -179,6 +179,18 @@ explicit; timeout recovery on a fresh connection is not implemented.
 See [the UI guide](docs/ui.md) for setup, JSON fields, text policy, bounds and the AX/XCTest
 comparison. Availability depends on the [installation channel](#installation-channels).
 
+### Agent tools (`ipb mcp`)
+
+This development branch adds a bounded stdio MCP server: `ipb mcp`. Configure a client
+with the absolute ipb path and `args: ["mcp"]`. Python 3.11+ is required; set
+`IPB_MCP_PYTHON` if needed. AX tools retain the optional dependencies from `ipb ui`.
+
+Tools provide fresh compact native observations, exact element operations and explicit
+coordinate input. Every device tool requires a full CoreDevice UUID. Requests serialize
+across MCP servers sharing one state directory; manual CLI/mirror are outside that lock.
+Uncertain actions are never replayed. See the [MCP guide](docs/mcp.md) for tools, results,
+cancellation and persistent isolation. Device acceptance remains pending.
+
 ## Build
 
 ```sh
