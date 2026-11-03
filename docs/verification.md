@@ -2,7 +2,22 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-11-02. This section is overwritten; dated records below are append-only.**
+**Updated 2026-11-03. This section is overwritten; dated records below are append-only.**
+
+### v0.6.0 publication decision (2026-11-03)
+
+The maintainer explicitly decided: “实机先不测了，让 Opus 5.5 review 下这两个 PR，
+没问题就先合 #11，再合 #12，发版并更新 Homebrew。” This is a new, version-specific
+publication decision, conditional on actual Opus5.5 review without unresolved blocking
+findings and successful host/package/Homebrew gates. It does not inherit the old v0.5.0
+exception or establish physical acceptance. No new phone operation is authorized for
+this publication; the supported native device matrix and device-facing MCP effects
+remain open. Current review/artifact references are kept locally outside Git.
+
+Opus5.5's fixed-ref review accepts PR#11 `8b239e3`. PR#12's one root-schema
+compatibility issue is corrected by removing the exported `anyOf` while retaining
+server-side selection checks; its focused review accepts `5b3961d`. No phone operation
+was used to reach those source-review conclusions.
 
 ### MCP agent bridge (development, 2026-11-02)
 
@@ -17,8 +32,8 @@ child cleanup and full native matrix acceptance remain untested. Host fake CLI c
 exercise production process ownership and detached-child cleanup but cannot close those
 phone gates. Manual CLI/mirror and different state roots remain outside the MCP lock.
 An `orphanPossible` state deliberately blocks further requests until operator investigation;
-no timer, server restart or observation automatically clears it. These PRs do not publish,
-change Homebrew or upgrade the default local installation.
+no timer, server restart or observation automatically clears it. The version-specific decision above authorizes release and tap publication after review
+and host/package checks; the default local installation is not changed.
 
 ### Interface contracts and support inventory (development, 2026-11-02)
 
@@ -34,7 +49,8 @@ Early shell/native/text failures and external termination still have no v1 error
 consumers must treat missing submission evidence as unknown. Static support metadata
 performs no target query and supplies no device availability or verification claim.
 The earlier v0.5.0 release-specific exception does not apply to these development PRs.
-No merge, release, Homebrew publication or default-install update is part of this work.
+The version-specific decision above now authorizes merge/release and tap publication;
+the default local installation is not changed.
 
 ### Runner-free element work (2026-10-21, v0.5.0 released)
 

@@ -52,6 +52,9 @@ class Ipb < Formula
       dependency in #{share}/ipb/requirements-ax.txt are needed. See docs/ui.md;
       no Python packages or phone application are installed automatically.
 
+      `ipb mcp` also needs Python 3.11+. GUI MCP clients can set IPB_MCP_PYTHON
+      to an absolute interpreter path; AX tools still need the optional UI environment.
+
       Update later with `ipb update`.
     EOS
   end

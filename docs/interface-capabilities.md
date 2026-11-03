@@ -1,10 +1,10 @@
 # 接口能力与规范补充
 
-> 状态：B0已提交；B1实现与产品接线已完成，设备未验证，待父会话review/提交/PR；最后核对：2026-11-02。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向B。
+> 状态：B0已提交；B1实现与产品接线已完成，设备未验证，已提PR#11；本版按Opus评审与主机/包门禁发布；最后核对：2026-11-03。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向B。
 
 ## 1. 需求与关联资料
 
-用户授权两个独立GPT6.1Sol/xhigh/Fast方向，基线为main `bf3fcad375db5e11d5573a7ef11fa9a02c8cd1d7` / v0.5.0。2026-11-02的交付范围为完成B1实现与产品接线后由父会话提交并提PR；不自动合入或发布。产品继续只使用Apple自带服务；不安装手机Runner、不启动XCTest，不继承过去版本的实机豁免。本次只做主机回归，不操作手机，设备矩阵仍未运行，不阻止用户请求的PR交付。
+用户授权两个独立GPT6.1Sol/xhigh/Fast方向，基线为main `bf3fcad375db5e11d5573a7ef11fa9a02c8cd1d7` / v0.5.0。2026-11-02的交付范围为完成B1实现与产品接线后由父会话提交并提PR；2026-11-03用户进一步授权Opus5.5评审无阻塞后按#11→#12合入、发版并更新Homebrew，本版不跑实机。产品继续只使用Apple自带服务；不安装手机Runner、不启动XCTest，不继承过去版本的实机豁免。本次只做主机回归，不操作手机，设备矩阵仍未运行，不阻止用户请求的PR交付。
 
 ipb已有多个命令族和不同结果语义：发送被接受、实际效果、补充属性失败及清理失败不能互换。目标是明确能力与错误契约，再逐项补充有证据的接口，供脚本、MCP及后续客户端共用。
 
@@ -56,7 +56,7 @@ B拥有契约/fixtures、Python AX入口、support模块、bin/ipb及相关接�
 
 B0由父会话提交为 `eda742d`。B1包含Python opt-in错误、静态support和source/install/package接线；包清单明确包含support helper，提取后解析其kind/version，主机总入口纳入现有interface/support回归。父会话review后提交、提PR并检查CI。第一份交接的B1代码保持review baseline；本次没有新增状态/生命周期机制。B2裸text完整结构化阶段与RSD截图不在本次范围。
 
-A/B均只改归属文件，不能自行rebase/cherry-pick/修改对方工作区。B完成本工作树授权的产品接线，跨方向集成与Git/PR/CI由父会话处理；不自动合入或发布。
+A/B均只改归属文件，不能自行rebase/cherry-pick/修改对方工作区。B完成本工作树授权的产品接线，跨方向集成与Git/PR/CI由父会话处理；本版按2026-11-03用户指令在评审后合入发布，不升级默认本机安装。
 
 ### 验证
 

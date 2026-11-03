@@ -13,6 +13,10 @@ deep/state/action additions; earlier `v0.2.0` has only ordinary AXChildren reads
 See the [installation channels](../README.md#installation-channels) for stable and `--HEAD`
 packages.
 
+v0.6.0 adds opt-in handled Python AX error receipts and `support --json`; default
+errors, exit codes and successful schema1/2 output remain compatible. See
+[the interface contract](contract.md). No new Apple wire or dependency upgrade is introduced.
+
 ## Setup
 
 The host backend needs Python 3.11+ and the verified `pymobiledevice3==11.10.2`.

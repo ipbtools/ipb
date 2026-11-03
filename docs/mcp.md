@@ -1,6 +1,6 @@
 # MCP host bridge
 
-> Status: implemented, device-unverified. M1 only; Python 3.11+ and a POSIX host.
+> Introduced in v0.6.0; device-unverified. M1 only; Python 3.11+ and a POSIX host.
 > No Runner, XCTest, device app, persistent DTX connection or network listener.
 
 The supported ipb host/device matrix is unchanged; this is not new Linux/Windows support.
