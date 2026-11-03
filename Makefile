@@ -127,6 +127,7 @@ install: all
 	install -m 755 Sources/ipb_ax.py $(PREFIX)/libexec/ipb-ax.py
 	install -m 755 Sources/ipb_support.py $(PREFIX)/libexec/ipb-support.py
 	install -m 644 Sources/ax_archive.py $(PREFIX)/libexec/ax_archive.py
+	install -m 644 Sources/ipb_mcp.py Sources/ipb_mcp_adapter.py Sources/ipb_mcp_process.py $(PREFIX)/libexec/
 	install -m 644 requirements-ax.txt $(PREFIX)/share/ipb/requirements-ax.txt
 	install -m 644 VERSION $(PREFIX)/share/ipb/VERSION
 	install -m 755 scripts/smoke_matrix.sh $(PREFIX)/share/ipb/smoke_matrix.sh

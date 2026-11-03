@@ -1,10 +1,10 @@
 # MCP 与 agent 体验优化
 
-> 状态：已决定待开发；最后核对：2026-10-27。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向A。
+> 状态：M1已接入CLI/安装/主机检查；设备验收待完成；最后核对：2026-11-02。执行进程：GPT6.1Sol / xhigh / Fast(priority)，方向A。
 
 ## 1. 需求与关联资料
 
-用户在2026-10-27授权：与Opus5.5讨论后，设立两个大方向，各由独立GPT6.1Sol/xhigh/Fast进程跟进。基线为main `bf3fcad375db5e11d5573a7ef11fa9a02c8cd1d7` / v0.5.0。产品继续只使用Apple自带服务；不安装手机Runner、不启动XCTest，不把过去版本的实机豁免继承为本次验收。当前两个进程先推进实现和主机回归，实机项保持未验证，未授权自动合入或发布。
+用户在2026-10-27授权：与Opus5.5讨论后，设立两个大方向，各由独立GPT6.1Sol/xhigh/Fast进程跟进。基线为main `bf3fcad375db5e11d5573a7ef11fa9a02c8cd1d7` / v0.5.0。产品继续只使用Apple自带服务；不安装手机Runner、不启动XCTest，不把过去版本的实机豁免继承为本次验收。用户在2026-11-02进一步授权落地并提PR；本轮完成首期产品接线和主机回归，实机项保持未验证，不自动合入或发布。
 
 ipb已有完整native deep读取和受保护的单步操作，但agent仍需拼接CLI、处理输出和协调设备。目标是让agent通过小而明确的工具集获得新鲜页面、执行一次操作并理解结果。
 
@@ -16,6 +16,10 @@ ipb已有完整native deep读取和受保护的单步操作，但agent仍需拼�
 ## 2. 技术调研结论
 
 首期采用薄stdio MCP进程，每次操作调用当前安装的ipb CLI，不直接import或复制AX后端。先交付新鲜观察、精确操作、机器可读结果和MCP间的设备互斥，再做diff、settle及跨页收集。MCP运行时与常驻DTX连接是不同能力，首期不复用DTX或缓存native handle。
+
+`Sources/ipb_mcp_adapter.py`集中定义有界工具schema、argv构造、v0.5.0按命令族的保守映射和v1错误样例消费。observe保留原生路径/字段，返回独立MCP envelope；底层schema1/2不变。当前开发和验证只使用主机fake数据，真实设备路径均待验收。2026-11-02重新核对六个参考仓库的默认分支；iPhone-use未变，其余更新没有改变本期无Runner方案。go-ios的[截图串行/取消边界](https://github.com/danielpaulus/go-ios/blob/51887da850dd19f4242c58a00262d06e006839cf/ios/screencapture/screencapture.go#L33-L47)与agent-device的[操作证据边界](https://github.com/callstack/agent-device/blob/32bf98def5e3b0c6d577ed96ac09309d4e7353f0/packages/apple-runner/src/runner-failure-diagnostics.ts#L23-L50)作为设计参考，不复制执行层或新增连接管理。
+
+M1正式入口为`ipb mcp`（开发也可直接运行`python3 Sources/ipb_mcp.py --cli /absolute/path/to/ipb`），使用MCP revision 2025-11-25的有界stdio子集；工具和结果指南见[docs/mcp.md](mcp.md)。`Sources/ipb_mcp_process.py`拥有锁、持久化intent及取消回收；没有引入SDK/AX依赖，由父会话接通同一安装的CLI、三个Python模块及主机/包检查。后续M2–M4未实现。
 
 <details><summary>选择与约束</summary>
 
@@ -57,13 +61,21 @@ MVP工具范围：设备枚举、observe、locate、wait、press、input、scrol
 - 强杀后无法证明子进程回收时记unknown/orphanPossible，并持久化隔离该设备的后续修改。隔离不能因60秒到期、一次observe或server重启自行解除；恢复必须有明确终止证据或人工介入。
 - 只有“结果未知但确认进程全部回收”的情况可以通过一次成功、完整且匹配设备的观察解除observeRequired。无完整snapshotId的超时观察不能解除。
 
+M1作保守收窄：`orphanPossible`阻止该设备所有MCP请求，包括observe，避免未知残留期间再建立AX连接；只允许`observeRequired`用完整observe解除。进程身份预检失败时不启动CLI；运行中检查失败或强杀时保留`orphanPossible`。维护测试保留可注入的协作fake CLI身份，同时增加使用真实Darwin ps/sysctl的假CLI回归，覆盖正常退出、独立session子进程取消和外壳先退出；这些主机检查不替代手机验收。
+
+旧AX错误缺少receipt时，MCP不再单凭1/5认定not-sent；只有结构化已知状态、可证明未spawn或HID族明确的准备阶段映射才表明未发送。读取方向B已提交契约后，dump采用`operation=ui.dump`；child负值/≥128保留数值且状态unknown。已用方向B实际Python格式化输出做跨模块回归；不改默认CLI输出或退出码。
+
+维护fixture确认的可达主机问题：CLI的waitpid完成与pipe EOF可能相差一次调度；若即时把未读到EOF归类为孙进程残留，普通成功观察会被误判。实现先给予150ms有界尾部排空，再判定持续残留；外壳先退出且独立session孙进程仍持有pipe或已关闭pipe的场景仍触发回收/隔离。
+
+源码确认的旧CLI兼容边界：`bin/ipb`的query_ui按文本精确匹配枚举identifier。MCP仅规范化锁键，传入CLI的完整UUID保留调用者观察到的大小写；相同UUID的大小写变体仍共用锁，避免MCP自行小写化导致正常大写枚举UUID被旧CLI拒绝。
+
 持久化操作intent必须在spawn前落盘，随后补齐本请求pid/pgid/启动时间及唯一环境标记。server崩溃也要留下可判定或保守隔离的记录；不能只靠flock自动释放。不得把人工解除隔离暴露成MCP工具。进程标记检查只提取本请求nonce/身份，不输出或保存完整环境、argv和用户输入。共享同一canonical锁路径的其他checkout也受保护，使用不同状态目录的进程不受保护。
 
 MCP首期固定一个实际测试的协议revision，覆盖initialize、notifications/initialized、ping、tools/list、tools/call、notifications/cancelled。不支持的请求返回-32601；通知不发JSON-RPC响应。stdout仅NDJSON，日志放stderr，资源与参数有界。
 
 ### 里程碑
 
-M1：协议握手/工具schema、薄CLI适配、紧凑observe、锁、失败/取消边界。M2：保守语义diff和可选动作后观察/有限settle。M3：有预算的scroll-find/collect，页级来源、去重限制、结束证据和no-progress分开。M4：仅在实测瓶颈明确后设计连接复用。M1未完成前不扩大到M2–M4。
+M1：已落源码与主机fixtures，协议握手/工具schema、薄CLI适配、紧凑observe、锁、失败/取消边界均有对应模块；CLI、安装包和主机检查已接通；设备验收待处理。M2：保守语义diff和可选动作后观察/有限settle。M3：有预算的scroll-find/collect，页级来源、去重限制、结束证据和no-progress分开。M4：仅在实测瓶颈明确后设计连接复用。本轮未扩大到M2–M4。
 
 ### 验证
 
@@ -80,4 +92,8 @@ M1：协议握手/工具schema、薄CLI适配、紧凑observe、锁、失败/取
 | MCP与结果适配 | 独立GPT6.1Sol进程A；人工负责人待确认 | codex/mcp-agent-experience | 可评审的实现提交、维护测试、docs/mcp.md和接线清单 | 冻结的B契约词汇；首期不等待B代码 | 待确认 |
 | diff/settle/list后续 | 同一进程持续跟进 | 同分支分阶段提交 | M1完成后另定增量 | M1结果/取消边界 | 待确认 |
 
-本方案不构成已实现/已验证声明。不得自动发布、合入或升级默认本机安装。
+M1为已实现未验证状态；主机fixture不构成设备验收。不得自动发布、合入或升级默认本机安装。代码及文档仅在方向A工作树内；提交按MCP实现、产品接线和接口线集成分段保留，主机原始输出留本地，不提交成功日志。
+
+首期主机联调确认两项问题并作最小修正：`tools/list`原先拒绝合法通用`_meta`，现校验其为对象后忽略；Darwin `KERN_PROCARGS2`可能在进程退出后返回EINVAL，原先会把这个竞态判为权限缺失。现在只在再次读取进程身份确认该PID消失/身份变化时忽略读取失败；仍存活且不可读时继续在发送前失败。真实主机回归使用假CLI验证正常退出、取消独立session子进程及外壳先退场景，不代表手机清理通过。
+
+Opus5.5发布评审指出五个工具的根级`anyOf`存在客户端/API兼容问题。[Claude官方说明](https://code.claude.com/docs/en/mcp#tool-input-schemas-with-a-root-level-combinator)确认API不接受根级组合，当前Claude Code可能改写或跳过工具，不能依赖所有客户端补救。维护回归先复现旧schema不符合平坦根对象约束；删除这一行后通过。至少一个精确选择器仍由服务端在spawn前强制，不新增状态或放松操作校验。

@@ -10,6 +10,7 @@ branch may be ahead of Homebrew HEAD. Check the running path with `command -v ip
 | --- | --- |
 | Install, update, select a device, command overview | [README](../README.md) |
 | Read a UI tree, text, frames and state; understand AX/XCTest coverage | [UI guide](ui.md) |
+| Configure agent tools, understand results, cancellation and device isolation | [MCP guide](mcp.md) |
 | Inspect static implementation support or consume opt-in Python AX errors | [Interface contract](contract.md), [UI error guide](ui.md#opt-in-structured-errors-and-implementation-inventory) |
 | Mirror controls, keyboard/IME/clipboard, geometry and errors | [Mirror guide](mirror.md) |
 | Stream media and its implementation plan | [README stream usage](../README.md#live-screen-stream-ipb-stream), [video plan](video-stream.md) |

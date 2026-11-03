@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INSTALL_FILES = {
     "bin/ipb", "libexec/ipb-helper", "libexec/ipb-video", "libexec/ipb-mirror",
     "libexec/ipb-ax.py", "libexec/ipb-support.py", "libexec/ax_archive.py", "share/ipb/requirements-ax.txt",
+    "libexec/ipb_mcp.py", "libexec/ipb_mcp_adapter.py", "libexec/ipb_mcp_process.py",
     "share/ipb/VERSION", "share/ipb/smoke_matrix.sh", "share/ipb/smoke_assertions.zsh",
     "share/ipb/png_pixels_digest.py", "share/ipb/assert_search_text.swift",
     "share/zsh/site-functions/_ipb",
@@ -140,6 +141,7 @@ CI package to update this extracted copy; `ipb update` does not upgrade it.
             raise ValueError("installed CLI version mismatch")
         run(str(cli), "help")
         run(str(cli), "help", "hid")
+        run(str(cli), "mcp", "--help")
         verify_support(cli)  # Static inventory only; never selects/queries a phone.
         # Start each Mach-O without device arguments; usage errors are expected,
         # but loader errors, crashes and missing private symbols must fail CI.

@@ -4,6 +4,22 @@
 
 **Updated 2026-11-02. This section is overwritten; dated records below are append-only.**
 
+### MCP agent bridge (development, 2026-11-02)
+
+The `mcp-agent-experience` branch integrates `ipb mcp`, compact native deep observations,
+explicit element/coordinate tools, shared-root MCP device locks and conservative
+cancellation/isolation. It builds on the interface-contract branch; it adds no phone
+Runner, XCTest dependency or Apple service protocol. See [MCP guide](mcp.md) and
+[current plan](mcp-agent-experience.md).
+
+**Open, agent-fixable validation:** supported-device tool effects, real input/clipboard
+child cleanup and full native matrix acceptance remain untested. Host fake CLI controls
+exercise production process ownership and detached-child cleanup but cannot close those
+phone gates. Manual CLI/mirror and different state roots remain outside the MCP lock.
+An `orphanPossible` state deliberately blocks further requests until operator investigation;
+no timer, server restart or observation automatically clears it. These PRs do not publish,
+change Homebrew or upgrade the default local installation.
+
 ### Interface contracts and support inventory (development, 2026-11-02)
 
 The maintainer authorized implementation and PRs for interface contracts and MCP agent
