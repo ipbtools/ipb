@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ipb handled Python AX error v1",
+  "type": "object",
+  "required": ["kind", "contractVersion", "operation", "phase", "exitCode", "error", "action", "retrySafe", "result"],
+  "properties": {
+    "kind": {"const": "ipb.error"},
+    "contractVersion": {"const": 1},
+    "operation": {"enum": ["ui.dump", "ui.hit-test", "ui.locate", "ui.wait", "ui.press", "ui.input", "ui.scroll-to-visible", "ui.alert-press", "unknown"]},
+    "phase": {"enum": ["validation", "dependency", "query", "submission", "postcondition", "supplemental", "unknown"]},
+    "exitCode": {"enum": [1, 2, 5, 6]},
+    "error": {
+      "type": "object",
+      "required": ["type", "message"],
+      "properties": {"type": {"type": "string"}, "message": {"type": "string"}}
+    },
+    "action": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["state", "native", "childExitCode"],
+          "properties": {
+            "state": {"enum": ["not-sent", "submitted", "accepted", "refused", "child-exited-zero", "child-exited-nonzero", "native-true", "native-false", "unknown"]},
+            "native": {"oneOf": [{"type": "boolean"}, {"const": "unknown"}]},
+            "childExitCode": {"type": ["integer", "null"]}
+          }
+        }
+      ]
+    },
+    "retrySafe": {"type": "boolean"},
+    "result": {"type": ["object", "null"]}
+  }
+}

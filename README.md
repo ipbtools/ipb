@@ -216,6 +216,7 @@ bin/ipb ui input --class UISearchBarTextField --text Battery --replace-all --jso
 bin/ipb ui scroll-to-visible --identifier com.apple.settings.general --json # one native scroll, then observe
 bin/ipb displays --json
 bin/ipb capabilities --json
+bin/ipb support --json                      # static implementation inventory; no device query
 bin/ipb apps | bin/ipb ps | bin/ipb lock-state | bin/ipb orientation
 bin/ipb push local.txt /Documents/x.txt --app <bundle-id>
 bin/ipb long 0.615 0.675 1.2
@@ -304,6 +305,21 @@ resolved `deviceIdentifier`. Displays preserves Apple's `displays`, `orientation
 capabilities preserves the advertised entries, sorted by `featureIdentifier`. Select the explicit
 primary display; the first entry need not be the phone screen. Query failure is an error, not an
 empty capability list. An advertised feature is not a guarantee that its next operation will work.
+
+`ipb support --json` is a separate static inventory of ipb's implementation and prerequisites.
+It does not select or query a device: advertisement is `unknown` and verification records
+are empty. Listed implementations are `unverified`; explicitly unimplemented operations are
+`unsupported`. `-s` and `DEVICE_ID` do not turn this into a device probe. The output has
+`kind="ipb.support"`, `contractVersion=1`; it is not a complete CLI command list or a
+claim of device availability. [Interface contract](docs/contract.md) describes its schema.
+
+For scripts, `IPB_ERROR_FORMAT=json` opts into a single `ipb.error` v1 document on handled
+Python AX failures. The nonzero exit code is preserved, and any complete native result is
+retained in its top-level `result` field. Default errors and successful schema 1/2 or text
+output stay unchanged. zsh setup/device-selection errors, native helpers, raw `text` and
+external abnormal termination are outside this initial coverage; a missing receipt is
+unknown, not permission to replay an action. See the [error contract](docs/contract.md)
+and [UI guide](docs/ui.md#opt-in-structured-errors-and-implementation-inventory).
 
 ### Live screen stream: `ipb stream`
 

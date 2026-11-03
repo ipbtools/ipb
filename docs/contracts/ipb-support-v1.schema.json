@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ipb static support inventory v1",
+  "type": "object",
+  "required": ["kind", "contractVersion", "scope", "deviceQuery", "supportedMatrix", "operations"],
+  "properties": {
+    "kind": {"const": "ipb.support"},
+    "contractVersion": {"const": 1},
+    "scope": {"type": "string"},
+    "deviceQuery": {
+      "type": "object", "required": ["status", "deviceIdentifier"],
+      "properties": {"status": {"const": "not-requested"}, "deviceIdentifier": {"type": "null"}}
+    },
+    "supportedMatrix": {
+      "type": "object", "required": ["host", "device", "status", "reason"],
+      "properties": {
+        "host": {"type": "string"}, "device": {"type": "string"},
+        "status": {"const": "unverified"}, "reason": {"type": "string"}
+      }
+    },
+    "operations": {
+      "type": "array", "items": {
+        "type": "object",
+        "required": ["operation", "status", "reason", "scope", "implementation", "advertisement", "prerequisites", "verification"],
+        "properties": {
+          "operation": {"type": "string"},
+          "status": {"enum": ["verified", "unverified", "unsupported", "unknown"]},
+          "reason": {"type": "string"}, "scope": {"type": "string"},
+          "implementation": {
+            "type": "object", "required": ["present", "mechanism", "errorContract"],
+            "properties": {
+              "present": {"type": "boolean"}, "mechanism": {"type": ["string", "null"]},
+              "errorContract": {"type": ["string", "null"]}
+            }
+          },
+          "advertisement": {
+            "type": "object", "required": ["status", "data", "reason"],
+            "properties": {"status": {"const": "unknown"}, "data": {"type": "null"}, "reason": {"type": "string"}}
+          },
+          "prerequisites": {"type": "array", "items": {"type": "string"}},
+          "verification": {
+            "type": "object", "required": ["status", "records"],
+            "properties": {
+              "status": {"enum": ["verified", "unverified", "unsupported", "unknown"]},
+              "records": {"type": "array", "items": {
+                "type": "object", "required": ["host", "device", "os", "commandScope", "evidence"],
+                "properties": {
+                  "host": {"type": "string"}, "device": {"type": "string"}, "os": {"type": "string"},
+                  "commandScope": {"type": "string"}, "evidence": {"type": "string"}
+                }
+              }}
+            }
+          }
+        },
+        "allOf": [{"if": {"properties": {"status": {"const": "verified"}}},
+                   "then": {"properties": {"verification": {"properties": {"status": {"const": "verified"}, "records": {"minItems": 1}}}}}}]
+      }
+    }
+  }
+}
