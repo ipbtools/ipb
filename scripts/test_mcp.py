@@ -466,6 +466,9 @@ class ProcessTests(FixtureCase):
                 self.assertEqual(kinds[:2], ['start', 'start'])
 
     async def test_cancel_once_grace_keeps_lock_until_reaped_and_requires_observe(self):
+        # Positive cleanup uses the production budget; short fixture grace is
+        # reserved for controls that deliberately force termination.
+        self.bridge.grace = processes.GRACE_SECONDS
         self.configure(mode='sleep', termDelay=0.12)
         cancel = asyncio.Event()
         first = asyncio.create_task(self.bridge.call('input', {'device': DEVICE, 'identifier': 'field',
