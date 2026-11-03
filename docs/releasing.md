@@ -17,6 +17,11 @@ phone input cleanup and device-facing MCP effects remain unverified. Future devi
 are unchanged. See [MCP guide](mcp.md), [interface contract](contract.md) and
 [current verification](verification.md#open-items--current-state-living-section).
 
+Opus5.5 accepted PR#11 at `8b239e3`. Its PR#12 review required removing the root-level
+`anyOf` in tool schemas; the focused review accepted `5b3961d`, with server-side selector
+validation preserved. Both reviews report no unresolved blocking findings; raw reports
+remain outside Git. The release preparation changes version and documentation only.
+
 Stable archives remain macOS27 ARM64 and require compatible Apple development components
 at runtime. MCP needs Python3.11+; AX additionally needs the separately installed pinned
 host environment. The [latest standard Release](https://github.com/ipbtools/ipb/releases/latest)

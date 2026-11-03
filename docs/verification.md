@@ -14,6 +14,11 @@ exception or establish physical acceptance. No new phone operation is authorized
 this publication; the supported native device matrix and device-facing MCP effects
 remain open. Current review/artifact references are kept locally outside Git.
 
+Opus5.5's fixed-ref review accepts PR#11 `8b239e3`. PR#12's one root-schema
+compatibility issue is corrected by removing the exported `anyOf` while retaining
+server-side selection checks; its focused review accepts `5b3961d`. No phone operation
+was used to reach those source-review conclusions.
+
 ### MCP agent bridge (development, 2026-11-02)
 
 The `mcp-agent-experience` branch integrates `ipb mcp`, compact native deep observations,
