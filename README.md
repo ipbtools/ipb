@@ -21,11 +21,16 @@ nonzero while preserving a validated native tree after successful cleanup. Defau
 `ipb ui` retains the ordinary AXChildren graph and JSON schema 1. It uses an optional host Python
 backend; it installs nothing on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
 
+v0.6.0 adds `ipb mcp` for agent tools, a static `support --json` inventory and opt-in
+Python AX error receipts. Default CLI errors/exit codes and successful ordinary/deep
+schemas remain compatible. MCP invokes the existing CLI; no phone Runner, XCTest,
+new device protocol or AX dependency upgrade is introduced.
+
 The CLI uses DeviceHub's captured async descriptor-discovery path to resolve the touchscreen
-service when `UHID_SERVICE_ID=auto`. The maintainer authorized v0.5.0 publication after
-Opus 5.5 review and host/package/Homebrew checks, without further physical-device testing.
-Existing scoped12mini controls remain separate evidence. The full supported physical-device
-gate remains open; this release does not claim full device acceptance. See
+service when `UHID_SERVICE_ID=auto`. On 2026-11-03 the maintainer authorized v0.6.0
+publication after Opus 5.5 review and host/package/Homebrew checks, deferring physical-device
+testing for this version. Earlier scoped12mini controls remain separate evidence. The full
+supported device gate and device-facing MCP effects remain unverified. See
 [current verification scope](docs/verification.md#open-items--current-state-living-section).
 For `ui press`, exit **6** means failure after submission: the diagnostic preserves accepted,
 refused or unknown status. Never retry it automatically; read the page again first.
@@ -52,14 +57,14 @@ Override it at build time with `XCODE_PATH=/path/to/Xcode-beta.app` if you prefe
 
 ## Installation channels
 
-The v0.5.0 source revision adds the runner-free element
-operations in [PR #9](https://github.com/ipbtools/ipb/pull/9). It retains v0.4.0's
-native-only deep trees/rectangles and separate supplemental state (deep JSON schema 2),
-ordinary schema1 and identifier-only press output. Stable installs use the precompiled
-macOS 27 ARM64 package; source/HEAD installs build locally. The supported physical-device
-gate remains open; the maintainer authorized this release after Opus5.5 review and
-host/package/Homebrew verification, without additional device testing. It does not claim full acceptance. See
-[release verification](docs/releasing.md#current-channels).
+The v0.6.0 source revision includes the MCP agent bridge in
+[PR #12](https://github.com/ipbtools/ipb/pull/12) and machine-readable error/support
+contracts in [PR #11](https://github.com/ipbtools/ipb/pull/11). It retains native deep
+schema2, ordinary/action schema1 and the existing runner-free element operations.
+Stable installs use the precompiled macOS 27 ARM64 package; source/HEAD installs build
+locally. The maintainer authorized publication after review and host/package/Homebrew
+checks without a new phone run; this does not certify the full physical-device matrix.
+See [release verification](docs/releasing.md#current-channels).
 Published archives are listed on the [latest stable Release](https://github.com/ipbtools/ipb/releases/latest);
 version preparation and CI packages do not publish or update the stable tap automatically.
 
@@ -181,7 +186,7 @@ comparison. Availability depends on the [installation channel](#installation-cha
 
 ### Agent tools (`ipb mcp`)
 
-This development branch adds a bounded stdio MCP server: `ipb mcp`. Configure a client
+v0.6.0 provides a bounded stdio MCP server: `ipb mcp`. Configure a client
 with the absolute ipb path and `args: ["mcp"]`. Python 3.11+ is required; set
 `IPB_MCP_PYTHON` if needed. AX tools retain the optional dependencies from `ipb ui`.
 

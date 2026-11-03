@@ -2,6 +2,29 @@
 
 ## Current channels
 
+The v0.6.0 source revision combines [PR#11](https://github.com/ipbtools/ipb/pull/11)
+(opt-in handled Python AX error receipts and static support inventory) and
+[PR#12](https://github.com/ipbtools/ipb/pull/12) (`ipb mcp`, compact native observations,
+explicit tools, device serialization and bounded cancellation/isolation). The existing
+Apple service paths, default CLI output/exit behavior, ordinary/action schema1 and deep
+schema2 are retained. No phone Runner/XCTest or dependency upgrade is added.
+
+On 2026-11-03 the maintainer explicitly decided to defer physical-device testing for
+this version, require Opus5.5 review of both PRs, merge #11 before #12 if no blocking
+findings remain, then publish and update Homebrew. This v0.6.0-specific decision permits
+publication after the review and host/package/Homebrew gates; the actual device matrix,
+phone input cleanup and device-facing MCP effects remain unverified. Future device gates
+are unchanged. See [MCP guide](mcp.md), [interface contract](contract.md) and
+[current verification](verification.md#open-items--current-state-living-section).
+
+Stable archives remain macOS27 ARM64 and require compatible Apple development components
+at runtime. MCP needs Python3.11+; AX additionally needs the separately installed pinned
+host environment. The [latest standard Release](https://github.com/ipbtools/ipb/releases/latest)
+is the authority for published assets. The source formula stays the HEAD template;
+the stable tap formula is generated from the reviewed archive after publication.
+
+## Previous v0.5.0 release
+
 The v0.5.0 source revision contains the runner-free element operations in [PR#9](https://github.com/ipbtools/ipb/pull/9):
 exact locators/waits and qualified press, clipboard/HID replacement that checks the
 actual first responder, one-shot native scroll-to-visible and explicitly selected
@@ -209,7 +232,7 @@ handoff and condensed verification record.
 4. Update VERSION, user guides and release notes for the reviewed version. Record an exact
    candidate SHA; complete review before selecting the commit to tag.
 
-The full supported physical matrix remains open. The explicit v0.2.0, v0.3.0, v0.4.0 and v0.5.0 publication decisions
+The full supported physical matrix remains open. The explicit v0.2.0, v0.3.0, v0.4.0, v0.5.0 and v0.6.0 publication decisions
 are recorded above; standard Release status does not certify physical acceptance.
 
 ## Prepare and publish the reviewed version
