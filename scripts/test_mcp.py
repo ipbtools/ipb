@@ -89,8 +89,9 @@ class AdapterTests(unittest.TestCase):
         self.assertIn('literal $(never-run) 中文\n', adapter.command('input', cases['input']))
         self.assertIn('--class', adapter.command('press', cases['press']))
         self.assertNotIn('--full-state', adapter.command('observe', cases['observe']))
-        press = next(t for t in adapter.TOOLS if t['name'] == 'press')
-        self.assertEqual(press['inputSchema']['anyOf'], [{'required': [key]} for key in adapter.SELECTORS])
+        for entry in adapter.TOOLS:
+            for combinator in ('anyOf', 'oneOf', 'allOf'):
+                self.assertNotIn(combinator, entry['inputSchema'], entry['name'])
 
     def test_reject_invalid_arguments_before_spawn(self):
         invalid = [('observe', {}), ('observe', {'device': '11111111'}),

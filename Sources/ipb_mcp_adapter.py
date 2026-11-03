@@ -50,7 +50,6 @@ for name in ("locate", "wait", "press", "input", "scroll_to_visible"):
                 "input": "One guarded replacement of the current text responder. Clipboard may change; never replay.",
                 "scroll_to_visible": "One native scroll for an already materialized target; no search/fallback."}[name]
          + " Supply at least one exact selector; className is native class.", props, required)
-    TOOLS[-1]['inputSchema']['anyOf'] = [{'required': [key]} for key in SELECTORS]
 tool("alert_press", "One explicitly observed SpringBoard modal button; no automatic alert handling.",
      {"device": DEVICE, "pid": PID, "alertLabel": string(), "label": string()},
      ("device", "pid", "alertLabel", "label"))
