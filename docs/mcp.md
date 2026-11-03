@@ -76,6 +76,8 @@ conjunctively. Their maximum length is 1024 characters; replacement text is boun
 4096 characters. Snapshot-local `n…` IDs are never accepted as action tokens. There is
 no bare text tool, coordinate/OCR fallback, automatic alert approval or automatic replay.
 The tool list publishes the complete argument schemas; unknown fields are rejected.
+Schemas use a flat root object for client/API compatibility; the server still requires
+at least one exact selector for element tools before spawning the CLI.
 
 Each input frame is at most 65536 bytes, with at most 16 active calls (including lock
 waiters). The normal CLI/lock budget is 60 seconds; cancellation has a separate 22-second
@@ -103,6 +105,8 @@ AX failure (even exit 1/5) is unknown rather than proof of a normal Python retur
 HID setup/socket/tunnel codes 2/3/4 retain their family-specific pre-send mapping; devicectl
 launch remains unknown without a phase receipt. Signals, interrupted collection and
 malformed expected JSON never establish `not-sent`. stderr text is never phase evidence.
+Even a successful `launch` therefore requires a fresh complete `observe` before another
+modification can run.
 
 `observe.result` has its own `kind=ipb.mcp.observation`, `version=1` and
 `sourceSchemaVersion=2`. It projects the complete native tree and application/snapshot
