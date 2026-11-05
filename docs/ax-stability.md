@@ -84,4 +84,9 @@ observations may differ. The isolated package passes layout/signature/checksum a
 extracted startup checks. Host results apply to this unchanged production source;
 the subsequent checkpoint changes documentation only.
 
-Remaining delivery work is the PR and actual CI results. Legacy full nil remains open.
+Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15). First CI run42076765640
+passes native build/host/package checks but fails while cloning homebrew/core after180s,
+before installing ipb. The underlying clone cause is not established; the unchanged
+Homebrew script is outside this AX fix. Its installation gate remains unverified at
+this checkpoint, with subsequent actual checks recorded on the PR. Legacy full nil
+and physical-device acceptance remain open.

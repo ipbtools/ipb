@@ -32,7 +32,9 @@ unsuitable because its records are truncated and lack responder traits/value.
 
 Stage1 cadcefa and the complete core profile58e5c32 are accepted by actual Opus5.5
 source review without blocking findings. The isolated development package passes;
-PR CI remains the delivery check. The supported
+Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15). Its first CI run passes
+build/host/package checks but times out cloning homebrew/core before ipb installation;
+that installation gate is unverified. Current checks are tracked on the PR. The supported
 physical HID/media/AX matrix remains unrun; no physical operation is part of this task.
 See [current plan](ax-stability.md) and the dated evidence below.
 
@@ -7981,3 +7983,30 @@ The later delivery checkpoint changes documentation only; production/test source
 unchanged from this tested/reviewed revision. PR CI will separately verify the final
 head and its development package/Homebrew installation in the disposable runner. No
 physical device, merge, release or default-install operation is part of delivery.
+
+
+## 2026-11-06 — PR15 delivery and first CI result
+
+[PR#15](https://github.com/ipbtools/ipb/pull/15) targets main on codex/ax-stability.
+Implementation checkpoints are cadcefa (unused visibility),58e5c32 (explicit profile)
+and f299856 (Opus/package documentation); source/test files are identical to the
+accepted/tested58e5c32. The separate Duo simulator branch remains locally rebased on
+main8c227a1. No unrelated worktree changes or window_dump.xml were included.
+
+[CI run42076765640](https://github.com/ipbtools/ipb/actions/runs/42076765640) at
+f299856 completes with **failure**. Apple environment, native ARM64 builds, all host
+regressions, archive layout/signatures/checksum and extracted startup pass. The
+precompiled Homebrew step implicitly taps homebrew/core, then times out after180s
+while cloning `/opt/homebrew/Library/Taps/homebrew/homebrew-core`, before an ipb
+installation/result. Upload is skipped, so this run provides no downloadable artifact.
+This proves neither a successful nor a defective installed ipb package. The Homebrew
+test/workflow are unchanged from main; the clone's underlying cause is not established.
+No AX code or timeout change is justified by that failure. Logs/results:10-ci-* in the
+external implementation evidence directory. Later checks are visible on the PR; this
+dated record describes this exact run only.
+
+A documentation-only delivery update triggers one subsequent CI attempt. Actual latest
+status will be recorded on the PR. Host fixtures, local isolated package and source
+review remain passing evidence for the same production source, while physical-device
+acceptance and default full nil remain open. Task-owned simulator is shut down; no
+physical operation, local Homebrew install, merge or release occurred.
