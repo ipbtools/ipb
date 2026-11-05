@@ -66,6 +66,24 @@ keys under `nativeAttributes`. These do not define XCTest element types. Unavail
 properties are omitted; `CGRectNull` is reported as `frameUnavailable`. Structural records
 may have no text or state. The text renderer shows native Label, Identifier, then class.
 
+### Explicit core observations
+
+This development revision adds `ipb ui --deep --native-profile core --json`.
+Omitting the option or choosing `full` keeps the existing request and successful output.
+Core requests the same complete hierarchy, geometry and text without native visibility2025,
+which can be expensive across application windows. It reports
+`nativeAttributeProfile="core"` and `nativeVisibility="not-requested"`; nodes omit
+`visible`, including any extra visibility returned by the server. Not requested does not
+mean false. There is no automatic profile fallback.
+
+The option requires a deep dump. `--native-profile core --full-state` is allowed:
+later visibility reads remain under `supplementalAX`, separate from the native snapshot.
+Both profiles retain schema2, root checks, complete child counts and the512-record/depth32
+limits. Core does not resolve oversized trees or establish physical-device acceptance;
+default full-profile nils remain open. See [verification](verification.md).
+
+### Native graph checks
+
 A native tree can contain a terminal `AXRemoteElement` reference to another process.
 Only its proven zero-child shape is accepted. Such nodes add `processIdentifier` and
 `externalProcessReference=true`; their remote descendants are not synthesized and actions
@@ -188,7 +206,7 @@ and checks the same hit identity/display again. It is read-only. It does not com
 `locate` reads one fresh native snapshot and returns every public match, its match count,
 uniqueness, and snapshot-local path IDs. It uses core attributes without the unused native
 visibility field. `wait`, `press` and `input` likewise omit that field; their existing
-live-state and action guards remain. It does not expose or retain native object IDs. The
+live-state and action guards remain. `locate` does not expose or retain native object IDs. The
 `identifier`, `label`, string `value`, and native `--class` selectors are exact and conjunctive: every supplied
 field must match the same native element. There is no fuzzy matching or automatic first match.
 For example, a repeated button label and its child UILabel may both match `--label 'Continue'`;

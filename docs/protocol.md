@@ -3603,6 +3603,14 @@ old ordinary count/navigation relations. The default ordinary dump and actions r
 schema1. Native child counts, PID/root/archive/graph limits and nil/truncation failures
 remain mandatory; there is no shallow fallback or partial native tree.
 
+The development `--native-profile core` dump uses the same request/options except that
+native2025 is omitted, as in the November6 simulator workload controls recorded in
+verification.md. Its product projection excludes native visibility even if returned as
+an extra field, and reports `nativeAttributeProfile=core` plus
+`nativeVisibility=not-requested`. This is a requested-attribute policy, not a new Apple
+wire field or a claim that an element is invisible. Default/explicit full output is
+unchanged; later full-state visibility remains separately attributed below.
+
 Optional `--full-state` reads the already-proven AXP27/28/30/32/42/45/46/51 fields once
 per unique native handle after primary validation. Fields stay in node.supplementalAX;
 they neither overwrite native visibility nor imply snapshot-time state. Its separate

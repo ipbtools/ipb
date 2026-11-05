@@ -141,6 +141,7 @@ _ipb() {
           '--wait-for[wait condition]:condition:(present absent)' \
           '--timeout[wait deadline, at most 15 seconds]:seconds:' \
           '--deep[native tree and geometry; JSON schema 2]' \
+          '--native-profile[with --deep, choose native visibility policy]:profile:(full core)' \
           '--full-state[with --deep, read separate supplementalAX state; slower]' \
           '--json[structured AX result]' '--pid[explicit application PID]:PID:' \
           '--point[normalized hit-test point]:X::Y:' '--help[AX command help]' ;;

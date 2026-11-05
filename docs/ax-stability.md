@@ -66,9 +66,17 @@ supported physical smoke matrix. Keep legacy deep nils explicitly open.
 
 ## Current state
 
-Plan committed at fc05182. Opus5.5 stage0 conditions are incorporated above.
-Stage1's existing-fixture regression fails before the production change and passes
-with90 AX tests afterward. Task-owned simulator9FE94853-1660-4DB1-98D8-C22A608CC76A
-shows lower cost within512 records, including core+3002, without a natural nil yet.
-The stage1 commit is ready for Opus inspection; explicit CLI/MCP profiles are next.
-This is a partial-stage checkpoint, not complete feature acceptance.
+Stage1 cadcefa is accepted by actual Opus5.5 source review with no blocking finding.
+Its existing-fixture regression failed before the production change; the integrated
+implementation now passes91 AX,44 MCP,9 interface tests and the complete native host
+gate. Stage2 implements the explicit CLI/MCP profile and provenance, requested/result
+validation, help/completion and documentation. Its complete fixed diff is the first
+complete implementation offered for review; later fixes retain this scope baseline.
+
+Task-owned simulator9FE94853-1660-4DB1-98D8-C22A608CC76A shows lower cost within512
+records, including core+3002, and the real captured responder passes the input resolver.
+No natural nil was found in that clean state; later activations did not add scenes.
+The simulator is now shut down. No physical-device acceptance is claimed.
+
+Next delivery gates: Opus review of the complete committed implementation, isolated
+package verification, PR and actual CI results. Legacy full nil remains open by design.

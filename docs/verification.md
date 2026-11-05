@@ -4,41 +4,36 @@
 
 **Updated 2026-11-06. This section is overwritten; dated records below are append-only.**
 
-### AX stability investigation — simulator evidence only (2026-11-05)
+### AX snapshot workload — explicit core observations (2026-11-06)
 
-On the dedicated Duo simulator, application-level type2/attribute52 reads can return
-error0/nil before the product parser sees a tree. Native visibility2025 alone reproduces
-the failure; firstResponder3002 alone succeeds. A traced combined request returns nil to
-the research client after about3s while the application's native snapshot finishes with
-a non-nil tree after4.22s. This supports a parameterized-attribute call timing out before
-native computation completes; the exact caller/deadline owner remains untraced.
-Immediately subsequent reads can also return nil, so attributing every nil to the
-requested attribute or adding retries would be unsound.
+The implementation omits unused native visibility2025 from locate/wait/press/input;
+input retains whole-tree firstResponder3002 and all existing identity/value/traits,
+live-state/frame, PID/display, exact-hit and no-replay guards. Default deep, scroll
+and alert requests stay full. An explicit `ui --deep --native-profile core` and MCP
+`observe(nativeProfile="core")` preserve the complete graph without native node.visible,
+reporting paired core/not-requested provenance. MCP rejects request/result profile
+mismatches before observation can clear isolation. Later full-state visibility stays
+under supplementalAX. There is no automatic fallback, timeout or budget increase.
 
-Two separate limits remain explicit: Safari's complete multiwindow trees can exceed the
-512 path-record budget, and Settings's selected native handle can change after
-an effective scroll. The current parser and action postcondition reject these cases
-without partial output or action replay. Neither is evidence for deduplicating paths,
-raising the budget or relaxing the identity guard.
+**Confirmed and bounded:** host fixtures reproduce error0/nil when2025 is requested,
+then succeed through the cheaper operations/core observation; default and explicit
+full still fail in that control. All91 AX,44 MCP and9 interface tests pass, along with
+the complete host build/check gate. Actual simulator comparisons within512 records
+show reduced cost, including core+3002; their captured responders pass the product's
+input resolver. No natural nil was found in that task-owned clean state. The external
+probe is not a product simulator backend and does not prove a physical fix.
 
-**Implementation in progress:** stage1 now omits unused2025 in locate/wait/press/input;
-all existing guards and full deep/scroll/alert requests are retained.90 AX host tests
-pass, including a before-failing native-nil control. Stage review and the opt-in core
-observation profile remain in progress. The full supported physical matrix is unrun.
+**Still open:** legacy full snapshots can return error0/nil before parsing; the exact
+intermediate deadline owner remains unknown. Prior multiwindow Safari graphs exceed
+512 path records, and Settings handles can change after effective scroll. Existing
+complete-tree/identity guards continue to reject those cases. Do not deduplicate paths,
+raise budgets, relax identity or replay actions on this evidence. Shallow3002 remains
+unsuitable because its records are truncated and lack responder traits/value.
 
-**Research/design:** two read-only rounds with actual Opus5.5 agree on a
-minimal candidate: omit unused native2025 only from locate/wait/press/input requests;
-keep input's whole-tree3002 and every existing live-state/identity/hit guard. First
-measure nine-attribute+3002 cost and demonstrate a real failure-to-success state within
-the512-record contract. Deep/scroll/alert retain their current requests; this candidate
-alone does not resolve default deep observation failures. A separately explicit core
-observation profile with provenance would require a CLI/MCP contract decision; no
-such change is implemented or approved here. Root-only3002 is not a drop-in replacement
-because its retained fixture is truncated and lacks responder traits/value. Exact
-intermediate deadline ownership remains open but need not precede workload investigation.
-No product fix or supported physical-device acceptance is claimed.
-Main `8c227a1` has no simulator AX backend; external probes and host fixtures are distinct
-from the product CLI and its supported matrix. See the dated record below.
+Stage1 is committed and accepted by actual Opus5.5 source review. The complete core
+profile is awaiting its stage review and package/CI delivery checks. The supported
+physical HID/media/AX matrix remains unrun; no physical operation is part of this task.
+See [current plan](ax-stability.md) and the dated evidence below.
 
 ### v0.6.0 publication decision (2026-11-03)
 
@@ -7917,3 +7912,44 @@ Evidence is outside Git at
 `/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-stability-implementation/`:
 00-opus*, 02-host-before/after, 03-initial*, 04-input*, 04-focused-settled.png.
 No physical smoke/acceptance, release, merge or default install is claimed.
+
+
+## 2026-11-06 — Explicit core observations and integrated host gate
+
+The user authorized implementation, staged Opus supervision/commits/documentation and
+a PR. Stage1 cadcefa is accepted by actual claude-opus-5-5 source review without a
+blocking finding; its two suggested observable assertions and wording correction are
+included in stage2. Stage2 adds only the opt-in CLI/MCP profile and provenance, with
+help/completion and user/protocol documentation. The usage golden changes solely for
+the additive option; default successful output and other baseline cases are unchanged.
+
+Reachable controlled reproduction remains
+`python3 scripts/test_ax.py SessionTests.test_unused_visibility_does_not_block_exact_operations`:
+locate/wait produce their expected match/status, press and input submit once, core deep
+succeeds, and default/explicit full deep fail with no tree. The companion core test
+preserves ordered graph/attributes except visibility, rejects truncation, ignores even
+malformed extra2025, and keeps later full-state visibility only under supplementalAX.
+MCP controls reject partial/unknown/contradictory or wrong-profile metadata; a wrong
+profile cannot clear observeRequired. Existing action guard/no-replay tests stay intact.
+
+`make -j3 check-host` passes on macOS27.2/26B123, Xcode27.2/27B52, ARM64:
+all native targets build;91 AX,44 MCP,9 interface,3 support and10 release tests pass,
+along with device/update CLI fixtures, bounded sender, smoke-assertion negative controls,
+syntax, keyboard, display geometry, device-control and mirror FIFO contracts. Expected
+negative screenshot fixtures print FAIL while their enclosing regression passes; no
+real screen/device was read by that host gate. Evidence:07-check-host.txt outside Git.
+
+Two retained core+3002 Safari captures (04-input indices1/2) pass the actual
+resolve_input_target with exact identifier URL, same responder/target identity,
+text-entry traits and equal current value (06-core-input-parser.json). No text was
+submitted. Three explicit nonterminating Safari activations did not add a scene or
+produce a natural failure; graphs stayed117 records. No further window hunting was
+performed. The only task-owned simulator9FE94853-1660-4DB1-98D8-C22A608CC76A was shut
+down after collection (06-final-simulators.json); other simulators and physical devices
+were untouched. Earlier Data Migration Failed remains an environment limitation.
+
+Raw review, test and simulator artefacts remain outside Git in
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-stability-implementation/`.
+Full supported physical smoke/acceptance is unrun. Legacy full nil, oversized trees
+and changed scroll identities are not claimed fixed. Package/CI and stage2 Opus review
+are pending at this checkpoint. No merge, release or default install occurred.

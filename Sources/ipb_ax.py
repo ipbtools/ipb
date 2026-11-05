@@ -1116,8 +1116,9 @@ async def capture(rsd, args):
             # One native observation owns the whole hierarchy and its geometry.
             # A separate AXChildren walk samples another generation and can fail
             # on animations/overlays even when this native snapshot is complete.
-            native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
-            nodes, by_handle = snapshot_nodes(native, root)
+            options = CORE_SNAPSHOT_OPTIONS if getattr(args, "native_profile", None) == "core" else SNAPSHOT_OPTIONS
+            native = await read(2, {"parameter": options}, root)
+            nodes, by_handle = snapshot_nodes(native, root, requested=options["attributes"])
             if identity(await app(root["pid"])) != identity(root):
                 raise ValueError("AX application root identity changed during native snapshot")
         else:
@@ -1214,6 +1215,8 @@ async def capture(rsd, args):
         if args.deep:
             result.update(rootStabilityScope="application-identity", snapshotMs=snapshot_ms,
                           supplementalAX=supplemental)
+            if getattr(args, "native_profile", None) == "core":
+                result.update(nativeAttributeProfile="core", nativeVisibility="not-requested")
         else:
             result["ordinaryAXNodeCount"] = len(seen)
         return result
@@ -1429,6 +1432,8 @@ def main():
                           help="select the app by a read-only hit test at normalized X Y (default centre)")
     parser.add_argument("--json", action="store_true", help="emit JSON (deep schema 2; ordinary/actions schema 1); default is a text tree")
     parser.add_argument("--deep", action="store_true", help="read the native descendant tree and geometry without an AXChildren walk")
+    parser.add_argument("--native-profile", choices=("full", "core"),
+                        help="with --deep, core omits native visibility; full is the compatible default")
     parser.add_argument("--full-state", action="store_true", help="with --deep, read state/role separately into supplementalAX (extra per-handle requests)")
     args = parser.parse_args()
     parser.error_context = args
@@ -1436,6 +1441,8 @@ def main():
     args.scroll_state = "not-sent"
     args.input_state = "not-sent"
     args.input_exit_code = None
+    if args.native_profile is not None and (not args.deep or args.operation is not None):
+        parser.error("--native-profile requires a --deep dump")
     if args.full_state and (not args.deep or args.operation is not None):
         parser.error("--full-state requires a --deep dump")
     if args.operation is not None and args.deep:

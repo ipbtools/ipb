@@ -77,6 +77,7 @@ screen
                                                live JPEG frames, no DeviceHub
   mirror [--seconds S] [--csv PATH]            live screen, mouse, keyboard and text clipboard (GUI)
   ui [--deep [--full-state]] [--json] [--pid PID | --point X Y] read AX tree/frames; --full-state adds separate state (USB)
+       --native-profile core                   with --deep, omit native visibility; full remains default
   ui hit-test [--point X Y] [--json]           read the actual AX element at a point
   ui locate <selectors> [--json]               find exact native matches in a fresh snapshot
   ui wait <selectors> [--wait-for present|absent] [--timeout SECONDS] [--json]

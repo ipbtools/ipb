@@ -59,7 +59,9 @@ class Bridge:
                 outcome = await run_cli(self.cli, argv, cancel, persist, persist,
                                         timeout=max(0, deadline - time.monotonic()), grace=self.grace)
                 code, stdout, reason, complete, forced = outcome
-                result = adapt(name, device, code, stdout, interrupted=reason)
+                result = adapt(name, device, code, stdout, interrupted=reason,
+                               requested_profile=arguments.get('nativeProfile', 'full')
+                               if name == 'observe' else 'full')
                 if reason in ('cancelled-before-spawn', 'cli-spawn-failed', 'ownership-unavailable-before-spawn'):
                     result = error_result(name, device, reason)
                 intent = state.get('active')
