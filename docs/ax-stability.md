@@ -78,5 +78,10 @@ records, including core+3002, and the real captured responder passes the input r
 No natural nil was found in that clean state; later activations did not add scenes.
 The simulator is now shut down. No physical-device acceptance is claimed.
 
-Next delivery gates: Opus review of the complete committed implementation, isolated
-package verification, PR and actual CI results. Legacy full nil remains open by design.
+Opus5.5 accepts the complete implementation58e5c32 without blocking findings. Its
+wording suggestion is incorporated: traversal/options are the same, while separate
+observations may differ. The isolated package passes layout/signature/checksum and
+extracted startup checks. Host results apply to this unchanged production source;
+the subsequent checkpoint changes documentation only.
+
+Remaining delivery work is the PR and actual CI results. Legacy full nil remains open.

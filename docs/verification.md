@@ -30,8 +30,9 @@ complete-tree/identity guards continue to reject those cases. Do not deduplicate
 raise budgets, relax identity or replay actions on this evidence. Shallow3002 remains
 unsuitable because its records are truncated and lack responder traits/value.
 
-Stage1 is committed and accepted by actual Opus5.5 source review. The complete core
-profile is awaiting its stage review and package/CI delivery checks. The supported
+Stage1 cadcefa and the complete core profile58e5c32 are accepted by actual Opus5.5
+source review without blocking findings. The isolated development package passes;
+PR CI remains the delivery check. The supported
 physical HID/media/AX matrix remains unrun; no physical operation is part of this task.
 See [current plan](ax-stability.md) and the dated evidence below.
 
@@ -7953,3 +7954,30 @@ Raw review, test and simulator artefacts remain outside Git in
 Full supported physical smoke/acceptance is unrun. Legacy full nil, oversized trees
 and changed scroll identities are not claimed fixed. Package/CI and stage2 Opus review
 are pending at this checkpoint. No merge, release or default install occurred.
+
+
+## 2026-11-06 — Opus stage2 acceptance and isolated package
+
+Actual claude-opus-5-5 accepts complete implementation58e5c32ac9f56590562c145f860886ea15123b13
+(base main8c227a1), with no blocking finding. The prior accepted stage1 plus this
+increment cover the full implementation. Requested-attribute projection, unchanged
+action guards/full behavior, CLI validation, MCP bidirectional provenance/isolation
+checks and observable regressions are accepted in this source-only review. One
+nonblocking wording suggestion is incorporated: core uses the same traversal options,
+without claiming that separate live observations must have identical graphs.
+Raw response/model metadata:08-opus.json and08-opus-response.md in the external
+implementation evidence directory. This is not physical acceptance.
+
+`python3 scripts/package_test_build.py <external>/package-stage2` passes at58e5c32:
+17 installed files plus LICENSE, complete layout, ARM64 signatures, SHA256, extracted
+host startup and support contract. Archive:
+`ipb-0.6.0-ci.58e5c32ac9f5-macos27-arm64.tar.gz`, SHA256
+`02a44db0b48cb7a75983bc3a4705dd5158a9f670b20dd954584ae87a3d987922`.
+Its BUILD_INFO records macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32 and the exact
+source commit. Files remain under the external implementation directory's package-stage2;
+09-package.txt records the gate. No local Homebrew installation was run.
+
+The later delivery checkpoint changes documentation only; production/test sources are
+unchanged from this tested/reviewed revision. PR CI will separately verify the final
+head and its development package/Homebrew installation in the disposable runner. No
+physical device, merge, release or default-install operation is part of delivery.

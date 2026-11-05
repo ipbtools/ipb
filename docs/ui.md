@@ -70,8 +70,9 @@ may have no text or state. The text renderer shows native Label, Identifier, the
 
 This development revision adds `ipb ui --deep --native-profile core --json`.
 Omitting the option or choosing `full` keeps the existing request and successful output.
-Core requests the same complete hierarchy, geometry and text without native visibility2025,
-which can be expensive across application windows. It reports
+Core uses the same traversal options and geometry/text attributes, omitting native
+visibility2025, which can be expensive across application windows. It still requires a
+complete hierarchy; separate observations can differ as the app changes. It reports
 `nativeAttributeProfile="core"` and `nativeVisibility="not-requested"`; nodes omit
 `visible`, including any extra visibility returned by the server. Not requested does not
 mean false. There is no automatic profile fallback.
