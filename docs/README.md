@@ -22,6 +22,7 @@ branch may be ahead of Homebrew HEAD. Check the running path with `command -v ip
 | What is implemented and why? | [Device Hub alignment plan](devicehub-alignment.md), [deep AX snapshot plan](ax-deep-snapshot.md) |
 | What is proven, still open, or awaiting a device/host? | [Verification: living current state](verification.md#open-items--current-state-living-section) |
 | What bytes/IDs does the client send? | [Protocol: captured Wire Format](protocol.md#wire-format-captured-2026-09-07), then the feature-specific sections |
+| What do current Duo/DDI and window-scoped AX experiments establish? | [Duo DDI / AX exploration](duo-ddi-exploration.md) |
 | How should Device Hub behavior be captured? | [Tracing procedure](devicehub-tracing.md) |
 | How is a reviewed version released? | [Release process and CI/tap automation](releasing.md) |
 | How would the tool ship without Xcode? | [Standalone distribution plan](standalone-distribution.md) |

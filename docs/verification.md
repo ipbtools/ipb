@@ -2,7 +2,19 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-11-03. This section is overwritten; dated records below are append-only.**
+**Updated 2026-11-05. This section is overwritten; dated records below are append-only.**
+
+### Duo DDI / native AX research (2026-11-05)
+
+Main `8c227a1` native snapshot semantics have bounded Duo simulator evidence;
+see [current exploration](duo-ddi-exploration.md). Window-subtree snapshots work,
+but mixed frame spaces, error0/nil Safari replies, an application tree beyond the
+512-record budget and SwiftUI handle changes remain open. A separate user-requested
+AX task owns reproduction/root cause and the dedicated simulator. No production
+AX guard was relaxed, no new product capability was accepted, and no physical
+operation occurred in this run. DDI scene-resizing types/service evidence exists;
+host reachability and Duo effects remain unverified. Existing Duo integration PR
+work is deferred while these concerns are clarified.
 
 ### v0.6.0 publication decision (2026-11-03)
 
@@ -7728,3 +7740,41 @@ Formula-only PR#6 passes CI39574491943 and merges at
 Release asset exactly. Full reports/downloads and model-usage metadata remain outside Git
 in the local v0.5.0 release state directory. This record documents publication, not
 new physical acceptance.
+
+## 2026-11-05 — DDI27B52 inventory and main-native AX on Duo simulator
+
+**Baseline/scope:** main `8c227a1`; macOS27.2/26B123, Xcode27.2/27B52,
+CoreDevice651.32, DDI Public/build189/27B52. Dedicated simulator
+`1CA07373-09AA-4E38-82BD-937711C73565`, Duo24B91016s, inner landscapeRight,
+CoreSimulator1174.21/SimulatorKit1005.14, live displayId3. No physical-device
+operation or product implementation change.
+
+Read-only DDI extraction confirms resizable scene request/response types and
+`dtappserviced` implementation strings, with MachServices/RemoteServices routing
+disagreement still open. Display-update/capture and keyboard service mappings were
+checked in the actual launchd plists. The task's read-only image mounts were detached;
+other simulator runtime mounts were retained. Guest SBSAppResizingService metadata
+exists; a1.5s status-only sample stays Initializing, without an established observer
+handshake or resize assertion. No resize effect or reachable host request is claimed.
+
+CoreSimulator native52 produces Settings224/130 and Safari492/452 path/unique-handle
+records, compared with13/22 ordinary AXChildren. The overlapping numerical frames
+agree and main's semantic parser accepts the native records. Safari Bookmarks547
+records hit main's512 guard; window-scoped native requests return176/118/118/122
+records. Context/display probes and screenshots establish the narrower boundaries
+in the [research plan](duo-ddi-exploration.md); they do not solve global geometry.
+
+Independent screenshots show semantic Back/Sidebar effects. A one-shot scroll shows
+Keyboard y668.6667→372 with a different fresh row handle, so same-identity product
+postconditions are not accepted. Safari has both successful and error0/nil snapshot
+observations; nil persists in the final read despite a normal rendered screen and
+unchanged final PID inventory. No retries of submitted actions or hidden fallback.
+Root cause remains open and was handed to the separately requested AX stability task.
+
+Final layout restored to Settings left/Safari right; editing dismissed, settled full
+frame manually reviewed. Settings scroll changed; no exact-view restoration claim.
+Original SpringBoard/Settings/Safari PIDs2736/6971/9282 remain in final inventory.
+The AX task now owns the dedicated simulator. Raw evidence stays outside Git at
+`/Users/borealin/Documents/Codex/2026-11-05/ipb-duo-ddi-exploration/`
+(owning plists/symbols in `raw-ddi27b52/`; samples01–30, final30-preview.png).
+This research is not SMOKE_AX, a product simulator deep gate or hardware acceptance.

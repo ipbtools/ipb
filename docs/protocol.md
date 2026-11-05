@@ -3819,3 +3819,46 @@ The integrated `ui alert-press` controls on source and isolated installation als
 confirm disappearance. Its postcondition observation is bounded to2s and read-only:
 the immediate snapshot can still contain a closing modal after native acceptance.
 Unknown/read-error/timeout is never interpreted as disappearance.
+
+## DDI27B52 service inventory and simulator window-scoped AX (2026-11-05)
+
+**Source/seed:** macOS27.2/26B123, Xcode27.2/DDI27B52, host/DDI CoreDevice651.32;
+Public DDI build189 image `iOS_DDI/Restore/022-22446-061.dmg`. Owning metadata is
+`Library/LaunchDaemons/com.apple.coredevice.{dtappserviced,dtdeviceinfod,
+dtscreencaptured,dtuhidd}.plist` inside that image; symbols come from
+`Library/Frameworks/CoreDeviceUtilities.framework/CoreDeviceUtilities`, server
+strings from `usr/libexec/dtappserviced`. Extracted originals and hashes are retained
+outside Git in the research evidence below. These are additions to ipb's evidence,
+not a proven Apple version delta.
+
+- `resizableappmanagement` / `streamresizabilitystate` are dtappserviced MachServices
+  entries, absent from its `RemoteServices.appservice.Features`. DDI Swift enum
+  symbols define get scene state, adjust display geometry, cancel scene session and
+  move frontmost apps to a display. Scene state includes cornerRadius and
+  min/max/preferred/resolved sizes. Server/session/SBSAppResizingService strings
+  substantiate an implementation; no captured routable request or Duo pane effect.
+- `streamapplist` and `streamprocesslist` are advertised appservice remote features.
+  Deviceinfo advertises `getdisplayinfo` / `displayinfoupdates`. The distinct
+  `screencaptureservice` advertises `capturescreenshot` under the display entitlement.
+- `hid.universalhid` advertises both `remote.hid.keyboard` and `remote.universalhid`
+  under `com.apple.private.CoreDevice.hid`. No separate keyboard transport follows.
+  `remote.hid.pointer` is absent from this DDI plist. Earlier beta2 host-symbol
+  negatives elsewhere in this document remain qualified by their older seed.
+
+**AX runtime evidence is separate:** Duo simulator24B91016s on CoreSimulator1174.21
+accepts the existing type2/attribute52 snapshot request on an actual window token,
+returning a subtree rooted at that window. Main's application request can include
+multiple same-PID windows and terminal foreign AXRemoteElement references. Native
+root/window frames remain mixed; per-window requests do not establish global origin.
+Host AXPT591.4.5 (UUID16162041-96F3-3F3C-B532-053DED8F2603) disassembly maps
+`_windowContextId` to type2/attribute12 and frontmost-with-display to type4/displayId;
+`accessibilityHitTest:withDisplayId:contextId:` builds type6 with point/displayId/contextId.
+Simulator replies confirm nonzero visible-window context samples, but contextId does
+not eliminate the measured native-coordinate transform. Type4 returns the same
+Settings application for display0/1/3 and is not a pane selector.
+
+Exact experiments, failure observations and source paths are in
+[the current research plan](duo-ddi-exploration.md). Raw evidence lives at
+`/Users/borealin/Documents/Codex/2026-11-05/ipb-duo-ddi-exploration/`.
+No physical AX mapping, CoreDevice resize wire, stable window token, generic
+semantic postcondition or new product command is established by this run.
