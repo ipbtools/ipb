@@ -31,11 +31,12 @@ raise budgets, relax identity or replay actions on this evidence. Shallow3002 re
 unsuitable because its records are truncated and lack responder traits/value.
 
 Stage1 cadcefa and the complete core profile58e5c32 are accepted by actual Opus5.5
-source review without blocking findings. The isolated development package passes;
-Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15). Its first CI run passes
-build/host/package checks but times out cloning homebrew/core before ipb installation;
-that installation gate is unverified. Current checks are tracked on the PR. The supported
-physical HID/media/AX matrix remains unrun; no physical operation is part of this task.
+source review without blocking findings. The isolated development package passes.
+Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15).
+[CI run42077704751](https://github.com/ipbtools/ipb/actions/runs/42077704751) passes
+native build, host regressions, package and precompiled Homebrew install/test/hash checks;
+the first run's homebrew/core clone timeout does not recur. The supported physical
+HID/media/AX matrix remains unrun; no physical operation is part of this task.
 See [current plan](ax-stability.md) and the dated evidence below.
 
 ### v0.6.0 publication decision (2026-11-03)
@@ -8010,3 +8011,29 @@ status will be recorded on the PR. Host fixtures, local isolated package and sou
 review remain passing evidence for the same production source, while physical-device
 acceptance and default full nil remain open. Task-owned simulator is shut down; no
 physical operation, local Homebrew install, merge or release occurred.
+
+
+## 2026-11-06 — PR15 CI package and Homebrew gate pass
+
+[CI run42077704751](https://github.com/ipbtools/ipb/actions/runs/42077704751) completes
+with success for PR head0c4b9879b8451d38a48b49294d1fc9c3a11ee992 (tested merge revision
+f478b9214da8). Its macOS27.0.1/26A434 ARM64 runner with Xcode27.0 passes Apple
+environment checks, all native builds/host regressions, package verification,
+precompiled Homebrew install/test plus all product-file hashes, and artifact upload.
+The earlier clone timeout does not recur; its underlying cause remains unestablished.
+No workflow/installation/AX source change was used to obtain this passing result.
+
+[Development test package](https://github.com/ipbtools/ipb/actions/runs/42077704751/artifacts/13438982541):
+`ipb-0.6.0-ci.f478b9214da8-macos27-arm64.tar.gz`, SHA256
+`01e90761b46ae6bdad8c80360a1de94798d51c7aedaa8435dd0e8316c28e1539`.
+Upload name ipb-macos27-arm64-42077704751-1, retention14 days. Actual step results and
+full logs remain at12-ci-result.json /12-ci-log.txt outside Git. This is a development
+artifact and a disposable-runner installation result, not a release or physical test.
+
+Opus5.5's delivery review retains the accepted58e5c32 source conclusion and confirms
+the documented host/CI versus physical boundary (11-opus.json /11-opus-response.md).
+The present checkpoint only updates existing documentation with the now-confirmed
+result; production/tests/build configuration remain identical to the accepted source.
+Later automatic CI on this documentation is tracked on PR15. Default full nil,
+oversized graphs, changed scroll identities and supported physical acceptance remain
+open. No local Homebrew install, physical operation, merge or release occurred.

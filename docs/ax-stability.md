@@ -84,9 +84,11 @@ observations may differ. The isolated package passes layout/signature/checksum a
 extracted startup checks. Host results apply to this unchanged production source;
 the subsequent checkpoint changes documentation only.
 
-Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15). First CI run42076765640
-passes native build/host/package checks but fails while cloning homebrew/core after180s,
-before installing ipb. The underlying clone cause is not established; the unchanged
-Homebrew script is outside this AX fix. Its installation gate remains unverified at
-this checkpoint, with subsequent actual checks recorded on the PR. Legacy full nil
-and physical-device acceptance remain open.
+Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15).
+[CI run42077704751](https://github.com/ipbtools/ipb/actions/runs/42077704751) passes
+native builds, host regressions, package verification, precompiled Homebrew install/test
+and product hashes, and artifact upload. The first run's homebrew/core clone timeout
+does not recur; no workflow change was needed. The dated verification record contains
+the exact revision and package reference. Opus's delivery review preserves source ACCEPT
+and confirms the evidence boundary. Default full nil and physical acceptance remain open;
+merge requires the supported gate or an explicit maintainer exception.
