@@ -2,7 +2,7 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-11-05. This section is overwritten; dated records below are append-only.**
+**Updated 2026-11-06. This section is overwritten; dated records below are append-only.**
 
 ### AX stability investigation — simulator evidence only (2026-11-05)
 
@@ -21,9 +21,17 @@ an effective scroll. The current parser and action postcondition reject these ca
 without partial output or action replay. Neither is evidence for deduplicating paths,
 raising the budget or relaxing the identity guard.
 
-**Open, agent-fixable research:** trace the parameterized-query caller and evaluate how
-to bound expensive visibility/responder work while preserving the documented graph and
-fresh action guards. No product fix or supported physical-device acceptance is claimed.
+**Open, agent-fixable research:** two read-only rounds with actual Opus5.5 agree on a
+minimal candidate: omit unused native2025 only from locate/wait/press/input requests;
+keep input's whole-tree3002 and every existing live-state/identity/hit guard. First
+measure nine-attribute+3002 cost and demonstrate a real failure-to-success state within
+the512-record contract. Deep/scroll/alert retain their current requests; this candidate
+alone does not resolve default deep observation failures. A separately explicit core
+observation profile with provenance would require a CLI/MCP contract decision; no
+such change is implemented or approved here. Root-only3002 is not a drop-in replacement
+because its retained fixture is truncated and lacks responder traits/value. Exact
+intermediate deadline ownership remains open but need not precede workload investigation.
+No product fix or supported physical-device acceptance is claimed.
 Main `8c227a1` has no simulator AX backend; external probes and host fixtures are distinct
 from the product CLI and its supported matrix. See the dated record below.
 
@@ -7824,3 +7832,40 @@ unique CancelBarItemButton, two matching observations, live state/frame and exac
 centre hit guarded one final dismiss action. Its native result is true and `19-final.png`
 shows the keyboard closed, with Settings left/Safari right. All owned debuggers have
 detached; no app install, physical-device operation, release, push or merge occurred.
+
+
+## 2026-11-06 — AX repair design discussion with Opus (read-only)
+
+Two independent/follow-up exchanges report actual `claude-opus-5-5` model usage.
+Sources were main8c227a1, the current AX implementation/contracts and November5
+captures; no AX performance code or device operation was performed. Raw briefs,
+responses and model metadata remain outside Git at
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-stability-design/`.
+
+Main-session checks strengthen two boundaries: full default and nine-attribute
+captures each contain664 records with exactly equal ordered paths, native identities,
+child counts and every non-2025 attribute. This is one-state structural equivalence,
+not a <=512 product success. Shallow and zero-depth3002 captures contain one root with
+children=[] but declared child count11; their nested responder attributes have only
+key3002, lacking2004/2006. They cannot pass the complete-tree parser or the current
+strict input guard. Neither quick root reads nor a new connection prove previous
+native work has drained; research comparisons must be independently bounded.
+
+Agreed minimal candidate: operation-specific field sets for locate/wait/press/input
+omit unused2025; input retains whole-tree3002. Preserve default deep/MCP observations,
+scroll/alert native visibility, complete-tree validation, action guards, errors and
+no-replay. Output semantics stay unchanged; timing and snapshot IDs naturally differ.
+Before implementation/acceptance, obtain a task-owned <=512-record failing state and
+fixed-count alternating comparisons, including nine attributes+3002. Do not close
+other sessions' windows to manufacture that state. Reuse existing fixtures to pin
+successful cheap operations, pre-submit guard refusals, and one-shot post-submit
+failures; field-list assertions alone are not sufficient regression evidence.
+
+Default deep nil remains open. Opus recommends a separate opt-in core profile with
+explicit not-requested visibility provenance and CLI/MCP propagation, keeping legacy
+default behavior until a deliberate versioned migration. This is a design proposal,
+not an implemented fix or approval to change the interface.512-budget changes, scroll
+identity relaxation, root-only responder parsing, retries and timeout increases are
+outside this minimal candidate. The user additionally requested the Duo branch rebase;
+that branch's separate host record describes its results and does not validate this
+AX candidate or close physical acceptance.
