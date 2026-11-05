@@ -23,7 +23,8 @@ have truncated children and lack responder traits/value.
 
 - Derive one core attribute list from the existing full list by excluding2025.
   Use it for locate/wait/press and for input with whole-tree3002 added. Keep the
-  parser, action guards, timeouts, graph budgets and no-replay behavior unchanged.
+  structural validation, action guards, timeouts, graph budgets and no-replay
+  behavior unchanged. Project only requested native attributes in the parser.
 - Add opt-in `ui --deep --native-profile core`; `full` remains the default and
   preserves its current output. Profile selection is valid only for deep dumps.
   Core keeps complete structure/geometry/text, omits native node.visible, and adds
@@ -32,7 +33,8 @@ have truncated children and lack responder traits/value.
   remain separately attributed under supplementalAX.
 - MCP observe accepts optional `nativeProfile` with the same full/core values.
   Its adapter validates and propagates core provenance; incomplete/contradictory
-  metadata fails. Existing callers keep the full profile. There is no fallback.
+  metadata or request/result profile mismatch fails before a successful observe
+  can clear isolation. Existing callers keep the full profile. There is no fallback.
 - This provides a cheaper explicit observation path; it does not claim to cure all
   legacy full-profile nils, oversized graphs or identity changes after scroll.
 
@@ -64,5 +66,9 @@ supported physical smoke matrix. Keep legacy deep nils explicitly open.
 
 ## Current state
 
-Plan committed before implementation. Evidence collection and Opus stage review
-are next. No production code has changed for this feature.
+Plan committed at fc05182. Opus5.5 stage0 conditions are incorporated above.
+Stage1's existing-fixture regression fails before the production change and passes
+with90 AX tests afterward. Task-owned simulator9FE94853-1660-4DB1-98D8-C22A608CC76A
+shows lower cost within512 records, including core+3002, without a natural nil yet.
+The stage1 commit is ready for Opus inspection; explicit CLI/MCP profiles are next.
+This is a partial-stage checkpoint, not complete feature acceptance.

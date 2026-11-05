@@ -34,18 +34,20 @@ MAX_NODES, MAX_DEPTH = 512, 32
 # Native AX IDs, not AXP field IDs. Required numeric attributes and descendant
 # options: matching iOS 27 / 24A437 source and 13 Pro controls (protocol.md).
 SNAPSHOT_ATTRS = [2001, 2002, 2003, 2004, 5019, 2006, 2025, 5003, 5004, 3003]
+CORE_SNAPSHOT_ATTRS = [attribute for attribute in SNAPSHOT_ATTRS if attribute != 2025]
 STATE_ATTRS = [27, 28, 30, 32, 42, 45, 46, 51]
 SNAPSHOT_OPTIONS = {"attributes": SNAPSHOT_ATTRS, "maxDepth": 48,
                     "maxChildren": 512, "maxArrayCount": 512,
                     "traverseFromParentsToChildren": True,
                     "snapshotKeyHonorModalViews": False}
+CORE_SNAPSHOT_OPTIONS = {**SNAPSHOT_OPTIONS, "attributes": CORE_SNAPSHOT_ATTRS}
 ELEMENT = "UIAccessibilitySnapshotKeyElement"
 CHILDREN = "UIAccessibilitySnapshotKeyChildren"
 CHILD_COUNT = "UIAccessibilitySnapshotKeyChildrenCount"
 NATIVE_ATTRS = "UIAccessibilitySnapshotKeyAttributes"
 
 
-def snapshot_nodes(snapshot, root):
+def snapshot_nodes(snapshot, root, *, requested=SNAPSHOT_ATTRS):
     """Keep native path occurrences; handles can legitimately have two parents."""
     if snapshot is None:
         raise ValueError("AX snapshot unavailable: device returned nil")
@@ -70,6 +72,7 @@ def snapshot_nodes(snapshot, root):
         external = key[0] != root["pid"]
         if external and (native.get(5003) != "AXRemoteElement" or children or count != 0):
             raise ValueError("AX snapshot foreign child is not a proven leaf AXRemoteElement")
+        native = {attribute: native[attribute] for attribute in requested if attribute in native}
         fields = node_fields({mapped: native[native_id] for native_id, mapped in
                               ((2001, 3), (2003, 21), (2004, 77), (5019, 25), (2006, 53), (2025, 32))
                               if native_id in native})
@@ -99,9 +102,9 @@ def snapshot_nodes(snapshot, root):
     return nodes, by_handle
 
 
-def native_matches(snapshot, root, selectors):
+def native_matches(snapshot, root, selectors, *, requested=SNAPSHOT_ATTRS):
     """Match exact string selectors against one fresh native snapshot."""
-    nodes, by_handle = snapshot_nodes(snapshot, root)
+    nodes, by_handle = snapshot_nodes(snapshot, root, requested=requested)
     matches = {}
     pending = [snapshot]
     while pending:
@@ -120,9 +123,9 @@ def native_matches(snapshot, root, selectors):
     return nodes, list(matches.values())
 
 
-def resolve_native_target(snapshot, root, selectors, *, operation="AX locator"):
+def resolve_native_target(snapshot, root, selectors, *, operation="AX locator", requested=SNAPSHOT_ATTRS):
     """Resolve exactly one distinct native AX element; never accept a cached handle."""
-    _, matches = native_matches(snapshot, root, selectors)
+    _, matches = native_matches(snapshot, root, selectors, requested=requested)
     if len(matches) != 1:
         raise ValueError(f"{operation} selector matches={len(matches)}; exactly one native element is required")
     match = matches[0]
@@ -143,7 +146,7 @@ def resolve_input_target(snapshot, root, selectors):
     responder_key = identity(responder_token)
     if responder_key[0] != root["pid"] or not isinstance(responder_attrs, dict):
         raise ValueError("AX input first responder is not a same-process native element; no input submitted")
-    _, matches = native_matches(snapshot, root, selectors)
+    _, matches = native_matches(snapshot, root, selectors, requested=CORE_SNAPSHOT_ATTRS)
     if len(matches) != 1:
         raise ValueError(f"AX input selector matches={len(matches)}; exactly one native element is required")
     match = matches[0]
@@ -600,9 +603,9 @@ async def capture(rsd, args):
             selection = "explicit-pid+hit-test" if args.pid else "hit-test"
 
         if operation == "locate":
-            native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+            native = await read(2, {"parameter": CORE_SNAPSHOT_OPTIONS}, root)
             await validate_snapshot_selection()
-            _, matches = native_matches(native, root, selectors)
+            _, matches = native_matches(native, root, selectors, requested=CORE_SNAPSHOT_ATTRS)
             return {"schemaVersion": 1, "deviceIdentifier": args.device_id, "udid": rsd.udid,
                     "application": {"pid": root["pid"], "selection": selection},
                     "scope": "native-locator", "snapshotId": str(uuid.uuid4()),
@@ -622,14 +625,14 @@ async def capture(rsd, args):
                     break
                 try:
                     async with asyncio.timeout(remaining) as budget:
-                        native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+                        native = await read(2, {"parameter": CORE_SNAPSHOT_OPTIONS}, root)
                         await validate_snapshot_selection()
                 except TimeoutError:
                     if not budget.expired():
                         raise
                     status = "timed_out"
                     break
-                _, matches = native_matches(native, root, selectors)
+                _, matches = native_matches(native, root, selectors, requested=CORE_SNAPSHOT_ATTRS)
                 if len(matches) > 1:
                     raise ValueError(f"AX wait selector is ambiguous: matches={len(matches)}")
                 satisfied = (len(matches) == 1) if args.wait_for == "present" else (len(matches) == 0)
@@ -785,8 +788,8 @@ async def capture(rsd, args):
             return base_result
 
         if operation == "input":
-            input_options = {**SNAPSHOT_OPTIONS,
-                             "attributes": [*SNAPSHOT_ATTRS, 3002]}
+            input_options = {**CORE_SNAPSHOT_OPTIONS,
+                             "attributes": [*CORE_SNAPSHOT_ATTRS, 3002]}
             native = await read(2, {"parameter": input_options}, root)
             await validate_snapshot_selection()
             match, before_value = resolve_input_target(native, root, selectors)
@@ -872,7 +875,7 @@ async def capture(rsd, args):
 
             post_native = await read(2, {"parameter": input_options}, root)
             await validate_snapshot_selection()
-            _, post_by_handle = snapshot_nodes(post_native, root)
+            _, post_by_handle = snapshot_nodes(post_native, root, requested=CORE_SNAPSHOT_ATTRS)
             post_records = native_records_for_identity(post_native, identity(token))
             post = None
             verified = False
@@ -932,16 +935,17 @@ async def capture(rsd, args):
             return result
 
         if operation == "press":
-            native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
-            token, native_attrs, node = resolve_native_target(native, root, selectors, operation="AX press")
+            native = await read(2, {"parameter": CORE_SNAPSHOT_OPTIONS}, root)
+            token, native_attrs, node = resolve_native_target(
+                native, root, selectors, operation="AX press", requested=CORE_SNAPSHOT_ATTRS)
             if identity(token)[0] != root["pid"]:
                 raise ValueError("AX press target belongs to another process; no action sent")
             if "label" in selectors or "value" in selectors or "className" in selectors:
                 # Selector qualifiers are re-resolved from a second observation
                 # immediately before the existing live-state/hit/display guards.
-                confirmed_native = await read(2, {"parameter": SNAPSHOT_OPTIONS}, root)
+                confirmed_native = await read(2, {"parameter": CORE_SNAPSHOT_OPTIONS}, root)
                 confirmed_token, native_attrs, node = resolve_native_target(
-                    confirmed_native, root, selectors, operation="AX press")
+                    confirmed_native, root, selectors, operation="AX press", requested=CORE_SNAPSHOT_ATTRS)
                 if identity(confirmed_token) != identity(token):
                     raise ValueError("AX press selector target changed; no action sent")
                 if identity(confirmed_token)[0] != root["pid"]:

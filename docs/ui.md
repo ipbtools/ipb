@@ -186,7 +186,9 @@ and checks the same hit identity/display again. It is read-only. It does not com
 `isHittable`. Portrait selection restrictions still apply; `hit-test` cannot use `--pid`.
 
 `locate` reads one fresh native snapshot and returns every public match, its match count,
-uniqueness, and snapshot-local path IDs. It does not expose or retain native object IDs. The
+uniqueness, and snapshot-local path IDs. It uses core attributes without the unused native
+visibility field. `wait`, `press` and `input` likewise omit that field; their existing
+live-state and action guards remain. It does not expose or retain native object IDs. The
 `identifier`, `label`, string `value`, and native `--class` selectors are exact and conjunctive: every supplied
 field must match the same native element. There is no fuzzy matching or automatic first match.
 For example, a repeated button label and its child UILabel may both match `--label 'Continue'`;

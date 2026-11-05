@@ -21,7 +21,12 @@ an effective scroll. The current parser and action postcondition reject these ca
 without partial output or action replay. Neither is evidence for deduplicating paths,
 raising the budget or relaxing the identity guard.
 
-**Open, agent-fixable research:** two read-only rounds with actual Opus5.5 agree on a
+**Implementation in progress:** stage1 now omits unused2025 in locate/wait/press/input;
+all existing guards and full deep/scroll/alert requests are retained.90 AX host tests
+pass, including a before-failing native-nil control. Stage review and the opt-in core
+observation profile remain in progress. The full supported physical matrix is unrun.
+
+**Research/design:** two read-only rounds with actual Opus5.5 agree on a
 minimal candidate: omit unused native2025 only from locate/wait/press/input requests;
 keep input's whole-tree3002 and every existing live-state/identity/hit guard. First
 measure nine-attribute+3002 cost and demonstrate a real failure-to-success state within
@@ -7869,3 +7874,46 @@ identity relaxation, root-only responder parsing, retries and timeout increases 
 outside this minimal candidate. The user additionally requested the Duo branch rebase;
 that branch's separate host record describes its results and does not validate this
 AX candidate or close physical acceptance.
+
+
+## 2026-11-06 — AX workload stage1 (host and isolated simulator)
+
+Plan: [AX stability](ax-stability.md), started at fc05182 on main8c227a1.
+Opus5.5 stage0 permits the scoped implementation with requested-attribute projection
+and bidirectional MCP profile checks. Source changes here omit unused native2025
+only for locate/wait/press/input, retaining whole-tree3002 for input. The same parser
+projects requested attributes; structural checks and full deep/scroll/alert requests
+remain intact. No new timeout, retry, identity rule or graph budget is introduced.
+
+Reachable host reproduction uses the existing transport fixture:
+`python3 scripts/test_ax.py SessionTests.test_unused_visibility_does_not_block_exact_operations`.
+The fixture returns the observed error0/nil when2025 is requested. Before the change,
+all four operation cases fail; afterward all four succeed with the expected single
+press/input submission, while legacy deep still fails with no tree. All90 AX tests
+pass, including unchanged guard, cleanup and no-replay negatives. This is a controlled
+host failure-to-success, not proof of every app or the physical transport.
+
+New task-owned simulator9FE94853-1660-4DB1-98D8-C22A608CC76A uses
+macOS27.2/26B123, Xcode27.2/27B52, Duo24B91016s, opened inner landscapeRight through
+Device Hub. Initial bootstatus reported Data Migration Failed; subsequent Home and
+Settings/Safari rendering, fresh process inventory and complete snapshots were observed.
+That environment condition is retained, not treated as a successful supported gate.
+Only this new simulator is operated; prior simulators/windows and physical phones
+are untouched. Main has no simulator AX backend: all native measurements below use
+an external SimDevice probe, then main's actual parser over numeric converted frames.
+
+Fixed ABBA full/core order, fresh connection/PID lookup per read and5s fixed spacing
+were specified before collection. Spacing is not claimed as a native-work drain barrier.
+Settings122 records returns full0.466/0.447s, core0.172/0.167s. Safari125 records
+returns full0.700/0.704s, core0.170/0.184s. Focused Safari full+3002 returns118/117
+records in0.960/0.891s, core+3002 returns117 in0.258/0.325s; root responder identity,
+traits and value are present. The initial focused graph changes by one record, so
+no strict cross-sample structural-equality claim is made there. All reads pass the
+512-record parser; this initial clean state produces no natural nil/fail-to-success.
+A settled screenshot shows the focused Safari address caret (hardware keyboard hides
+the software keyboard). Multiwindow research remains separate and ongoing.
+
+Evidence is outside Git at
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-stability-implementation/`:
+00-opus*, 02-host-before/after, 03-initial*, 04-input*, 04-focused-settled.png.
+No physical smoke/acceptance, release, merge or default install is claimed.

@@ -646,6 +646,8 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                                                   snapshot(container, [snapshot(CHILD)], attrs=container_attrs)])
                     if mode == "native-nil":
                         result = None
+                    if mode == "native-visibility-busy" and 2025 in req["parameters"]["parameter"]["attributes"]:
+                        result = None
                     if mode == "native-child-pid-mismatch":
                         result = snapshot(TOKEN, [snapshot({**CHILD, "pid": CHILD["pid"] + 1})])
                     if mode == "native-truncated":
@@ -850,6 +852,23 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                     state["scroll_state"] = args.scroll_state
                     state["input_state"] = args.input_state
                     return None, state, error
+
+    async def test_unused_visibility_does_not_block_exact_operations(self):
+        for operation in ("locate", "wait", "press", "input"):
+            with self.subTest(operation=operation):
+                result, state, error = await self.run_capture("native-visibility-busy", operation=operation)
+                self.assertIsNone(error)
+                self.assertIsNotNone(result)
+                self.assertEqual(state["action_submissions"], int(operation == "press"))
+                self.assertEqual(state.get("input_child_calls", 0), int(operation == "input"))
+                if operation == "input":
+                    self.assertTrue(result["postconditionVerified"])
+                self.assertTrue(state["closed"] and state["dtx_closed"])
+        result, state, error = await self.run_capture("native-visibility-busy", deep=True)
+        self.assertIsNone(result)
+        self.assertIn("snapshot unavailable", str(error))
+        self.assertEqual(state["action_submissions"], 0)
+        self.assertTrue(state["closed"] and state["dtx_closed"])
 
     async def test_default_ordinary_schema_and_description_contract_are_unchanged(self):
         result, state, error = await self.run_capture("description")
