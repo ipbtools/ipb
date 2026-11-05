@@ -2,7 +2,30 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-11-03. This section is overwritten; dated records below are append-only.**
+**Updated 2026-11-05. This section is overwritten; dated records below are append-only.**
+
+### AX stability investigation — simulator evidence only (2026-11-05)
+
+On the dedicated Duo simulator, application-level type2/attribute52 reads can return
+error0/nil before the product parser sees a tree. Native visibility2025 alone reproduces
+the failure; firstResponder3002 alone succeeds. A traced combined request returns nil to
+the research client after about3s while the application's native snapshot finishes with
+a non-nil tree after4.22s. This supports a parameterized-attribute call timing out before
+native computation completes; the exact caller/deadline owner remains untraced.
+Immediately subsequent reads can also return nil, so attributing every nil to the
+requested attribute or adding retries would be unsound.
+
+Two separate limits remain explicit: Safari's complete multiwindow trees can exceed the
+512 path-record budget, and Settings's selected native handle can change after
+an effective scroll. The current parser and action postcondition reject these cases
+without partial output or action replay. Neither is evidence for deduplicating paths,
+raising the budget or relaxing the identity guard.
+
+**Open, agent-fixable research:** trace the parameterized-query caller and evaluate how
+to bound expensive visibility/responder work while preserving the documented graph and
+fresh action guards. No product fix or supported physical-device acceptance is claimed.
+Main `8c227a1` has no simulator AX backend; external probes and host fixtures are distinct
+from the product CLI and its supported matrix. See the dated record below.
 
 ### v0.6.0 publication decision (2026-11-03)
 
@@ -7728,3 +7751,76 @@ Formula-only PR#6 passes CI39574491943 and merges at
 Release asset exactly. Full reports/downloads and model-usage metadata remain outside Git
 in the local v0.5.0 release state directory. This record documents publication, not
 new physical acceptance.
+
+## 2026-11-05 — AX nil, visibility cost and strict failure controls (simulator only)
+
+Source: origin/main8c227a10710dad479852aa0203de729fed57471b (v0.6.0), isolated
+`codex/ax-stability`. Host macOS27.2/26B123, Xcode27.2/27B52; dedicated simulator
+`1CA07373-09AA-4E38-82BD-937711C73565`, Duo runtime24B91016s, inner
+landscapeRight. Safari PID9282 and Settings PID6971 were freshly checked. Loaded
+simulator UIAccessibility3245.8.9 UUIDE3B68BF4-1D09-346A-AECE-F4137F24CB1D;
+AXRuntime3245.8.9 UUID07686FEA-F105-371F-B3F3-99989BA5B4CE.
+
+Raw evidence is outside Git at
+`/Users/borealin/Documents/Codex/2026-11-05/ipb-ax-stability/`.
+`ax-probe` from the adjacent `ipb-duo-ddi-exploration/` is an external experiment
+using CoreSimulator's AXP bridge, not a product backend. Reproduction with a freshly
+checked Safari PID: `ax-probe <dedicated-UDID> snapshot <PID> '{}'`; controlled
+parameters replace `{}` with `{"attributes":[2025]}` or
+`{"attributes":[2001,2002,2003,2004,5019,2006,5003,5004,3003]}`.
+The probe waits up to8s for a semantic reply, so its nil at about3s is not its own
+watchdog. Main's separate per-request budget is3s (`Sources/ipb_ax.py:read`), which
+can time out even before such a reply arrives. No request retries or action replays
+were added.
+
+**Native nil reproduction and discriminator:** initial default, frame-only and shallow
+Safari requests return error0/nil while Settings returns117 records. Ordinary Safari
+root attributes and its current accessible-child snapshots still succeed. A later fresh
+guarded address press is accepted once; default snapshot then returns664 records,
+default+3002 returns nil after3.18s, and the next default returns nil after0.155s.
+FirstResponder3002 alone succeeds, including a root-only request, so it is not an
+unconditionally invalid attribute (`01-read-controls.json`, `02-*`, `12-*`, `15-*`).
+
+LLDB breakpoint callbacks log registers and immediately continue the selected Safari
+process, tracing
+`-[NSObject(UIAccessibilityAutomation) _accessibilityUserTestingSnapshotWithOptions:]`
+at0x1f0a57c70 and its descendants builder at0x1f0a5658c. Default computation takes2.94s;
+the following combined3002 computation takes4.22s and returns a non-null object, although
+the client already received error0/nil after3.164s. Invalid-options nil is not hit.
+This is evidence of a result lost before product decoding and is consistent with an
+intermediate AX messaging deadline; it does not identify the exact deadline owner.
+Debugger runs are diagnostic and can affect timing. A separate manual breakpoint run
+paused the process past the request deadline and is excluded from timing conclusions
+(`07-snapshot-disassembly.txt`, `14-native-trace.jsonl`, `14-*-under-trace.json`).
+
+With the debugger detached, individual attributes2001/2002/2003/2004/5019/2006 succeed
+in0.20–0.29s. Attribute2025 alone returns nil after3.163s; immediately subsequent
+single-attribute calls also return nil and are not evidence against those attributes.
+Later, the full nine-attribute request excluding2025
+returns a complete tree in0.326s; root-only2025 succeeds in0.185s (`17-*`, `18-*`).
+Visibility across this app's multiwindow hierarchy is a demonstrated expensive trigger.
+No automatic fallback removes it from the product's observation/action contract.
+
+**Independent parser/action boundaries:** retained peer research captures were converted
+only from JSON NSValue descriptions to numeric rectangles, then passed to main's actual
+`snapshot_nodes` (original capture provenance: 来源：peer). Settings224/130 and
+Safari492/452 path records/unique handles pass. Safari547/503 fails the512-record budget;
+nil fails explicitly. Repeated handles in these captures have equal native attributes;
+there is no evidence for deleting repeated parent paths. The prior Settings scroll
+capture's exact Keyboard identifier changes handle17599517741159542921→6940389906386965559
+while its frame moves y668.67→372. This is insufficient to verify the same-target
+postcondition, regardless of the visual effect (`06-main-parser-results.json` and the
+adjacent exploration's25/26 captures).
+
+Six existing focused host tests pass: duplicate paths, nil/malformed trees, record/depth
+budgets, native nil/timeout cleanup, scroll postcondition failure receipts, and one-shot
+scroll submission/no replay (`16-focused-host-tests.txt`). No new regression fixture,
+production code, build or supported HID/media smoke run was introduced. These host and
+experimental simulator results do not close physical acceptance.
+
+Only this simulator was operated. One nonterminating Safari launch was used as an
+activation control and may add a scene; no scene-count restoration is claimed. A fresh
+unique CancelBarItemButton, two matching observations, live state/frame and exact native
+centre hit guarded one final dismiss action. Its native result is true and `19-final.png`
+shows the keyboard closed, with Settings left/Safari right. All owned debuggers have
+detached; no app install, physical-device operation, release, push or merge occurred.
