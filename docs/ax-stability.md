@@ -60,9 +60,12 @@ failure versus successful cheap requests; unchanged pre-submit guards and one-sh
 post-submit failures; honest core provenance with unchanged default output. Keep
 tests compact and reuse existing negatives. No new phone app/test framework.
 
-Simulator probes are external experiments, not a new product backend. No physical
-device operation is authorized here; host/CI/simulator results cannot close the
-supported physical smoke matrix. Keep legacy deep nils explicitly open.
+Simulator probes are external experiments, not a new product backend. The earlier
+implementation stage excluded phone operations. On November6 the user explicitly
+requested a broader physical App matrix and selected12mini; that authorizes foreground
+App/page setup and AX sampling on that device.13Pro is assigned to the concurrent
+PocketAgent task and remains untouched. AX-only results do not close the supported
+HID/media smoke matrix. Keep legacy deep nils explicitly open.
 
 ## Current state
 
@@ -92,3 +95,50 @@ does not recur; no workflow change was needed. The dated verification record con
 the exact revision and package reference. Opus's delivery review preserves source ACCEPT
 and confirms the evidence boundary. Default full nil and physical acceptance remain open;
 merge requires the supported gate or an explicit maintainer exception.
+
+## Expanded physical App matrix (2026-11-06)
+
+Purpose: determine whether omitting2025 improves real accepted-snapshot success,
+not merely query duration. This is a follow-up validation of the58e5c32 baseline;
+production code, timeouts, graph budgets and action guards stay fixed.
+
+Device: explicit12mini CoreDevice UUID1D533177-5153-5A0C-9102-8D0A8ADDAEFB,
+iPhone13,1/iOS27.0/24A437, wired and unlocked, macOS27.2/26B123,
+Xcode27.2/27B52. The user confirmed this allocation. Initial screen is Home.
+13Pro belongs to the live PocketAgent latency comparison; other devices/sims are excluded.
+
+Predeclared broad phase:18 launchable apps, each in its observed landing state:
+Settings, Calculator, Safari, AppStore, Files, Calendar, Clock, Notes, Reminders,
+Maps, Weather, Books, Shortcuts, Music, Stocks, Translate, Bitwarden and PocketAgent.
+These cover system lists/grids, WebKit, dynamic/canvas views, forms and third-party
+login/SwiftUI surfaces. App names alone do not prove framework internals; record actual
+onboarding/permission/empty/content state from captures. A launch/setup refusal is a
+matrix cell result, not silently substituted by another App or counted as a native nil.
+
+Three arms use real isolated CLI installs: main8c227a1 full (before),58e5c32 full
+(compatibility control),58e5c32 explicit core (opt-in after). Each App/state gets6
+attempts per arm, ordered by the six permutations of these arms (18 total), with a
+fixed3s inter-attempt gap and fresh one-shot USB/DTX connection. Confirm PID via fresh
+process inventory before each attempt; record foreground/setup screenshots around the
+cell. Spacing is not a native-drain guarantee. Do not retry failed measurements.
+Store stdout/stderr, exit/status, wall time and query/snapshot timing outside Git.
+
+Accepted success requires rc0 plus a validated complete schema2 tree, matching device
+and explicit PID, correct profile metadata and closed connection/tunnel. Count native
+nil, type2 semantic timeout, other semantic/global timeout, graph/archive budget,
+identity/selection/transport and cleanup failures separately. Report per-App/state
+numerators/denominators and latency; success-only timing never hides failed attempts.
+No aggregate across heterogeneous Apps is a universal reliability estimate.
+
+Then add observed reachable search/keyboard, secondary-page, Web-content and overlay
+states using reversible navigation without sending messages or editing user content.
+Natural failure cells receive fixed additional30 attempts per arm and three independent
+state re-entries when reachable; if a state cannot be recreated, report that explicitly.
+Read-only old/new locate samples use actual unique observed selectors on representative
+states. Whole-tree3002 comparison requires a separately labelled read-only physical
+experiment; product input is not a read-only snapshot command and is not auto-replayed.
+
+Opus reviews the matrix before the broad run and the actual findings afterward. Reuse
+the current tested install; no new product test infrastructure or device app is added.
+Scripts and detailed personal AX/screenshot evidence stay outside Git; this plan and
+verification.md retain only condensed, verified findings and artefact references.
