@@ -77,6 +77,7 @@ screen
                                                live JPEG frames, no DeviceHub
   mirror [--seconds S] [--csv PATH]            live screen, mouse, keyboard and text clipboard (GUI)
   ui [--deep [--full-state]] [--json] [--pid PID | --point X Y] read AX tree/frames; --full-state adds separate state (USB)
+       --native-profile core                   with --deep, omit native visibility; full remains default
   ui hit-test [--point X Y] [--json]           read the actual AX element at a point
   ui locate <selectors> [--json]               find exact native matches in a fresh snapshot
   ui wait <selectors> [--wait-for present|absent] [--timeout SECONDS] [--json]
@@ -1268,7 +1269,13 @@ case "$cmd" in
   unpair)      devicectl manage unpair --device "$DEVICE" ;;
   devicectl)
     [[ $# -ge 1 ]] || { usage; exit 2; }
-    devicectl "$@" --device "$DEVICE"
+    if [[ "$1" == device && "${2:-}" == process && "${3:-}" == launch ]]; then
+      # launch treats everything after the bundle as App arguments, including flags.
+      shift 3
+      devicectl device process launch --device "$DEVICE" "$@"
+    else
+      devicectl "$@" --device "$DEVICE"
+    fi
     ;;
   raw)
     [[ $# -ge 2 ]] || { usage; exit 2; }

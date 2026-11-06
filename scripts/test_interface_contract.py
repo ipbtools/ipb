@@ -106,6 +106,25 @@ class DefaultGoldenTests(unittest.TestCase):
 
 
 class ErrorContractTests(unittest.TestCase):
+    def test_launch_passthrough_selects_device_before_app_arguments(self):
+        with tempfile.TemporaryDirectory(prefix="ipb-launch-wrapper-") as tmp:
+            fake = Path(tmp) / "devicectl"
+            fake.write_text(f"#!{sys.executable}\nimport argparse,json,sys\n"
+                            "assert sys.argv[1:4] == ['device','process','launch']\n"
+                            "p=argparse.ArgumentParser(); p.add_argument('--device',required=True)\n"
+                            "p.add_argument('--activate',action='store_true'); p.add_argument('app')\n"
+                            "p.add_argument('arguments',nargs=argparse.REMAINDER)\n"
+                            "print(json.dumps(vars(p.parse_args(sys.argv[4:]))))\n")
+            fake.chmod(0o755)
+            device = "00000000-0000-0000-0000-000000000001"
+            env = {**os.environ, "DEVELOPER_DIR": "/unused", "DEVICECTL": str(fake), "IPB_HELPER": str(fake)}
+            observed = subprocess.run([str(ROOT / "bin/ipb"), "-s", device, "devicectl", "device", "process",
+                                       "launch", "--activate", "example.app", "--payload-flag"],
+                                      env=env, capture_output=True, text=True, timeout=5)
+            self.assertEqual(observed.returncode, 0, observed.stderr)
+            self.assertEqual(json.loads(observed.stdout), {"device": device, "activate": True,
+                             "app": "example.app", "arguments": ["--payload-flag"]})
+
     def test_source_and_installed_wrappers_pass_the_opt_in_but_leave_zsh_errors_unwrapped(self):
         with tempfile.TemporaryDirectory(prefix="ipb-error-wrapper-") as tmp:
             directory = Path(tmp)

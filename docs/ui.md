@@ -48,6 +48,40 @@ A keyboard/overlay can select a different process.
 Hit-test selection currently requires portrait `rot0`; explicit PID reads retain the raw
 AX coordinate space. Failed or nil hit tests fail the command, with no automatic replay.
 
+### Explicit foreground recovery
+
+On the verified 12 mini / iOS 27.0 (24A437), a still-running Settings process returns
+a native nil snapshot while Calculator is foreground; ordinary AX also refuses the
+read with error17. Returning Settings to the foreground restores its AX tree with
+the same PID. This is an explicit foreground recovery, not original-position
+background AX support. A nil result alone does not establish that an app is suspended.
+
+When changing the foreground App is authorized, use the existing CoreDevice
+passthrough to activate the target without requesting process termination:
+
+```sh
+# Set IPB_RECOVERY_DEVICE to the selected CoreDevice UUID.
+ipb -s "$IPB_RECOVERY_DEVICE" devicectl device process launch --activate \
+  --json-output activation.json com.apple.Preferences
+```
+
+Proceed only after that command succeeds. Read `result.process.processIdentifier`
+from the new `activation.json` receipt and set `IPB_RECOVERY_PID` to that value.
+Check the visible target App with a screenshot or a hit test on one of its visible
+elements; activation can expose an onboarding or system prompt. Then read anew:
+
+```sh
+ipb -s "$IPB_RECOVERY_DEVICE" ui --deep --pid "$IPB_RECOVERY_PID" --json
+```
+
+Use the receipt's PID rather than a cached value: the process might have exited
+before activation. The command above omits `--terminate-existing`; this branch's
+ordinary `ipb launch` includes it and must not be substituted when preserving a
+running process/page is required. Do not replay an activation with an uncertain
+outcome. `ui` never activates or retries automatically, and a failed read emits no
+replacement tree. The observed `--no-activate` receipt did not keep Settings in the
+background on this seed, so it is not an alternative background-read recipe.
+
 ## Returned graph and text policy
 
 Ordinary dumps keep JSON schema 1 and the existing AXChildren/Description-first contract.
@@ -65,6 +99,25 @@ Native fields include label, hint, identifier, value, frame, traits and AX visib
 keys under `nativeAttributes`. These do not define XCTest element types. Unavailable
 properties are omitted; `CGRectNull` is reported as `frameUnavailable`. Structural records
 may have no text or state. The text renderer shows native Label, Identifier, then class.
+
+### Explicit core observations
+
+This development revision adds `ipb ui --deep --native-profile core --json`.
+Omitting the option or choosing `full` keeps the existing request and successful output.
+Core uses the same traversal options and geometry/text attributes, omitting native
+visibility2025, which can be expensive across application windows. It still requires a
+complete hierarchy; separate observations can differ as the app changes. It reports
+`nativeAttributeProfile="core"` and `nativeVisibility="not-requested"`; nodes omit
+`visible`, including any extra visibility returned by the server. Not requested does not
+mean false. There is no automatic profile fallback.
+
+The option requires a deep dump. `--native-profile core --full-state` is allowed:
+later visibility reads remain under `supplementalAX`, separate from the native snapshot.
+Both profiles retain schema2, root checks, complete child counts and the512-record/depth32
+limits. Core does not resolve oversized trees or establish physical-device acceptance;
+default full-profile nils remain open. See [verification](verification.md).
+
+### Native graph checks
 
 A native tree can contain a terminal `AXRemoteElement` reference to another process.
 Only its proven zero-child shape is accepted. Such nodes add `processIdentifier` and
@@ -186,7 +239,9 @@ and checks the same hit identity/display again. It is read-only. It does not com
 `isHittable`. Portrait selection restrictions still apply; `hit-test` cannot use `--pid`.
 
 `locate` reads one fresh native snapshot and returns every public match, its match count,
-uniqueness, and snapshot-local path IDs. It does not expose or retain native object IDs. The
+uniqueness, and snapshot-local path IDs. It uses core attributes without the unused native
+visibility field. `wait`, `press` and `input` likewise omit that field; their existing
+live-state and action guards remain. `locate` does not expose or retain native object IDs. The
 `identifier`, `label`, string `value`, and native `--class` selectors are exact and conjunctive: every supplied
 field must match the same native element. There is no fuzzy matching or automatic first match.
 For example, a repeated button label and its child UILabel may both match `--label 'Continue'`;

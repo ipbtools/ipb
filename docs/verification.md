@@ -2,7 +2,78 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-11-03. This section is overwritten; dated records below are append-only.**
+**Updated 2026-11-06. This section is overwritten; dated records below are append-only.**
+
+### AX snapshot workload — explicit core observations (2026-11-06)
+
+The implementation omits unused native visibility2025 from locate/wait/press/input;
+input retains whole-tree firstResponder3002 and all existing identity/value/traits,
+live-state/frame, PID/display, exact-hit and no-replay guards. Default deep, scroll
+and alert requests stay full. An explicit `ui --deep --native-profile core` and MCP
+`observe(nativeProfile="core")` preserve the complete graph without native node.visible,
+reporting paired core/not-requested provenance. MCP rejects request/result profile
+mismatches before observation can clear isolation. Later full-state visibility stays
+under supplementalAX. There is no automatic fallback, timeout or budget increase.
+
+**Confirmed and bounded:** host fixtures reproduce error0/nil when2025 is requested,
+then succeed through the cheaper operations/core observation; default and explicit
+full still fail in that control. All91 AX,44 MCP and9 interface tests pass, along with
+the complete host build/check gate. Actual simulator comparisons within512 records
+show reduced cost, including core+3002; their captured responders pass the product's
+input resolver. No natural nil was found in that task-owned clean state. The external
+probe is not a product simulator backend and does not prove a physical fix.
+
+**Still open:** legacy full snapshots can return error0/nil before parsing; the exact
+intermediate deadline owner remains unknown. Prior multiwindow Safari graphs exceed
+512 path records, and Settings handles can change after effective scroll. Existing
+complete-tree/identity guards continue to reject those cases. Do not deduplicate paths,
+raise budgets, relax identity or replay actions on this evidence. Shallow3002 remains
+unsuitable because its records are truncated and lack responder traits/value.
+
+Stage1 cadcefa and the complete core profile58e5c32 are accepted by actual Opus5.5
+source review without blocking findings. The isolated development package passes.
+Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15).
+[CI run42077704751](https://github.com/ipbtools/ipb/actions/runs/42077704751) passes
+native build, host regressions, package and precompiled Homebrew install/test/hash checks;
+the first run's homebrew/core clone timeout does not recur. The supported physical
+HID/media gate remains unrun. The user subsequently selected12mini for expanded AX
+sampling. Default locate on five App states and a permission card passes6/6 old/new,
+with lower query cost. The permission card has disappeared; no choice is pending.
+Controlled Settings→Calculator switching reproduces background Settings nil in all
+three arms (0/18 each across three re-entries); foreground controls recover with the
+same PID. This failure is not fixed by core, and its internal cause is unknown.
+A foreground read-only search3002 workload has one initial old-full type2 timeout,
+but five same-PID re-entries are30/30 per arm with passing responder guards. The
+visually empty field exposes the native `Search` placeholder; guarded setup can warm
+the app. This shows lower read cost, not improved natural-failure success or cold-start
+reliability. The initial phase measures nine of23 candidates;13 have activation failures
+and Bitwarden is auth-gated. The largest state is279 records;300–512 and complete Web
+content remain unverified. One after-core default-selection call on a loaded Safari
+page hits a WebContent PID and fails the Safari root identity guard; old/full implicit
+selection was not measured. Explicit Safari PID reads expose64 native framework records
+including an AXRemoteElement. See the final dated record for separate denominators.
+
+The further12 candidates add11 measured Apps, now20 measured Apps across35 candidates.
+All198 new deep reads pass (6/6 per old-full/new-full/core arm for each App), with
+onboarding/empty/sign-in pages explicitly labelled; Health stops at personal-profile
+setup. Original13 activation and Bitwarden auth gates remain. User-approved first-use,
+network and location setup is separate from code-version comparison. A new default
+Freeform locate comparison passes6/6 each, query median1493→174ms; large CLI wall
+tails remain. The separate PDUIApp diagnostic stays0/6 per arm (full timeouts/core
+guard) outside target-App coverage. No natural-failure success-rate improvement or
+pooled reliability rate is established. See [current plan](ax-stability.md) and the
+latest dated record for exact states, controls, topology drift and remaining gaps.
+
+The background-nil follow-up now has fresh wire evidence: the same Settings root is
+returned, then type2 replies error0/resultData UID0 in6–7ms. Ordinary type5 returns
+error17 (APT maps underlying AXRuntime no-port status-25215). The same-DTX foreground
+→background→foreground experiment and clientType0/2 control reproduce the refusal.
+A suspended-PID gate is one static no-port path, not a proven runtime predicate.
+No original-position background read succeeds. The user has authorized explicit nonterminating foreground recovery; ui remains
+read-only. The documented passthrough launch first exposed an argument-placement
+bug (exit64 before activation), fixed narrowly for that launch path. Three Settings recoveries and one inverse
+Calculator recovery preserve PID and visible state; eight recovered full/core reads
+pass. Background reads still fail, and the full HID/media matrix remains unrun.
 
 ### v0.6.0 publication decision (2026-11-03)
 
@@ -7728,3 +7799,910 @@ Formula-only PR#6 passes CI39574491943 and merges at
 Release asset exactly. Full reports/downloads and model-usage metadata remain outside Git
 in the local v0.5.0 release state directory. This record documents publication, not
 new physical acceptance.
+
+## 2026-11-05 — AX nil, visibility cost and strict failure controls (simulator only)
+
+Source: origin/main8c227a10710dad479852aa0203de729fed57471b (v0.6.0), isolated
+`codex/ax-stability`. Host macOS27.2/26B123, Xcode27.2/27B52; dedicated simulator
+`1CA07373-09AA-4E38-82BD-937711C73565`, Duo runtime24B91016s, inner
+landscapeRight. Safari PID9282 and Settings PID6971 were freshly checked. Loaded
+simulator UIAccessibility3245.8.9 UUIDE3B68BF4-1D09-346A-AECE-F4137F24CB1D;
+AXRuntime3245.8.9 UUID07686FEA-F105-371F-B3F3-99989BA5B4CE.
+
+Raw evidence is outside Git at
+`/Users/borealin/Documents/Codex/2026-11-05/ipb-ax-stability/`.
+`ax-probe` from the adjacent `ipb-duo-ddi-exploration/` is an external experiment
+using CoreSimulator's AXP bridge, not a product backend. Reproduction with a freshly
+checked Safari PID: `ax-probe <dedicated-UDID> snapshot <PID> '{}'`; controlled
+parameters replace `{}` with `{"attributes":[2025]}` or
+`{"attributes":[2001,2002,2003,2004,5019,2006,5003,5004,3003]}`.
+The probe waits up to8s for a semantic reply, so its nil at about3s is not its own
+watchdog. Main's separate per-request budget is3s (`Sources/ipb_ax.py:read`), which
+can time out even before such a reply arrives. No request retries or action replays
+were added.
+
+**Native nil reproduction and discriminator:** initial default, frame-only and shallow
+Safari requests return error0/nil while Settings returns117 records. Ordinary Safari
+root attributes and its current accessible-child snapshots still succeed. A later fresh
+guarded address press is accepted once; default snapshot then returns664 records,
+default+3002 returns nil after3.18s, and the next default returns nil after0.155s.
+FirstResponder3002 alone succeeds, including a root-only request, so it is not an
+unconditionally invalid attribute (`01-read-controls.json`, `02-*`, `12-*`, `15-*`).
+
+LLDB breakpoint callbacks log registers and immediately continue the selected Safari
+process, tracing
+`-[NSObject(UIAccessibilityAutomation) _accessibilityUserTestingSnapshotWithOptions:]`
+at0x1f0a57c70 and its descendants builder at0x1f0a5658c. Default computation takes2.94s;
+the following combined3002 computation takes4.22s and returns a non-null object, although
+the client already received error0/nil after3.164s. Invalid-options nil is not hit.
+This is evidence of a result lost before product decoding and is consistent with an
+intermediate AX messaging deadline; it does not identify the exact deadline owner.
+Debugger runs are diagnostic and can affect timing. A separate manual breakpoint run
+paused the process past the request deadline and is excluded from timing conclusions
+(`07-snapshot-disassembly.txt`, `14-native-trace.jsonl`, `14-*-under-trace.json`).
+
+With the debugger detached, individual attributes2001/2002/2003/2004/5019/2006 succeed
+in0.20–0.29s. Attribute2025 alone returns nil after3.163s; immediately subsequent
+single-attribute calls also return nil and are not evidence against those attributes.
+Later, the full nine-attribute request excluding2025
+returns a complete tree in0.326s; root-only2025 succeeds in0.185s (`17-*`, `18-*`).
+Visibility across this app's multiwindow hierarchy is a demonstrated expensive trigger.
+No automatic fallback removes it from the product's observation/action contract.
+
+**Independent parser/action boundaries:** retained peer research captures were converted
+only from JSON NSValue descriptions to numeric rectangles, then passed to main's actual
+`snapshot_nodes` (original capture provenance: 来源：peer). Settings224/130 and
+Safari492/452 path records/unique handles pass. Safari547/503 fails the512-record budget;
+nil fails explicitly. Repeated handles in these captures have equal native attributes;
+there is no evidence for deleting repeated parent paths. The prior Settings scroll
+capture's exact Keyboard identifier changes handle17599517741159542921→6940389906386965559
+while its frame moves y668.67→372. This is insufficient to verify the same-target
+postcondition, regardless of the visual effect (`06-main-parser-results.json` and the
+adjacent exploration's25/26 captures).
+
+Six existing focused host tests pass: duplicate paths, nil/malformed trees, record/depth
+budgets, native nil/timeout cleanup, scroll postcondition failure receipts, and one-shot
+scroll submission/no replay (`16-focused-host-tests.txt`). No new regression fixture,
+production code, build or supported HID/media smoke run was introduced. These host and
+experimental simulator results do not close physical acceptance.
+
+Only this simulator was operated. One nonterminating Safari launch was used as an
+activation control and may add a scene; no scene-count restoration is claimed. A fresh
+unique CancelBarItemButton, two matching observations, live state/frame and exact native
+centre hit guarded one final dismiss action. Its native result is true and `19-final.png`
+shows the keyboard closed, with Settings left/Safari right. All owned debuggers have
+detached; no app install, physical-device operation, release, push or merge occurred.
+
+
+## 2026-11-06 — AX repair design discussion with Opus (read-only)
+
+Two independent/follow-up exchanges report actual `claude-opus-5-5` model usage.
+Sources were main8c227a1, the current AX implementation/contracts and November5
+captures; no AX performance code or device operation was performed. Raw briefs,
+responses and model metadata remain outside Git at
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-stability-design/`.
+
+Main-session checks strengthen two boundaries: full default and nine-attribute
+captures each contain664 records with exactly equal ordered paths, native identities,
+child counts and every non-2025 attribute. This is one-state structural equivalence,
+not a <=512 product success. Shallow and zero-depth3002 captures contain one root with
+children=[] but declared child count11; their nested responder attributes have only
+key3002, lacking2004/2006. They cannot pass the complete-tree parser or the current
+strict input guard. Neither quick root reads nor a new connection prove previous
+native work has drained; research comparisons must be independently bounded.
+
+Agreed minimal candidate: operation-specific field sets for locate/wait/press/input
+omit unused2025; input retains whole-tree3002. Preserve default deep/MCP observations,
+scroll/alert native visibility, complete-tree validation, action guards, errors and
+no-replay. Output semantics stay unchanged; timing and snapshot IDs naturally differ.
+Before implementation/acceptance, obtain a task-owned <=512-record failing state and
+fixed-count alternating comparisons, including nine attributes+3002. Do not close
+other sessions' windows to manufacture that state. Reuse existing fixtures to pin
+successful cheap operations, pre-submit guard refusals, and one-shot post-submit
+failures; field-list assertions alone are not sufficient regression evidence.
+
+Default deep nil remains open. Opus recommends a separate opt-in core profile with
+explicit not-requested visibility provenance and CLI/MCP propagation, keeping legacy
+default behavior until a deliberate versioned migration. This is a design proposal,
+not an implemented fix or approval to change the interface.512-budget changes, scroll
+identity relaxation, root-only responder parsing, retries and timeout increases are
+outside this minimal candidate. The user additionally requested the Duo branch rebase;
+that branch's separate host record describes its results and does not validate this
+AX candidate or close physical acceptance.
+
+
+## 2026-11-06 — AX workload stage1 (host and isolated simulator)
+
+Plan: [AX stability](ax-stability.md), started at fc05182 on main8c227a1.
+Opus5.5 stage0 permits the scoped implementation with requested-attribute projection
+and bidirectional MCP profile checks. Source changes here omit unused native2025
+only for locate/wait/press/input, retaining whole-tree3002 for input. The same parser
+projects requested attributes; structural checks and full deep/scroll/alert requests
+remain intact. No new timeout, retry, identity rule or graph budget is introduced.
+
+Reachable host reproduction uses the existing transport fixture:
+`python3 scripts/test_ax.py SessionTests.test_unused_visibility_does_not_block_exact_operations`.
+The fixture returns the observed error0/nil when2025 is requested. Before the change,
+all four operation cases fail; afterward all four succeed with the expected single
+press/input submission, while legacy deep still fails with no tree. All90 AX tests
+pass, including unchanged guard, cleanup and no-replay negatives. This is a controlled
+host failure-to-success, not proof of every app or the physical transport.
+
+New task-owned simulator9FE94853-1660-4DB1-98D8-C22A608CC76A uses
+macOS27.2/26B123, Xcode27.2/27B52, Duo24B91016s, opened inner landscapeRight through
+Device Hub. Initial bootstatus reported Data Migration Failed; subsequent Home and
+Settings/Safari rendering, fresh process inventory and complete snapshots were observed.
+That environment condition is retained, not treated as a successful supported gate.
+Only this new simulator is operated; prior simulators/windows and physical phones
+are untouched. Main has no simulator AX backend: all native measurements below use
+an external SimDevice probe, then main's actual parser over numeric converted frames.
+
+Fixed ABBA full/core order, fresh connection/PID lookup per read and5s fixed spacing
+were specified before collection. Spacing is not claimed as a native-work drain barrier.
+Settings122 records returns full0.466/0.447s, core0.172/0.167s. Safari125 records
+returns full0.700/0.704s, core0.170/0.184s. Focused Safari full+3002 returns118/117
+records in0.960/0.891s, core+3002 returns117 in0.258/0.325s; root responder identity,
+traits and value are present. The initial focused graph changes by one record, so
+no strict cross-sample structural-equality claim is made there. All reads pass the
+512-record parser; this initial clean state produces no natural nil/fail-to-success.
+A settled screenshot shows the focused Safari address caret (hardware keyboard hides
+the software keyboard). Multiwindow research remains separate and ongoing.
+
+Evidence is outside Git at
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-stability-implementation/`:
+00-opus*, 02-host-before/after, 03-initial*, 04-input*, 04-focused-settled.png.
+No physical smoke/acceptance, release, merge or default install is claimed.
+
+
+## 2026-11-06 — Explicit core observations and integrated host gate
+
+The user authorized implementation, staged Opus supervision/commits/documentation and
+a PR. Stage1 cadcefa is accepted by actual claude-opus-5-5 source review without a
+blocking finding; its two suggested observable assertions and wording correction are
+included in stage2. Stage2 adds only the opt-in CLI/MCP profile and provenance, with
+help/completion and user/protocol documentation. The usage golden changes solely for
+the additive option; default successful output and other baseline cases are unchanged.
+
+Reachable controlled reproduction remains
+`python3 scripts/test_ax.py SessionTests.test_unused_visibility_does_not_block_exact_operations`:
+locate/wait produce their expected match/status, press and input submit once, core deep
+succeeds, and default/explicit full deep fail with no tree. The companion core test
+preserves ordered graph/attributes except visibility, rejects truncation, ignores even
+malformed extra2025, and keeps later full-state visibility only under supplementalAX.
+MCP controls reject partial/unknown/contradictory or wrong-profile metadata; a wrong
+profile cannot clear observeRequired. Existing action guard/no-replay tests stay intact.
+
+`make -j3 check-host` passes on macOS27.2/26B123, Xcode27.2/27B52, ARM64:
+all native targets build;91 AX,44 MCP,9 interface,3 support and10 release tests pass,
+along with device/update CLI fixtures, bounded sender, smoke-assertion negative controls,
+syntax, keyboard, display geometry, device-control and mirror FIFO contracts. Expected
+negative screenshot fixtures print FAIL while their enclosing regression passes; no
+real screen/device was read by that host gate. Evidence:07-check-host.txt outside Git.
+
+Two retained core+3002 Safari captures (04-input indices1/2) pass the actual
+resolve_input_target with exact identifier URL, same responder/target identity,
+text-entry traits and equal current value (06-core-input-parser.json). No text was
+submitted. Three explicit nonterminating Safari activations did not add a scene or
+produce a natural failure; graphs stayed117 records. No further window hunting was
+performed. The only task-owned simulator9FE94853-1660-4DB1-98D8-C22A608CC76A was shut
+down after collection (06-final-simulators.json); other simulators and physical devices
+were untouched. Earlier Data Migration Failed remains an environment limitation.
+
+Raw review, test and simulator artefacts remain outside Git in
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-stability-implementation/`.
+Full supported physical smoke/acceptance is unrun. Legacy full nil, oversized trees
+and changed scroll identities are not claimed fixed. Package/CI and stage2 Opus review
+are pending at this checkpoint. No merge, release or default install occurred.
+
+
+## 2026-11-06 — Opus stage2 acceptance and isolated package
+
+Actual claude-opus-5-5 accepts complete implementation58e5c32ac9f56590562c145f860886ea15123b13
+(base main8c227a1), with no blocking finding. The prior accepted stage1 plus this
+increment cover the full implementation. Requested-attribute projection, unchanged
+action guards/full behavior, CLI validation, MCP bidirectional provenance/isolation
+checks and observable regressions are accepted in this source-only review. One
+nonblocking wording suggestion is incorporated: core uses the same traversal options,
+without claiming that separate live observations must have identical graphs.
+Raw response/model metadata:08-opus.json and08-opus-response.md in the external
+implementation evidence directory. This is not physical acceptance.
+
+`python3 scripts/package_test_build.py <external>/package-stage2` passes at58e5c32:
+17 installed files plus LICENSE, complete layout, ARM64 signatures, SHA256, extracted
+host startup and support contract. Archive:
+`ipb-0.6.0-ci.58e5c32ac9f5-macos27-arm64.tar.gz`, SHA256
+`02a44db0b48cb7a75983bc3a4705dd5158a9f670b20dd954584ae87a3d987922`.
+Its BUILD_INFO records macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32 and the exact
+source commit. Files remain under the external implementation directory's package-stage2;
+09-package.txt records the gate. No local Homebrew installation was run.
+
+The later delivery checkpoint changes documentation only; production/test sources are
+unchanged from this tested/reviewed revision. PR CI will separately verify the final
+head and its development package/Homebrew installation in the disposable runner. No
+physical device, merge, release or default-install operation is part of delivery.
+
+
+## 2026-11-06 — PR15 delivery and first CI result
+
+[PR#15](https://github.com/ipbtools/ipb/pull/15) targets main on codex/ax-stability.
+Implementation checkpoints are cadcefa (unused visibility),58e5c32 (explicit profile)
+and f299856 (Opus/package documentation); source/test files are identical to the
+accepted/tested58e5c32. The separate Duo simulator branch remains locally rebased on
+main8c227a1. No unrelated worktree changes or window_dump.xml were included.
+
+[CI run42076765640](https://github.com/ipbtools/ipb/actions/runs/42076765640) at
+f299856 completes with **failure**. Apple environment, native ARM64 builds, all host
+regressions, archive layout/signatures/checksum and extracted startup pass. The
+precompiled Homebrew step implicitly taps homebrew/core, then times out after180s
+while cloning `/opt/homebrew/Library/Taps/homebrew/homebrew-core`, before an ipb
+installation/result. Upload is skipped, so this run provides no downloadable artifact.
+This proves neither a successful nor a defective installed ipb package. The Homebrew
+test/workflow are unchanged from main; the clone's underlying cause is not established.
+No AX code or timeout change is justified by that failure. Logs/results:10-ci-* in the
+external implementation evidence directory. Later checks are visible on the PR; this
+dated record describes this exact run only.
+
+A documentation-only delivery update triggers one subsequent CI attempt. Actual latest
+status will be recorded on the PR. Host fixtures, local isolated package and source
+review remain passing evidence for the same production source, while physical-device
+acceptance and default full nil remain open. Task-owned simulator is shut down; no
+physical operation, local Homebrew install, merge or release occurred.
+
+
+## 2026-11-06 — PR15 CI package and Homebrew gate pass
+
+[CI run42077704751](https://github.com/ipbtools/ipb/actions/runs/42077704751) completes
+with success for PR head0c4b9879b8451d38a48b49294d1fc9c3a11ee992 (tested merge revision
+f478b9214da8). Its macOS27.0.1/26A434 ARM64 runner with Xcode27.0 passes Apple
+environment checks, all native builds/host regressions, package verification,
+precompiled Homebrew install/test plus all product-file hashes, and artifact upload.
+The earlier clone timeout does not recur; its underlying cause remains unestablished.
+No workflow/installation/AX source change was used to obtain this passing result.
+
+[Development test package](https://github.com/ipbtools/ipb/actions/runs/42077704751/artifacts/13438982541):
+`ipb-0.6.0-ci.f478b9214da8-macos27-arm64.tar.gz`, SHA256
+`01e90761b46ae6bdad8c80360a1de94798d51c7aedaa8435dd0e8316c28e1539`.
+Upload name ipb-macos27-arm64-42077704751-1, retention14 days. Actual step results and
+full logs remain at12-ci-result.json /12-ci-log.txt outside Git. This is a development
+artifact and a disposable-runner installation result, not a release or physical test.
+
+Opus5.5's delivery review retains the accepted58e5c32 source conclusion and confirms
+the documented host/CI versus physical boundary (11-opus.json /11-opus-response.md).
+The present checkpoint only updates existing documentation with the now-confirmed
+result; production/tests/build configuration remain identical to the accepted source.
+Later automatic CI on this documentation is tracked on PR15. Default full nil,
+oversized graphs, changed scroll identities and supported physical acceptance remain
+open. No local Homebrew install, physical operation, merge or release occurred.
+
+
+## 2026-11-06 — Expanded12mini AX matrix, first physical checkpoint
+
+The user requested a broader App/state matrix and explicitly chose12mini first.
+Target is wired CoreDevice1D533177-5153-5A0C-9102-8D0A8ADDAEFB /iPhone13,1,
+iOS27.0/24A437, macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32.
+13Pro belongs to the concurrent PocketAgent latency task and was not operated.
+Shared-host load is recorded per attempt; no isolated-host timing claim is made.
+
+Before main8c227a1 uses its verbatim wrapper/AX backend in a private temporary prefix;
+after58e5c32 uses its checksum-verified development package. Native binaries and pinned
+AX dependencies are shared/unchanged. The three arms are old default full, new default
+full, and new opt-in core; the last comparison changes requested visibility semantics,
+so it is not a claim of improved default deep behavior. Source hashes are in arms.json.
+
+18 inventory candidates plus5 additional Apps were predeclared, without replacing
+failed cells. Each valid cell uses6 attempts/arm in six rotated permutations, fresh
+PID inventory and one-shot USB/DTX sessions, fixed3s gaps with actual gaps/previous arm
+recorded, pre/post screenshot+lock+hit-PID checks and between-block lock checks. The
+same production compact_observe validator checks all successful deep responses.
+Invalid states would remain separate without replacement; no failed query was retried.
+Opus5.5 reviewed the design with three required state/order/confirmation corrections,
+which were applied; the peer statically checked both execution paths (来源：peer).
+
+Completed App states are Settings root list, Calculator keypad, Safari tab overview,
+AppStore onboarding, Maps landing and PocketAgent diagnostics. Each arm is6/6 in every
+cell. A separate existing local-network permission overlay, targeting SpringBoard37
+via its button area rather than embedded map PID17026, is also6/6 per arm. Thus126
+measured reads are accepted and no natural nil, semantic timeout or graph-budget
+failure appears in this checkpoint. This does not estimate general reliability;
+Even under independent-trial assumptions,0/6 failures still permits a one-sided95%
+upper bound of about39%; shared native work can correlate these observations.
+
+Files, Calendar, Clock, Notes, Reminders, Weather, Books, Shortcuts, Music, Stocks and
+Translate fail activation with CoreDevice10004 before a PID is obtained; cause unknown,
+zero AX attempts, not successful reads or native nils. Bitwarden's first state shows
+FaceID and hit-test refusal8. Stash/LocalDevVPN are covered by a Stash local-network
+permission request: centre hit selects CoreLocationMapLNPromptPlugin17026, while
+Allow/Don’t Allow hit points select SpringBoard37. These readiness gates are retained
+and excluded from within-state AX denominators, not hidden as successful coverage.
+
+The permission card persists after Home and termination of only this task's new
+Stash main17023 and new Intents17025/Widget17027 extensions; their absence from the
+initial inventory was checked. No privacy button or authentication was selected.
+The user was asked how to resolve it. Phone/Contacts/Photos, old/new default locate,
+secondary/Web/search and read-only whole-tree3002 sampling remain pending. No message-sending,
+text-entry or clipboard command ran; the standalone3002 probe has not run yet.
+
+Evidence remains in the0700 external directory
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-app-matrix/`: arms.json,
+00-opus-matrix*, broad-* per-attempt receipts/stdout/stderr/screenshots/rows,
+overlay-network-permission/, interim-results.json,03-* setup/cleanup evidence and
+04-locate-plan.json. No personal AX bodies/screenshots are committed. This is a
+partial physical AX checkpoint, not full supported HID/media acceptance or proof of
+improved natural-failure success rate. No production source or default install changed.
+
+
+## 2026-11-06 — Expanded 12 mini AX matrix, completed available-device run
+
+This follow-up finishes the predeclared 23-candidate run on the same wired 12 mini:
+iPhone13,1 / iOS27.0 /24A437, CoreDevice UUID1D533177-5153-5A0C-9102-8D0A8ADDAEFB,
+macOS27.2 /26B123, Xcode27.2 /27B52, CoreDevice651.32. Before is main8c227a1;
+after is the checksum-verified58e5c32 package. Production/tests/build configuration
+remain unchanged. The actual before/after manifests and state/order rules are in
+arms.json and the existing [plan](ax-stability.md). The concurrently owned 13 Pro
+was not operated. Host load is shared, not an isolated timing benchmark.
+
+Nine of23 candidates have measured App states: six of the initial18 and three of the
+additional five. The table gives snapshotMs medians (ms); every cell is6/6 accepted
+in **each** arm. Old/full/core means old default full, new default full compatibility
+control, and new opt-in core. Core omits native visibility, so these are different
+observation semantics. snapshotMs includes client-side work, not pure native CPU time.
+
+| Actual state | Records | Old full | New full | New core |
+| --- | ---: | ---: | ---: | ---: |
+| Settings root list | 171 | 1027 | 1025 | 171 |
+| Calculator keypad | 45 | 222 | 223 | 124 |
+| Safari tab overview | 66 | 407 | 410 | 116 |
+| App Store onboarding | 64 | 259 | 259 | 91 |
+| Maps landing | 132 | 525 | 525 | 143 |
+| PocketAgent diagnostics | 217 | 1023 | 1019 | 152 |
+| LocalDevVPN connected dashboard | 40 | 179 | 179 | 83 |
+| Phone Calls/Recents | 159 | 890 | 895 | 194 |
+| Stash3.6 What's New | 125 | 411 | 406 | 164 |
+| Settings Apps secondary list | 129 | 692 | 691 | 159 |
+| Safari loaded Swift Concurrency page, native framework only | 64 | 293 | 291 | 108 |
+| SpringBoard local-network permission overlay, separate from App content | 133 | 656 | 657 | 120 |
+
+Phone's first measured core read takes2020ms snapshot /2.674s CLI wall, well above
+its194ms snapshot median. Lower medians are not a uniform tail-latency guarantee.
+
+Thirteen candidates fail activation with CoreDevice10004 before a PID, with zero AX
+measurements: Files, Calendar, Clock, Notes, Reminders, Weather, Books, Shortcuts,
+Music, Stocks, Translate, Contacts and Photos. The first11 failure receipts precede
+the first Stash permission-card capture; Contacts/Photos fail after it disappeared.
+The launch cause is unknown, not established as a crash or AX failure. Bitwarden
+remains FaceID-gated with hit-test refusal8 and no measured App snapshots. Onboarding,
+diagnostics and native Web framework states are not complete business-flow coverage.
+
+The user authorized Allow for Stash. The guarded alert action found no visible alert
+and sent nothing; the next screenshot showed the card already gone. This does not
+prove that this task changed the OS permission. No VPN control or auth flow was used.
+
+**Same default-path comparison:** real old/new `ui locate`, unique preselected exact
+selectors,6/6 success in each arm. QueryMs and complete CLI wall medians are separate:
+
+| State | Query old→new (ms) | Wall old→new (s) |
+| --- | ---: | ---: |
+| Settings | 1024→166 | 1.660→0.796 |
+| Calculator | 221→128 | 0.857→0.750 |
+| Safari tab overview | 408→111 | 1.022→0.724 |
+| Maps | 527→140 | 1.191→0.758 |
+| PocketAgent diagnostics | 1033→156 | 1.633→0.756 |
+| Existing permission overlay | 659→120 | 1.276→0.736 |
+
+Only locate has a physical old/new operation comparison. Wait, press and end-to-end
+input share the attribute change but were not compared here. Setup press receipts
+are navigation evidence, not action reliability or input benchmarks.
+
+**Reproducible failure, not recovered:** activate Settings, obtain its current PID,
+activate Calculator without terminating Settings, then run `ipb -s UUID ui --deep
+--pid SETTINGS_PID --json` (add `--native-profile core` for that arm). Three same-PID
+re-entries, rotating first arm, give0/18 accepted per arm, all fast native nil
+(about0.64s wall). Each entry's old-full/new-core foreground reads before and after
+pass with the same PID7976:12 positive controls, outside measured denominators.
+Only this target/occluder pair was tested. This explicit-PID background refusal is
+not a foreground reliability estimate and does not establish the internal Apple
+cause or explain the simulator's roughly3s nil. Earlier Settings/PocketAgent reads
+under the permission overlay are separate joint-condition cohorts:0/6 per arm per
+App,36 more fast nils. Their foreground check expects SpringBoard, not the target App.
+
+**Read-only whole-tree3002 experiment:** real backends with full/core plus3002,
+unchanged limits, operation=None. No product `ui input`, text setter or clipboard call.
+Initial visually empty Settings search gives old5/6, new-full6/6, core6/6; the initial
+old first read times out on AX type2 attribute52. New-full sends the same request, so
+this cannot be attributed to a code version. Five further same-PID close/reopen entries,
+6/arm each with rotated first arm, are30/30 accepted per arm and30/30 passing the real
+responder resolver. All have279 records. The native value is the fixed `Search`
+placeholder (length6), not an empty string; screenshots show no user query.
+Placeholder and resolver passes are not end-to-end input evidence.
+
+| Arm | Snapshot median/max (ms) | Query max (ms) | CLI wall median/max (s) |
+| --- | ---: | ---: | ---: |
+| Old full+3002 | 2244 /2294 | 2295 | 2.803 /3.090 |
+| New full+3002 | 2247 /2283 | 2283 | 2.811 /2.975 |
+| New core+3002 | 508 /527 | 527 | 1.066 /1.288 |
+
+Only five reads are first-after-setup: old2246.5/2274.0ms, new-full2244.7/2246.9ms,
+core516.7ms (snapshotMs). Guarded setup press itself reads a snapshot and may warm
+native state. These correlated same-PID samples do not exclude a cold-first timeout
+rate or support an independent-trial reliability bound. The largest measured state
+is279 records;300–512 near-deadline states remain unverified. General secondary-page
+discovery has102 records and is not a completed6/arm cell.
+
+One own local HID query `a` was subsequently cleared. A setup command incorrectly
+combined mutually exclusive `--pid` and `--point`, so it failed before device access;
+the first attempted confirmation actually retained that query (228 records,6/6 per
+arm). It remains separately labelled exploratory, excluded from the30/arm confirmation.
+The corrected setup uses `--pid` alone; all five final close receipts are accepted.
+No message, call, form submission or user-content edit was performed.
+
+**Safari default-selection failure:** one real after CLI call without `--pid`,
+`ipb -s UUID ui --deep --native-profile core --json`, on the loaded public page
+`https://docs.swift.org/swift-book/documentation/the-swift-programming-language/concurrency/`
+fails root identity validation: selected WebContent PID15930, snapshot root Safari7978.
+Old/full implicit selection was not measured. Explicit Safari7978 reads pass, with
+chrome hit-point .84/.93 pre/post checks;64 records include WKContentView and an
+AXRemoteElement, not the complete article body. No identity guard was relaxed.
+
+Manifest accounting is30 completed cells /504 measured calls:216 normal deep App or
+overlay reads,72 default locate reads,126 input-workload reads (initial search cell,
+five confirmation entries and separately labelled query-a), and90 intentional background
+diagnostic reads.
+There are413 accepted reads,90 native nil and one type2 timeout, with no state-invalid
+measurement rows. These heterogeneous counts are bookkeeping, **not a pooled success
+rate**. No measurement was retried or silently replaced. Metadata-only ordered-child
+path checks find no count/hash drift in110 adjacent new-full/core pairs (40–279 records);
+99 additional old-full/core pairs also match, reported separately. No new-core read
+immediately followed new-core (N0), so fixed spacing is not evidence of native drain. Shape equality
+alone does not prove semantic, geometry or cross-snapshot identity equality.
+
+Actual Opus5.5 supervised the design and interim findings, then required the placeholder,
+first-read/tail, stale-summary and Safari-failure corrections above (20-opus-stage*).
+Its final review accepts the result interpretation/documentation scope after explicit
+placeholder/input-evidence wording corrections; no further review is required for
+those edits (23-opus-final*). The peer's final summary refresh is complete.
+The local extraction peer supplied metadata-only grouping (来源：peer); key totals,
+failures, placeholder and timing/control evidence were checked in the main session.
+The conclusion is lower read cost, including the changed default locate path, with
+**no demonstrated natural-failure success-rate improvement**. Supported HID/media,
+complete Web content, dense300–512, cold-first and other devices remain unverified.
+This matrix does not authorize merge or release.
+
+Evidence is outside Git in the0700 directory
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-app-matrix/`: arms.json,
+sanitized-final-results.json, per-cohort
+rows/stdout/stderr/screenshots, controlled-background/, confirm-focused-input-v2/,
+15-setup-correction.json,17-*/18-* discovery,19-remaining-apps-results.json and
+20-opus-stage*/23-opus-final*. Final Home is screenshot-confirmed with stable SpringBoard37 hit
+(21-final-*); no task-owned sampling job/caffeinate remains. No other device, local
+Homebrew install, production source, timeout, budget or action guard was changed.
+
+
+## 2026-11-06 — Further App expansion, wireless-data readiness gate
+
+After the completed23-candidate matrix, the user requested more Apps. Twelve new
+candidates are selected in the current plan; the existing before8c227a1 /after58e5c32
+installs remain hash-matched to arms.json. Fresh all-App inventory is76 entries; the
+default developer-only query returns four and must not be treated as full inventory.
+No placeholder/launchable metadata field is present. This is not evidence that all
+inventory entries can launch. Host remains macOS27.2/26B123, Xcode27.2/27B52 and
+CoreDevice651.32; only the same allocated12mini is operated.
+
+Tips launches asPID17137, but its pre-state hitsSpringBoard37: screenshot and native
+alert label show `Allow “Tips” to use wireless data?`, with WLAN & Cellular /WLAN Only /
+Don’t Allow. The first cell stops with0 measured attempts. One Home action leaves the
+card visible; no permission button was explicitly selected, and the actual OS setting
+was not queried. This is a setup gate, not native nil or CoreDevice10004. The other11
+candidates remain unattempted. The user was asked how to handle this category of new
+App network choice; the earlier Stash local-network authorization is separate.
+
+Opus5.5's expansion review confirms the external executor differs only in the appended
+candidate list and fresh inventory source (29-opus-expansion*). Its operating corrections
+are reflected in the current plan: record each authorized wireless-data decision,
+stop on other permission categories, inspect summaries even when rc0, use new cohort
+names after setup changes, and inspect actual screenshots for overlays/onboarding.
+Fixed-count discovery failures remain failures and trigger separate confirmation.
+No production change, new completed App measurement, supported acceptance, PR push or
+additional CI run is claimed by this checkpoint. Evidence is outside Git in the same
+0700 matrix directory:25-fresh-*,26-additional-app-plan.json /26-host-seed.json,
+27-additional-results.json,expand2-tips/,28-* and29-opus-expansion*.
+
+
+## 2026-11-06 — Additional Apps: Tips measured, first-use disclosure gates
+
+The user explicitly selected WLAN & Cellular for this round's new-App wireless-data
+prompts. The exact Tips alert is freshly checked and pressed once through the product
+alert guard, returning nativeAccepted=true. Pre/post screenshot and hit-PID checks show
+its content landing page. A new cohort, expand2-authorized-tips, preserves the earlier
+expand2-tips readiness failure with0 measurements instead of overwriting it.
+
+Tips has108 records and6/6 accepted per arm. Snapshot median/max ms are old full
+546.807/560.240, new full542.076/547.544, core135.638/175.469; CLI wall median/max s
+are1.232/1.396,1.208/1.452 and0.818/0.881. All18 pass the existing schema/profile/PID
+and cleanup validator, with0 state-invalid rows. Six adjacent new-full/core pairs have
+identical record counts and ordered-child path hashes. Core-after-core remains N0;
+these are not independent trials or a general success-rate improvement.
+
+The remaining11 new launch commands return CoreDevice10004 with0 target-App AX
+measurements: Compass, Podcasts, TV, Games, Preview, Freeform, Watch, Fitness,
+Voice Memos, Health and iTunes Store. These receipts do not prove an App crash or
+absence. Compass' captured transition shows a Welcome/Accept page; later ordinary AX
+and screenshot show Welcome to iTunes hosted byPID1336, matched to the running
+`/Applications/PDUIApp.app/PDUIApp`. The ordinary tree also retains a Weather disclosure.
+This identifies a first-use readiness gate in the observed cases; the other cases and
+historical13 launch failures are not retroactively assigned the same cause. Future
+10004 setup must inspect foreground/component/screenshots before further launches.
+
+A separate PDUIApp diagnostic uses the same real old/full/core installs,6 reads/arm,
+with no input during measurements. Both full arms are0/6, all AX type2 attribute52
+timeouts; core is0/6, all `AX snapshot limit reached; no partial tree emitted`.
+The core guard rejects depth>32 or a traversal beyond512 records; the exact bound
+responsible and graph size are unknown. Native request maxDepth48 is unchanged.
+The full timeout does not establish that a returned full tree would exceed that guard,
+and cannot be attributed to visibility computation alone. No partial tree is accepted.
+
+Foreground PDUIApp and the iTunes page are checked only at cohort boundaries;
+unchanged foreground during every read is an inference, not per-read proof. The
+error receipts do not report cleanup, so error-path cleanup and native drain are
+unverified. Wall median/max s are old5.532/7.502, new-full5.508/7.349 and core4.717/4.826;
+all are failed calls, not successful latency measurements. The single earlier full
+preflight timeout is excluded. This system-component row is not target-App coverage.
+
+Stopping this diagnostic at6/arm rather than the earlier30/arm foreground policy is
+a proposed data-after-sampling revision, based on the returned core tree hitting an
+unchanged acceptance guard, not on a reliability bound from0/6. Opus5.5's source-level
+method review permits this bounded revision; its first pass did not locate the external
+files, so the numerical evidence audit was explicitly rerun with absolute paths
+(33-opus-pdui* /35-opus-evidence-correction*, audit pending at this checkpoint).
+No budget/deadline, deduplication, action guard or product source is changed.
+
+Only one additional target App has completed: Tips, making10 target Apps across35
+attempted candidates so far. There are36 new measurements:18 accepted Tips reads and
+18 failed PDUI reads. Old504 plus new36 yields540 calls/431 accepted for bookkeeping
+only, not a pooled reliability rate. The metadata-only extraction peer supplied this
+separate increment (来源：peer), and main-session checks confirmed key counts/errors.
+Its sanitized-expansion-results.json leaves the old final summary unchanged.
+
+The user has been asked whether to accept the separate first-use data-use disclosures
+for the pending system Apps. No Accept & Continue or Close action was sent; network
+authorization does not imply this consent, login, purchases or independent TCC grants.
+Current exact button/frame was read only for a reviewable setup action (34-*).
+Further target-App sampling is pending that choice. Evidence stays in the same0700
+external matrix directory, including30-network-authorization.json,expand2-setup/,
+31-*/32-*,pdui-consent-discovery/,33-*/34-* and the separate sanitized increment.
+This checkpoint contains no PR push, new CI run, merge or release.
+
+
+## 2026-11-06 — PDUI diagnostic evidence audit and bounded sampling revision
+
+Opus5.5's35-opus-evidence-correction review uses absolute paths and checks the
+sanitized increment and permission preparation code. It accepts the bounded
+interpretation with corrections; it does not independently read raw receipts.
+The returned tree in core reads triggers the unchanged guard, which justifies ending
+that diagnostic at6/arm. The full arms are0/12 deadline timeouts, not structural
+failures; they are not expanded because this PDUI row is outside target-App coverage
+and supports no reliability estimate. The original target-App confirmation policy
+remains unchanged. Only cohort-boundary foreground is verified; per-read stability
+is an inference. Error-path cleanup and native drain remain unverified.
+
+Excluding this new18-call PDUI diagnostic, bookkeeping is old504 plus18 Tips calls,
+522 calls/431 accepted; this still includes the heterogeneous prior categories and
+is not a pooled success rate. The all-call540/431 figure above includes the separate
+PDUI diagnostic. The external increment now marks the bounded sampling revision
+accepted, while first-use user consent remains pending.
+
+The external setup helper now reads the actual foreground after10004 and stops for
+PID/bundle/screenshot classification before another App or cohort. This changes no
+historical classification or product code. Accept & Continue remains a separately
+pending authorization, and the network authorization file is not reused for it.
+
+
+## 2026-11-06 — Further App expansion completed: 20 measured Apps across35 candidates
+
+This record supersedes the partial coverage counts above without replacing their
+failed setup/discovery observations. Source baseline remains58e5c32; before is
+main8c227a1. arms.json's four CLI/backend hashes still match. Host is
+macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32; the sole allocated device is
+12mini, CoreDevice1D533177-5153-5A0C-9102-8D0A8ADDAEFB,
+iPhone13,1/iOS27.0/24A437. No other device or production/test/build source changed.
+
+Eleven of the12 further candidates now have actual target-main-PID observations,
+adding198 accepted/state-valid deep reads,6/6 per arm in every row,0 state-invalid.
+Together with the original nine Apps this is20 measured Apps across35 candidates.
+Snapshot medians below are successful native snapshot ms, not CLI wall latency.
+
+| App / observed state | Records | Old full ms | New full ms | Core ms |
+| --- | ---: | ---: | ---: | ---: |
+| Tips: Content home | 108 | 546.8 | 542.1 | 135.6 |
+| iTunes Store: Store catalog | 144–146 | 664.1 | 664.3 | 154.0 |
+| Preview: No Recents (main graph) | 54 | 447.0 | 443.9 | 87.2 |
+| Podcasts: Home | 147 | 657.5 | 653.4 | 170.1 |
+| TV/Videos: Empty library | 69 | 369.8 | 366.9 | 121.2 |
+| Watch: Unpaired landing | 91 | 457.2 | 465.5 | 118.7 |
+| Fitness: Welcome information | 52 | 389.1 | 391.1 | 82.8 |
+| Freeform: Empty canvas | 131 | 1496.7 | 1500.3 | 175.1 |
+| Voice Memos: No Recordings | 58 | 426.5 | 428.2 | 123.2 |
+| Compass: Dial | 10 | 88.6 | 97.4 | 64.4 |
+| Games: Game Center sign-in landing | 42 | 222.4 | 218.6 | 96.5 |
+
+Empty/onboarding/sign-in states are only those states' coverage. Preview's visible
+main title point(.5,.16) verifies mainPID17190; centre hits its embedded document
+helper, which is not claimed as main-graph coverage. Fitness' actual Welcome Continue
+point(.5,.92) verifies mainPID17279 without pressing it. Games' title(.5,.36) verifies
+mainPID17305 despite error8 at the blank centre; the sign-in button is not pressed.
+All queries retain explicit main PID and strict root/schema/profile/cleanup guards.
+Failed centre-point readiness cohorts remain0 measured attempts, not AX failures,
+replacement trials or version recoveries. Complete markers and pre/post screenshots
+were checked; rc0 alone was not used as success.
+
+First-use data-use Accept & Continue, wireless-data WLAN & Cellular and location
+Allow While Using App were separately approved by the user. Compass' actual matching
+location and network cards are each pressed once through the product modal guard;
+both receipts verify the original card disappears. Voice Memos' earlier location
+card disappears before its authorized choice is sent, so no location click or OS
+setting change is claimed for it. Only this task's newly launched old Voice Memos
+process is terminated during that gate recovery, with fresh ownership/process proof;
+no shared helper or existing user process is killed. Its later No Recordings page
+is measured with no recording action. Freeform's optional iCloud invitation is
+dismissed using Not Now, then its automatically presented empty canvas is read.
+No login, cloud-sync enabling, pairing, playback, purchase or profile submission occurs.
+No notification permission button is explicitly chosen; Home dismissal does not
+establish an OS permission value. Health stops at the prefilled personal-profile form,
+with no target AX measurements or entered/submitted values; its private defaults
+are not retained in committed evidence. The original13 activation refusals and
+Bitwarden authentication gate remain separate and unexplained by later setup success.
+
+Two setup taps were visibly above the actual Fitness/Freeform informational Continue
+buttons and had no observed effect. Their receipts are kept as coordinate setup
+errors; new correctly targeted actions are based on fresh screenshots, not automatic
+replay after an uncertain semantic action. They are not measured AX failures.
+
+Same-block child-index path/unreachable-count topology comparisons show no drift
+in ten new Apps (6/6 matching per arm pair). iTunes Store has one old-full/new-full,
+two old-full/core and one new-full/core drift pairs out of6 each, with144–146 records;
+local IDs, attributes and text are not part of this topology hash. This does not prove
+all values/identities are identical. Across the11 cohorts the first arm is core4,
+new-full4, old-full3. Core's previous arm is none4/old-full29/new-full33; core-after-core
+remainsN0. These small, shared-host carryover strata do not establish drain or causal
+failure probabilities. The new largest deep graph is147, below the existing279.
+
+The same6/arm permutations, rotated first arm, fresh PID inventory,3s requested gap,
+actual previous-arm/gap and shared-host load logging remain in force. Foreground is
+verified at cohort boundaries, not every read; between blocks only lock state is
+checked. Native drain and independent trials are not proven. The separate PDUI
+18-call diagnostic and its previously audited bounded sampling revision remain
+outside target-App coverage; it is not silently pooled with these successes.
+
+One extra same-default-path Freeform locate experiment uses the predeclared unique
+identifier Freeform.CRLiOSBoardView/class UINavigationBar from all six old-full
+canvas discovery snapshots. Both default CLI arms pass6/6, with0 state-invalid,
+unique target and closed connection/tunnel. Query median/range ms are old
+1493.137/[1481.082,2074.478], new174.343/[168.215,181.230] (about8.6x median).
+CLI wall median/range s are old2.583/[2.316,12.674], new1.201/[1.145,2.388].
+Old ordinal9 and10 take12.674/8.170s overall despite much shorter query time;
+shared-host load is recorded but the residual cost is not assigned to a cause.
+No samples are removed and no tail guarantee is made. This extends default locate
+to six App states plus the earlier separate permission card; it does not compare
+wait/press/end-to-end input effects. The explicit deep-core result is a different
+requested-attribute contract and is not substituted for default full.
+
+The11 new deep cohorts plus this locator add210 registered measurements/210 accepted.
+The original heterogeneous504/413 plus this increment is714/623; adding the separate
+PDUI18/0 gives732/623. These are bookkeeping totals, never a pooled success rate;
+setup/preflight CLI reads and zero-measurement gates are not included. No improvement
+in natural-failure success is demonstrated. The controlled background nil remains
+0/18 per arm; the initial search timeout does not recur in30/arm confirmation.
+Largest accepted state is still279 records. Other devices,300–512 records, complete
+Web content, cold-first reliability and the supported full physical HID/media gate
+remain unverified. Production remains the same tested58e5c32 package; any later CI
+package is a separate, not device-tested artifact.
+
+Evidence remains outside Git in the0700 matrix directory: sanitized-consented-
+expansion-results.json (metadata-only extraction, 来源：peer; key rows/guards and
+receipts checked by main), expand2-* cohorts,36/42 permission authorizations,
+41 process ownership,44–51 readiness/setup,47 locator plan,52 point-check delta,
+and53-final-home. Raw screenshots/AX labels/values and ad hoc scripts are not committed.
+The12mini is restored to Home with screenshot and stableSpringBoard37 hit; all
+measurement jobs have completed. Actual Opus final interpretation review is recorded
+below after completion; no merge or release is performed.
+
+
+## 2026-11-06 — Final Opus interpretation review and clarifications
+
+Actual claude-opus-5-5 reads all six explicitly supplied metadata/plan/record/PR/delta
+files bound to139f626 (56-opus-review-binding.json). Its result is conditional ACCEPT
+for interpretation/delivery scope, with two required wording corrections: limit core
+improvement to snapshot medians, and state that residual wall tails are unattributed
+with no tail guarantee. Main applies and checks both corrections in the current plan
+and PR description; this is not a new Opus review of a later commit or full supported
+matrix/merge approval. It does not audit the full verification.md, authorization text,
+raw process evidence or the old504-call source; those remain earlier/main proof layers.
+
+All11 new deep snapshot medians are lower with core. This does not imply lower wall
+medians or maxima: Compass core wall median0.8825s exceeds old-full0.810s, and its
+snapshot maximum exceeds both full arms. The locator's12.674s wall maximum has no
+assigned cause and is not a tail guarantee; no sample is removed.
+
+Read “sole allocated device” in the preceding record as “only device operated by
+this task”:13Pro remains allocated to another concurrent task. Fitness has exactly
+one missed setup tap above Continue, followed only by a read-only hit at its actual
+Continue button and the Welcome-page cohort; no correctly targeted Continue tap is
+sent. Freeform has exactly one above-button miss, then one freshly targeted Continue
+tap before its optional iCloud Not Now action. Thus there are two coordinate misses
+total, and the earlier plural “correctly targeted actions” does not mean Fitness was
+advanced. Compass has both separately authorized location and network actions.
+TV's measured state is the empty library. Metadata privacy statements mean no private
+content is included in that sanitized file, not that all local raw screenshots were
+deleted. Raw private evidence remains outside Git under the existing retention scope.
+
+The deep-only first-arm/previous-arm strata above must not be applied to the locator.
+Freeform locate ordinal order is new,old,old,new,new,old,old,new,new,old,old,new,
+where old/new mean default CLI arms; each has6 samples. Query/wall observations and
+actual previous-arm/gap are retained in rows.json and the sanitized metadata. Consecutive
+old arms, high shared-host load and unproven native drain limit causal interpretation.
+
+CI run42190368556 on139f626 passes native build, host regressions and staged package,
+then fails while cloning homebrew/core during the existing180s brew-install deadline.
+The failed log does not demonstrate a product regression. No timeout/build/test source
+is changed; the final documentation commit receives a fresh normal CI run. The full
+physical matrix remains a separate unrun gate. Review receipts and the failed CI result
+stay in56-opus-final* /57-ci-* outside Git; final CI status is linked in PR15.
+
+
+## 2026-11-06 — Background Settings nil: wire and AX server-port boundary
+
+The user requested further acquisition-failure diagnosis and repair. Source stays
+58e5c32 at documentation head28582fc. Host macOS27.2/26B123, Xcode27.2/27B52,
+CoreDevice651.32; device12mini/iPhone13,1/iOS27.0/24A437, explicit CoreDevice
+UUID1D533177-5153-5A0C-9102-8D0A8ADDAEFB. The active PocketAgent task remains
+on13Pro; only12mini is operated. Initial screenshot/hit confirms Home/SpringBoard37.
+
+An external passive request/decode tap preserves the hash-verified product backend,
+all options and decoder. Settings PID7976 is129 nodes with both full/core; after
+nonterminating Calculator activation, explicit Settings reads fail in both profiles.
+Raw type1 replies still provide the same PID/application flag/objectID. Raw type2
+replies have attribute52, matching associated identity, error0, and resultData pointing
+to archive UID0 (not a missing key or host decode substitution), in6–7ms. The whole
+CLI takes0.764/0.817s. Ordinary type5 returns error17 with only fields45/27/30/51;
+it is rejected and no graph is accepted. Calculator foreground is checked before/after.
+Returning Settings to foreground retains PID7976/root identity and restores129 nodes.
+
+A separate external experiment keeps one DTX connection and root across foreground
+full129→Calculator foreground hit→type5 error17→same-root type2 nil→fresh-root
+type2 nil→Settings foreground hit→same-root full129. The final restored schema/profile
+and closed connection/tunnel pass compact_observe. Its duration includes setup and is
+not a product latency sample. A separate isolated clientType2 research override,
+based on shipped Xcode client metadata, leaves deep nil/ordinary17 unchanged versus
+clientType0; this is not a proposed production fix. These are layered diagnostics,
+not independent reliability trials or additional successes in the earlier matrix.
+
+Static evidence uses the actual product's iPhone13,1 27.0 (24A437)/Symbols frameworks:
+APT UUID AA0429D2-50DA-3B83-9C2A-A8D9E752581D, AXRuntime
+6A0D8F1C-E84D-3040-90DC-881A282774AF and UIAccessibility
+A6B3716C-8C01-3104-87F6-18F7F7B1D819.14,2 files share UUIDs but differ in hashes
+and some VM addresses, so13,1 paths are rechecked rather than reusing addresses.
+APT's multiple-attribute status table maps signed-25215 (0xffff9d81) to17. AXRuntime
+CopyAttribute no-port branch returns-0x627f; __AXGetPortFromCache can return zero
+when the allows-suspended byte is false and its PID-suspended predicate is true, or
+when ordinary lookup fails. Thus no-port is supported, but the exact runtime cause
+and OS-process suspension are not established. Client-type override uses a separate
+global from __AXSetAllowsSuspendedAppServer; no wire setter is established. Static
+extraction is 来源：peer; main checks key branch evidence and all live wire observations.
+
+Actual Opus5.5's first discussion independently requests the ordinary and same-session
+controls; they are now executed. A follow-up discussion receives sanitized findings
+and the bounded static evidence. No original-position background acquisition or
+production repair is claimed. The user is deciding whether recovery may explicitly
+activate an App; current ui must not silently activate, replay an action or emit a
+cached/partial tree as success. Existing launch terminates a running instance and is
+not a same-PID recovery substitute. Production, timeouts, graph budgets and guards
+remain unchanged at this checkpoint.
+
+Evidence:0700 directory /Users/borealin/Documents/Codex/2026-11-06/ipb-ax-background-nil/,
+01-opus-*,02/03 host/device readiness,04-repro raw archives/summary,06-same-session,
+07 AXRuntime disassembly,08 client-type control,09 sanitized layer results,10-opus-*,
+and peer-* binary hashes/mappings. Raw user AX/screenshot data and ad hoc probes are
+not committed. This record does not supersede prior background refusal counts or
+prove full supported HID/media acceptance.
+
+
+## 2026-11-06 — Background recovery boundary after Opus discussion
+
+Opus5.5's10-opus follow-up checks the sanitized wire findings and static snippets.
+It finds no additional source-backed original-position background read RPC under
+the no-injection/no-unverified-request constraints; the exact runtime branch remains
+unresolved. Main independently checks the key AXRuntime no-port branch. This is not
+a proof that every Apple background AX mechanism is impossible, nor an acceptance
+of a production repair. No product source has changed.
+
+Two explicit CoreDevice launch controls retain Settings PID7976. Omitting activation
+flags records activatedWhenStarted=true (the installed CLI documents --activate as
+default). With explicit --no-activate, the receipt records false but the post-command
+hit is Settings7976 rather than Calculator17257, and a screenshot confirms Settings
+Apps is foreground. That probe stops on the foreground mismatch before any AX samples,
+so it establishes no background read success. This result is specific to the same
+12mini/24A437 and running Settings setup; it is not a general flag-support claim.
+
+Main then checks the existing generic ipb devicectl passthrough (bin/ipb:1270):
+it can issue explicit process launch --activate without --terminate-existing. A new
+activate command is unnecessary. The separate Duo branch72a69e6 already routes
+launch through Sources/ipb_physical.py's nonterminating activation; that branch is
+only read for ownership/compatibility and is not edited/rebased. The user's pending
+behavior question concerns explicit foreground recovery, not permission to add a
+duplicate implementation. User choice remains required before changing the recovery
+contract; ui continues to fail background requests without changing the foreground.
+
+Evidence:11-without-activation and12-no-activate receipts/hit/capture,10-opus-followup*
+in the same0700 external directory. Earlier passive-wire and no-port evidence remain
+valid. The preceding proposal for a new activate command is superseded by reuse of
+the existing passthrough/owning physical adapter.
+
+
+## 2026-11-06 — Authorized explicit foreground AX recovery verified
+
+The user explicitly selected “允许显式激活恢复（推荐）”. The delivered behavior is
+explicit activation followed by a fresh read; ui itself stays read-only. Current
+source fixes a reachable CLI failure in that recovery entry, rather than claiming
+original-position background AX support. The first complete source baseline58e5c32
+is retained. Investigation checkpoints areb2f6888/abe996e; source fix isc8a76ff.
+
+**Reproduction and fix:** the first source-CLI recovery attempt uses the documented
+ipb devicectl device process launch --activate … bundle form. The old passthrough
+appends --device after the bundle, so CoreDevice treats it as an App argument and
+exits64, Missing expected argument --device. No activation is sent and no recovery
+read is attempted in that cell. The fix puts the selected device before user arguments
+only for the exact device/process/launch prefix; other raw routes remain unchanged.
+Quoted argument forwarding is preserved. No activate command, automatic AX fallback,
+connection cache, timeout/budget increase or native identity relaxation is added.
+
+A conditional nil hint now points to explicit nonterminating foreground recovery and
+the new activation receipt's PID. It does not diagnose every nil as background or
+suspension. Existing session tests additionally require requests=[1,2], zero actions
+and closed connections on nil/timeout. The existing interface test suite gains one
+standard REMAINDER-parser regression for the real device-before-App-arguments boundary
+and unchanged App payload. It fails with the prior argument order and passes with
+the fixed order. Native production source is unchanged.
+
+**Physical run:** sourcec8a76ff, same12mini/CoreDevice UUID
+1D533177-5153-5A0C-9102-8D0A8ADDAEFB, iPhone13,1/iOS27.0/24A437;
+macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32. The source CLI/backend is
+hash-bound in the run plan, with the unchanged verified58e5c32 native helper and
+pinned Python/pymobiledevice3.13Pro remains assigned to the other active task.
+Each cycle prepares the target, reads a full foreground control, activates the
+occluder, checks lock/foreground, performs one failing full and core read, explicitly
+activates the target once via the fixed CLI, then validates fresh full/core snapshots.
+There are no action/read retries, replacement trials or business-content edits.
+
+| Target / observed state | Recovery cycles | Background full / core | Recovered full / core | Records |
+| --- | ---: | --- | --- | ---: |
+| Settings / Apps | 3 | 0/3 and0/3 | 3/3 and3/3 | 129 |
+| Calculator / existing calculation display | 1 | 0/1 and0/1 | 1/1 and1/1 | 45 |
+
+All four activation receipts retain the pre-occlusion PID, with activatedWhenStarted
+true and terminateExistingInstances false. Before/after screenshots confirm the
+Settings page and Calculator display value are preserved. Similar/identical target
+frames are expected because activation preserves that page; intervening occluder
+checks confirm the background state. All recovered graphs match their foreground
+control's record count and ordered child-index paths and pass compact_observe with
+closed connection/tunnel. This topology comparison does not prove every attribute
+is unchanged. These few state transitions are not independent reliability trials,
+a general activation guarantee, or a fix for native background reads. All eight
+background reads still fail and emit no successful/partial tree.
+
+**Other checks:**91 AX host tests and10 interface tests pass. SMOKE_AX_ONLY passes
+on the same source/device with ordinary AX, deep full, full-state and graph/cleanup
+contracts; the full HID/media gate is not run. Actual claude-opus-5-5 accepts the
+c8a76ff source diff without mandatory findings (16-opus-source*); it performs static
+review, not the device run. Main applies its nonblocking suggestion to qualify the
+nil hint with authorization, then reruns the existing focused nil/timeout regression
+and checks the final live error: rc1/result null with the qualified cue, Calculator
+still foreground before/after. This final text-only refinement does not alter the
+activation/read wire path. No subsequent native/backend behavior changes are made.
+
+Evidence stays outside Git under the0700 background-nil directory:14-authorized-
+recovery retains the zero-read parser failure and user approval;15-verified-recovery
+contains exact source hashes, activation receipts, complete rows and pre/post images;
+16-* contains Opus source review;17-ax-smoke contains the gate;18-final-cue-and-home
+contains the final cue/source hashes and stableSpringBoard37 Home proof. Raw user
+AX/screenshot content and ad hoc scripts are not committed. The task's device
+operations are finished. PR15 records the final CI/artifact links; a new CI artifact
+is a separate build and is not a device-tested package. No merge/release is performed.

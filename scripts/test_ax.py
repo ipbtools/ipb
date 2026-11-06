@@ -88,7 +88,11 @@ class ArchiveTests(unittest.TestCase):
                      ("ipb ui", "press", "--deep", "--full-state", "--identifier", "fixture-id"),
                      ("ipb ui", "hit-test", "--deep", "--full-state"),
                      ("ipb ui", "press", "--deep", "--identifier", "fixture-id"),
-                     ("ipb ui", "hit-test", "--deep")):
+                     ("ipb ui", "hit-test", "--deep"),
+                     ("ipb ui", "--native-profile", "core"),
+                     ("ipb ui", "--native-profile", "full"),
+                     ("ipb ui", "locate", "--deep", "--native-profile", "core", "--identifier", "fixture-id"),
+                     ("ipb ui", "--deep", "--native-profile", "unknown")):
             with self.subTest(argv=argv), patch("sys.argv", list(argv)), redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as raised:
                     ipb_ax.main()
@@ -353,7 +357,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
     async def run_capture(self, mode, *, deep=False, full_state=False, operation="capture", pid=42,
                           identifier="fixture-id", label=None, value=None, class_name=None,
                           wait_for="present", timeout=5.0, text="replacement", input_cli="/fixture/bin/ipb",
-                          alert_label="Settings would like to paste from Safari"):
+                          alert_label="Settings would like to paste from Safari", native_profile=None):
         state = {"requests": [], "attribute_requests": [], "structural_state_requests": [], "closed": False,
                  "dtx_closed": False, "root_reads": 0, "wire_requests": [],
                  "events": [], "display_calls": 0, "action_submissions": 0, "snapshot_reads": 0,
@@ -646,6 +650,10 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                                                   snapshot(container, [snapshot(CHILD)], attrs=container_attrs)])
                     if mode == "native-nil":
                         result = None
+                    if mode == "native-core-extra-visibility":
+                        result = snapshot(TOKEN, [snapshot(CHILD, attrs={2003: FRAME, 2025: "invalid"})])
+                    if mode == "native-visibility-busy" and 2025 in req["parameters"]["parameter"]["attributes"]:
+                        result = None
                     if mode == "native-child-pid-mismatch":
                         result = snapshot(TOKEN, [snapshot({**CHILD, "pid": CHILD["pid"] + 1})])
                     if mode == "native-truncated":
@@ -830,7 +838,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                                   label=label, value=value, class_name=class_name,
                                   wait_for=wait_for, wait_state=wait_for, timeout=timeout,
                                   text=text, replace_all=True, input_cli=input_cli, input_state="not-sent",
-                                  alert_label=alert_label, json=True)
+                                  alert_label=alert_label, json=True, native_profile=native_profile)
         async def fake_input_child(cli, device_id, child_text):
             state["input_child_calls"] = state.get("input_child_calls", 0) + 1
             state["input_child_argv"] = [cli, "-s", device_id, "text", "--replace-all", child_text]
@@ -850,6 +858,59 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                     state["scroll_state"] = args.scroll_state
                     state["input_state"] = args.input_state
                     return None, state, error
+
+    async def test_unused_visibility_does_not_block_exact_operations(self):
+        for operation in ("locate", "wait", "press", "input"):
+            with self.subTest(operation=operation):
+                result, state, error = await self.run_capture("native-visibility-busy", operation=operation)
+                self.assertIsNone(error)
+                self.assertIsNotNone(result)
+                if operation == "locate":
+                    self.assertTrue(result["unique"])
+                if operation == "wait":
+                    self.assertEqual(result["status"], "satisfied")
+                self.assertEqual(state["action_submissions"], int(operation == "press"))
+                self.assertEqual(state.get("input_child_calls", 0), int(operation == "input"))
+                if operation == "input":
+                    self.assertTrue(result["postconditionVerified"])
+                self.assertTrue(state["closed"] and state["dtx_closed"])
+        for profile in (None, "full"):
+            result, state, error = await self.run_capture("native-visibility-busy", deep=True, native_profile=profile)
+            self.assertIsNone(result)
+            self.assertIn("snapshot unavailable", str(error))
+            self.assertEqual(state["action_submissions"], 0)
+            self.assertTrue(state["closed"] and state["dtx_closed"])
+        result, state, error = await self.run_capture("native-visibility-busy", deep=True, native_profile="core")
+        self.assertIsNone(error)
+        self.assertEqual(result["nodeCount"], 2)
+        self.assertEqual(result["nativeVisibility"], "not-requested")
+
+    async def test_core_observation_preserves_graph_and_separates_supplemental_state(self):
+        full, _, error = await self.run_capture("native-deep-visible-priority", deep=True, native_profile="full")
+        self.assertIsNone(error)
+        self.assertNotIn("nativeAttributeProfile", full)
+        self.assertNotIn("nativeVisibility", full)
+        core, _, error = await self.run_capture("native-deep-visible-priority", deep=True,
+                                              native_profile="core", full_state=True)
+        self.assertIsNone(error)
+        self.assertEqual(core["nativeAttributeProfile"], "core")
+        self.assertEqual(core["nativeVisibility"], "not-requested")
+        self.assertEqual(core["stateScope"], "native-snapshot")
+        self.assertEqual(core["nodeCount"], full["nodeCount"])
+        for original, node in zip(full["nodes"], core["nodes"]):
+            self.assertEqual({k: v for k, v in original.items() if k != "visible"},
+                             {k: v for k, v in node.items() if k != "supplementalAX"})
+            self.assertNotIn("visible", node)
+        self.assertIs(core["nodes"][1]["supplementalAX"]["visible"], True)
+        for mode in ("native-core-extra-visibility", "native-truncated"):
+            result, _, error = await self.run_capture(mode, deep=True, native_profile="core")
+            if mode == "native-truncated":
+                self.assertIsNone(result)
+                self.assertIn("truncated", str(error))
+            else:
+                self.assertIsNone(error)
+                self.assertEqual(result["nodes"][1]["frame"], FRAME)
+                self.assertNotIn("visible", result["nodes"][1])
 
     async def test_default_ordinary_schema_and_description_contract_are_unchanged(self):
         result, state, error = await self.run_capture("description")
@@ -1171,6 +1232,8 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                 result, state, error = await self.run_capture(mode, deep=True)
                 self.assertIsNone(result)
                 self.assertIn(expected, str(error))
+                self.assertEqual(state["requests"], [1, 2])
+                self.assertEqual(state["action_submissions"], 0)
                 self.assertTrue(state["closed"] and state["dtx_closed"])
 
     async def test_full_state_supplement_is_per_unique_handle_and_keeps_native_fields(self):

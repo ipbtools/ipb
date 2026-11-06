@@ -59,7 +59,7 @@ echo native stderr, cancellation reasons, selectors, text, environments or comma
 | Tool | Additional arguments / behavior |
 | --- | --- |
 | `devices` | No arguments; enumerate physical-device metadata |
-| `observe` | Optional positive `pid`; fresh `ui --deep --json`, native-only compact tree |
+| `observe` | Optional positive `pid` and `nativeProfile=full/core` (default `full`); fresh native-only compact tree |
 | `locate` | At least one exact selector; optional `pid` |
 | `wait` | Exact selectors, optional `pid`, `waitFor=present/absent`, `timeout` in (0,15] seconds |
 | `press` | Exact selectors, optional `pid`; one guarded native action |
@@ -116,6 +116,14 @@ transport metadata and redundant per-node source/depth fields. It does not synth
 missing fields, containers, hittable state or XCTest types. It requires a complete matching
 native deep graph and successful cleanup. A nonzero retained native result stays in its
 original form and cannot clear isolation.
+
+`nativeProfile` is accepted only by `observe`. Omitted or `full` keeps the existing
+`ui --deep --json` invocation and output. `core` adds `--native-profile core`; it retains
+the complete hierarchy, geometry and text while omitting node `visible`, and reports
+`nativeAttributeProfile="core"` with `nativeVisibility="not-requested"`. The adapter checks
+that both fields appear together with those exact values, that they match the requested
+profile, and that core nodes contain no `visible` field. It rejects mismatches rather than
+returning a different profile or clearing `observeRequired` isolation.
 
 All device reads/writes acquire an in-server UUID lock and a cross-server flock. The server
 owns the lock FD; CLI children do not inherit it, so input's nested `text` cannot deadlock

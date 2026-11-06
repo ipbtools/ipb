@@ -16,7 +16,10 @@ once. v0.5.0 adds exact locators/waits, selector-qualified press, text replaceme
 checks the actual first responder, one-shot scroll-to-visible and explicitly selected
 system-alert buttons. Since v0.4.0, `--deep` is a native-only observation
 (JSON schema 2); `--deep --full-state` adds separately
-reported state/role reads under `supplementalAX`. A failed supplementary read returns
+reported state/role reads under `supplementalAX`. This development revision adds
+`--deep --native-profile core` to omit costly native visibility, with explicit provenance
+and no node `visible` field; default/explicit `full` keeps the existing output.
+See [the UI guide](docs/ui.md#explicit-core-observations). A failed supplementary read returns
 nonzero while preserving a validated native tree after successful cleanup. Default
 `ipb ui` retains the ordinary AXChildren graph and JSON schema 1. It uses an optional host Python
 backend; it installs nothing on the phone and starts no XCTest session. This is an AX graph, not a dump of every UIKit view.
@@ -183,6 +186,11 @@ explicit; timeout recovery on a fresh connection is not implemented.
 
 See [the UI guide](docs/ui.md) for setup, JSON fields, text policy, bounds and the AX/XCTest
 comparison. Availability depends on the [installation channel](#installation-channels).
+
+Background App AX reads can fail with a native nil or error17. When changing the
+foreground is authorized, use the [explicit foreground recovery](docs/ui.md#explicit-foreground-recovery)
+to activate without requesting termination and then read using the new receipt's PID.
+`ui` itself remains read-only; this is not background AX support.
 
 ### Agent tools (`ipb mcp`)
 

@@ -3526,10 +3526,14 @@ no requirement demonstrated here to start XCTest or change Automation Mode.
 
 Use the existing raw AX remote service / DTX channel0 and one outstanding read.
 This is a decoded secure keyed archive, not JSON on the wire. The following is the
-five-attribute research control. The current product adds hint, visibility and native
-class/bundle attributes; its exact list is
+five-attribute research control. Default deep dumps, scroll and alert operations add
+hint, visibility and native class/bundle attributes; their full list is
 `[2001,2002,2003,2004,5019,2006,2025,5003,5004,3003]`
 (Sources/ipb_ax.py SNAPSHOT_ATTRS).
+Locate/wait/press use the same options with2025 omitted (`CORE_SNAPSHOT_ATTRS`);
+input adds3002 to that core list. These operations do not consume native2025 and
+retain their existing live-state/identity/frame/hit checks. The November6 simulator
+workload comparisons and host refusal control are recorded in verification.md.
 
 ```text
 AXPTranslatorRequest {
@@ -3567,7 +3571,7 @@ from constant array0x1ed2e3288 (storage0x1e157b9c0):
 `[5019,2001,5047,5048,5049,5050,2004,5003,5004,5009,2002,2020,3003,2006,2003,5034,5041,5042,2021,2123,5062,5063]`.
 That full array also returns the same Settings hierarchy;14 native fields are present
 somewhere. Native5003/5004 return class/type strings;3003 returns bundle ID.
-The product requests these three plus the basic five, hint2002 and visibility2025, preserving the three numeric
+The full profile requests these three plus the basic five, hint2002 and visibility2025, preserving the three numeric
 keys under `nativeAttributes`; it does not infer XCUIElementType or unknown state flags.
 
 ### Product decoding and observation contract
@@ -3598,6 +3602,14 @@ Deep JSON schema2 preserves path occurrences and reports `attributePolicy=native
 old ordinary count/navigation relations. The default ordinary dump and actions retain
 schema1. Native child counts, PID/root/archive/graph limits and nil/truncation failures
 remain mandatory; there is no shallow fallback or partial native tree.
+
+The development `--native-profile core` dump uses the same request/options except that
+native2025 is omitted, as in the November6 simulator workload controls recorded in
+verification.md. Its product projection excludes native visibility even if returned as
+an extra field, and reports `nativeAttributeProfile=core` plus
+`nativeVisibility=not-requested`. This is a requested-attribute policy, not a new Apple
+wire field or a claim that an element is invisible. Default/explicit full output is
+unchanged; later full-state visibility remains separately attributed below.
 
 Optional `--full-state` reads the already-proven AXP27/28/30/32/42/45/46/51 fields once
 per unique native handle after primary validation. Fields stay in node.supplementalAX;
@@ -3763,7 +3775,9 @@ record at the application root. While Settings search receives keyboard input,
 its nested element identity equals the tree's `UISearchBarTextField`; after
 pressing the observed search Close button, root3002 and3023 are nil. The earlier
 AXP28/assistive-technology focus is not used as keyboard-responder proof.
-Input-only requests add3002; ordinary and default deep requests are unchanged.
+Input-only requests add3002 to the core list without2025; its same-snapshot
+responder/target identity, traits and value checks remain unchanged. Ordinary and
+default deep requests are unchanged.
 
 Literal replacement reuses the existing39-byte complete-held KeyboardReports.
 It prepends `{Command}`, `{Command,A}`, `{A}`, `{}` to the existing

@@ -34,7 +34,8 @@ def tool(name, description, properties, required):
 
 tool("devices", "List physical devices via ipb TSV. No automatic device selection.", {}, ())
 tool("observe", "Fresh compact native deep snapshot; IDs expire with this result. No hittable/XCTest type.",
-     {"device": DEVICE, "pid": PID}, ("device",))
+     {"device": DEVICE, "pid": PID,
+      "nativeProfile": {"type": "string", "enum": ["full", "core"]}}, ("device",))
 for name in ("locate", "wait", "press", "input", "scroll_to_visible"):
     props = {"device": DEVICE, "pid": PID, **EXACT}
     required = ["device"]
@@ -112,6 +113,8 @@ def command(name, arguments):
     if name in {"observe", "locate", "wait"} | AX_ACTIONS:
         argv += ["ui"]
         argv += ["--deep"] if name == "observe" else [name.replace("_", "-")]
+        if name == "observe" and a.get("nativeProfile", "full") == "core":
+            argv += ["--native-profile", "core"]
         argv += ["--json"]
         if "pid" in a:
             argv += ["--pid", str(a["pid"])]
@@ -157,8 +160,10 @@ def loads(raw):
     return json.loads(raw, parse_constant=reject, parse_float=number, object_pairs_hook=pairs)
 
 
-def compact_observe(raw, device):
+def compact_observe(raw, device, requested_profile="full"):
     """Project a complete schema2 observation, keeping absent and false fields distinct."""
+    if requested_profile not in ("full", "core"):
+        raise ValueError("invalid requested native attribute profile")
     if (not isinstance(raw, dict) or raw.get("schemaVersion") != 2
             or raw.get("deviceIdentifier", "").lower() != device.lower()
             or not isinstance(raw.get("snapshotId"), str) or not raw["snapshotId"]
@@ -168,6 +173,18 @@ def compact_observe(raw, device):
             or raw.get("rootStable") is not True
             or raw.get("rootStabilityScope") != "application-identity"):
         raise ValueError("not a complete matching native deep observation")
+    has_profile = "nativeAttributeProfile" in raw
+    has_visibility = "nativeVisibility" in raw
+    if has_profile != has_visibility:
+        raise ValueError("incomplete native attribute profile metadata")
+    if not has_profile:
+        returned_profile = "full"
+    elif (raw["nativeAttributeProfile"], raw["nativeVisibility"]) == ("core", "not-requested"):
+        returned_profile = "core"
+    else:
+        raise ValueError("invalid native attribute profile metadata")
+    if returned_profile != requested_profile:
+        raise ValueError("native attribute profile does not match request")
     cleanup = raw.get("cleanup", {})
     application = raw.get('application')
     if (not isinstance(application, dict) or type(application.get('pid')) is not int
@@ -187,6 +204,8 @@ def compact_observe(raw, device):
                 or node["id"] in by_id or not isinstance(node.get("children"), list)
                 or type(node.get("depth")) is not int or not 0 <= node["depth"] <= 32):
             raise ValueError("invalid native node record")
+        if returned_profile == "core" and "visible" in node:
+            raise ValueError("core observation contains native visibility")
         by_id[node["id"]] = node
     roots = [node for node in nodes if node.get("parentId") is None]
     if len(roots) != 1 or roots[0]["depth"] != 0:
@@ -210,13 +229,14 @@ def compact_observe(raw, device):
               "externalProcessReference")
     meta = ("snapshotId", "deviceIdentifier", "application", "coordinateSpace", "displayFrame",
             "atomic", "rootStable", "rootStabilityScope", "hierarchySource", "attributePolicy",
-            "stateScope", "nodeCount", "uniqueElementCount", "snapshotMs", "queryMs")
+            "stateScope", "nativeAttributeProfile", "nativeVisibility", "nodeCount",
+            "uniqueElementCount", "snapshotMs", "queryMs")
     return {"kind": "ipb.mcp.observation", "version": 1, "sourceSchemaVersion": 2,
             **{key: raw[key] for key in meta if key in raw}, "idsScope": "this-observation-only",
             "nodes": [{key: node[key] for key in fields if key in node} for node in nodes]}
 
 
-def adapt(name, device, exit_code, stdout, *, interrupted=None):
+def adapt(name, device, exit_code, stdout, *, interrupted=None, requested_profile="full"):
     """v0.5.0 fallback is command-family scoped. stderr is never submission evidence."""
     read = name in READS
     result, parse_error = None, False
@@ -283,7 +303,7 @@ def adapt(name, device, exit_code, stdout, *, interrupted=None):
     error = interrupted or ("invalid-cli-json" if parse_error and exit_code == 0 else None)
     if name == "observe" and ok:
         try:
-            result = compact_observe(result, device)
+            result = compact_observe(result, device, requested_profile)
         except (ValueError, TypeError, AttributeError, KeyError):
             ok, error = False, "invalid-native-observation"
     if name == "devices" and ok:

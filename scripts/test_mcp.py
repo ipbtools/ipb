@@ -86,6 +86,12 @@ class AdapterTests(unittest.TestCase):
                     self.assertEqual(argv[:2], ['-s', DEVICE])
         self.assertEqual(adapter.command('observe', cases['observe']),
                          ['-s', DEVICE, 'ui', '--deep', '--json', '--pid', '42'])
+        self.assertEqual(adapter.command('observe', {**cases['observe'], 'nativeProfile': 'full'}),
+                         ['-s', DEVICE, 'ui', '--deep', '--json', '--pid', '42'])
+        self.assertEqual(adapter.command('observe', {**cases['observe'], 'nativeProfile': 'core'}),
+                         ['-s', DEVICE, 'ui', '--deep', '--native-profile', 'core', '--json', '--pid', '42'])
+        observe_schema = next(t['inputSchema'] for t in adapter.TOOLS if t['name'] == 'observe')
+        self.assertEqual(observe_schema['properties']['nativeProfile']['enum'], ['full', 'core'])
         self.assertIn('literal $(never-run) 中文\n', adapter.command('input', cases['input']))
         self.assertIn('--class', adapter.command('press', cases['press']))
         self.assertNotIn('--full-state', adapter.command('observe', cases['observe']))
@@ -97,6 +103,7 @@ class AdapterTests(unittest.TestCase):
         invalid = [('observe', {}), ('observe', {'device': '11111111'}),
                    ('observe', {'device': 'phone'}), ('observe', {'device': DEVICE, 'pid': True}),
                    ('observe', {'device': DEVICE, 'point': [0, 0]}),
+                   ('observe', {'device': DEVICE, 'nativeProfile': 'cheap'}),
                    ('press', {'device': DEVICE}), ('press', {'device': DEVICE, 'id': 'n1'}),
                    ('press', {'device': DEVICE, 'label': ''}),
                    ('press', {'device': DEVICE, 'label': 'bad\0arg'}),
@@ -125,8 +132,40 @@ class AdapterTests(unittest.TestCase):
         self.assertNotIn('hittable', node)
         self.assertNotIn('type', node)
         self.assertNotIn('enabled', node)
+        self.assertNotIn('nativeAttributeProfile', out['result'])
+        self.assertNotIn('nativeVisibility', out['result'])
         self.assertEqual(out['businessVerified'], 'unknown')
         self.assertEqual(raw, original)
+
+    def test_observe_profile_metadata_and_visibility_match_the_request(self):
+        raw = snapshot()
+        raw.update(nativeAttributeProfile='core', nativeVisibility='not-requested')
+        for node in raw['nodes']:
+            node.pop('visible', None)
+        out = adapter.adapt('observe', DEVICE, 0, json.dumps(raw), requested_profile='core')
+        self.assertTrue(out['ok'], out)
+        self.assertEqual(out['result']['nativeAttributeProfile'], 'core')
+        self.assertEqual(out['result']['nativeVisibility'], 'not-requested')
+        self.assertTrue(all('visible' not in node for node in out['result']['nodes']))
+
+        invalid = []
+        invalid.append((snapshot(), 'core'))  # Requested core, but got full.
+        invalid.append((raw, 'full'))  # Requested full, but got core.
+        partial = copy.deepcopy(raw)
+        partial.pop('nativeVisibility')
+        invalid.append((partial, 'core'))
+        unknown = copy.deepcopy(raw)
+        unknown['nativeVisibility'] = 'included'
+        invalid.append((unknown, 'core'))
+        contradictory = copy.deepcopy(raw)
+        contradictory['nodes'][1]['visible'] = False
+        invalid.append((contradictory, 'core'))
+        for observation, requested in invalid:
+            with self.subTest(requested=requested, metadata=observation.get('nativeAttributeProfile')):
+                rejected = adapter.adapt('observe', DEVICE, 0, json.dumps(observation),
+                                         requested_profile=requested)
+                self.assertFalse(rejected['ok'])
+                self.assertEqual(rejected['error'], 'invalid-native-observation')
 
     def test_reject_partial_wrong_device_and_bad_graph(self):
         mutations = [lambda r: r.update(snapshotId=None), lambda r: r.update(deviceIdentifier=OTHER),
@@ -562,6 +601,15 @@ class ProcessTests(FixtureCase):
         self.configure(mode='incomplete')
         out = await self.call('observe')
         self.assertFalse(out['ok'])
+        self.assertEqual(out['isolation'], 'observeRequired')
+
+    async def test_wrong_profile_observe_cannot_clear_observe_required(self):
+        state = {'version': 1, 'active': None, 'quarantine': {'mode': 'observeRequired', 'reason': 'test'}}
+        self.bridge.state.save(DEVICE, state)
+        self.configure(mode='success')  # Fixture returns a complete full-profile result.
+        out = await self.call('observe', nativeProfile='core')
+        self.assertFalse(out['ok'])
+        self.assertEqual(out['error'], 'invalid-native-observation')
         self.assertEqual(out['isolation'], 'observeRequired')
 
     async def test_spawn_intent_is_durable_and_unfinished_intent_survives_restart(self):
