@@ -182,11 +182,19 @@ gate and normal lookup failure can both produce no port. The requesting-client o
 and allows-suspended-server byte are separate in the inspected code. No supported
 remote setter or successful original-position background-read path is established.
 
-Next decision is user-owned: whether an explicit activation recovery may bring the
-target App to the foreground. Existing ui stays read-only, and activation must not be
-reported as background-read success. The proposed separate activate command must
-preserve the existing process; launch currently terminates it. No new production
-change is made pending this behavior choice and Opus's evidence discussion.
+Next decision is user-owned: whether explicit activation recovery may bring the
+target App to the foreground. Existing ui stays read-only; activation is not
+background-read success. The current branch's generic devicectl passthrough can
+already call process launch --activate without --terminate-existing. The separate
+Duo physical adapter also owns nonterminating activation; do not add a duplicate
+activate command. No product change or automatic recovery is made pending this choice.
+
+The last bounded launch experiment does not supply a background route. Omitting
+--activate uses CoreDevice's documented default true. Explicit --no-activate records
+activatedWhenStarted=false and keeps the PID, but actual hit/screenshot shows Settings
+foreground on this seed. The probe stops before counting any AX read as background.
+Opus's follow-up finds no additional source-backed remote setter/read candidate;
+exact runtime suspension versus normal port lookup failure remains unresolved.
 
 Detailed raw archives, probes and sanitized findings remain outside Git under
 `/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-background-nil/` (0700).

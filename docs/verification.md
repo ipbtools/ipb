@@ -8600,3 +8600,35 @@ Evidence:0700 directory /Users/borealin/Documents/Codex/2026-11-06/ipb-ax-backgr
 and peer-* binary hashes/mappings. Raw user AX/screenshot data and ad hoc probes are
 not committed. This record does not supersede prior background refusal counts or
 prove full supported HID/media acceptance.
+
+
+## 2026-11-06 — Background recovery boundary after Opus discussion
+
+Opus5.5's10-opus follow-up checks the sanitized wire findings and static snippets.
+It finds no additional source-backed original-position background read RPC under
+the no-injection/no-unverified-request constraints; the exact runtime branch remains
+unresolved. Main independently checks the key AXRuntime no-port branch. This is not
+a proof that every Apple background AX mechanism is impossible, nor an acceptance
+of a production repair. No product source has changed.
+
+Two explicit CoreDevice launch controls retain Settings PID7976. Omitting activation
+flags records activatedWhenStarted=true (the installed CLI documents --activate as
+default). With explicit --no-activate, the receipt records false but the post-command
+hit is Settings7976 rather than Calculator17257, and a screenshot confirms Settings
+Apps is foreground. That probe stops on the foreground mismatch before any AX samples,
+so it establishes no background read success. This result is specific to the same
+12mini/24A437 and running Settings setup; it is not a general flag-support claim.
+
+Main then checks the existing generic ipb devicectl passthrough (bin/ipb:1270):
+it can issue explicit process launch --activate without --terminate-existing. A new
+activate command is unnecessary. The separate Duo branch72a69e6 already routes
+launch through Sources/ipb_physical.py's nonterminating activation; that branch is
+only read for ownership/compatibility and is not edited/rebased. The user's pending
+behavior question concerns explicit foreground recovery, not permission to add a
+duplicate implementation. User choice remains required before changing the recovery
+contract; ui continues to fail background requests without changing the foreground.
+
+Evidence:11-without-activation and12-no-activate receipts/hit/capture,10-opus-followup*
+in the same0700 external directory. Earlier passive-wire and no-port evidence remain
+valid. The preceding proposal for a new activate command is superseded by reuse of
+the existing passthrough/owning physical adapter.
