@@ -111,7 +111,7 @@ def main():
         if (seed["hostBuild"] != "26B123" or xcode.splitlines() != ["Xcode 27.2", "Build version 27B52"]
                 or seed["runtimeBuild"] != "24B91016s"
                 or seed["deviceTypeIdentifier"] != "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"):
-            raise ValueError("unverified host/Xcode/runtime seed; see docs/duo-ddi-exploration.md")
+            raise ValueError(f"unverified host/Xcode/runtime seed: {seed}; see docs/duo-ddi-exploration.md")
         helper = args.guest_helper.resolve()
         if not helper.is_file():
             raise ValueError("guest helper missing; run make duo-state-probe")

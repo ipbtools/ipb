@@ -103,9 +103,12 @@ This reinforces that equal samples are not continuous stability or a generation;
 no other-orientation input support is accepted from that command's rc0.
 
 The independent Codex code review found no material findings (来源：peer; main
-session arbitrates). Real Opus design discussion completed successfully; the
-separate fixed-source code review status is recorded with the final verification
-record. Initial source review found seed/provenance ambiguities: the current
+session arbitrates). Actual Claude Opus5.5 initial code review requested seed
+corrections; the focused follow-up returns ACCEPT within the read-only scope,
+actual model `claude-opus-5-5`/exit0. The final seed literals were already verified
+by live21/22 after correction; a model environment description is not host proof.
+A final failure-only message adds the rejected actual seed values for diagnosis;
+no success-path or protocol change follows. The3 host contracts pass. Initial source review found seed/provenance ambiguities: the current
 candidate records/rejects the unsupported device type and matches the full Xcode
 version lines exactly. The support-profile guard is not a pane/model geometry
 classifier. FrontBoard `layoutStatus` explicitly separates layout availability from
@@ -220,3 +223,8 @@ E=/Users/borealin/Documents/Codex/2026-11-05/ipb-duo-ddi-exploration
 Key samples:01 native/ordinary comparison;04 display hit controls;05/06 context;
 07/08 semantic effects;09/11 application/window trees;15–17 focus/nil controls;
 19/27 exchange and stale-window reads;25/26 scroll;29 PIDs;30 final screenshot/nil.
+
+Final resource state: this task's new1F52 simulator is Shutdown, confirmed in fresh
+inventory23. Existing1CA/98D/iPhone18Pro Booted states are retained. No owned
+observation listener remains; only the task's read-only DDI mounts were detached.
+No install/package/release or physical operation was performed.

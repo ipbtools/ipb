@@ -7842,3 +7842,13 @@ and actionable false. The earlier recorded Closed metadata is re-normalized with
 the newly explicit device-type seed; no old fingerprint string is reused as if it
 had the new scope. Code review raw outputs and exact per-file hashes remain in the
 external evidence directory; no build/device acceptance is inferred from review.
+
+Real Claude Opus5.5 focused follow-up exits0 and returns ACCEPT in the read-only
+candidate scope, actual returned model claude-opus-5-5. Its initial seed/provenance
+points are resolved; real post-correction CLI21/22 verify the exact live seed,
+not a model's environment assumptions. The final rejection diagnostic includes
+actual seed values; success path/protocol is unchanged and all3 host contracts
+pass. Separate Codex review found no material issues. Raw model replies/source
+hashes are external. The task's1F52 simulator is now Shutdown; inventory23 confirms
+older1CA/98D/iPhone18Pro Booted states remain. No task listener remains. No merge,
+publication, product installation or physical device operation occurred.
