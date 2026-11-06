@@ -46,24 +46,23 @@ A foreground read-only search3002 workload has one initial old-full type2 timeou
 but five same-PID re-entries are30/30 per arm with passing responder guards. The
 visually empty field exposes the native `Search` placeholder; guarded setup can warm
 the app. This shows lower read cost, not improved natural-failure success or cold-start
-reliability. Nine of23 candidates have measured App states;13 have activation failures
+reliability. The initial phase measures nine of23 candidates;13 have activation failures
 and Bitwarden is auth-gated. The largest state is279 records;300–512 and complete Web
 content remain unverified. One after-core default-selection call on a loaded Safari
 page hits a WebContent PID and fails the Safari root identity guard; old/full implicit
 selection was not measured. Explicit Safari PID reads expose64 native framework records
 including an AXRemoteElement. See the final dated record for separate denominators.
 
-The user requested more Apps after that run. All12 additional candidates have now
-been attempted. The explicitly authorized WLAN & Cellular choice clears Tips' exact
-wireless-data prompt, and its content landing page is6/6 per arm in a new cohort.
-The other11 launch commands return CoreDevice10004 with0 target-App measurements.
-At least the observed Compass/iTunes screens show a separate first-use disclosure
-hosted by PDUIApp; do not treat every10004 as an App crash, absence or AX failure.
-Consent to these first-use data-use screens is pending, separate from network access.
-An isolated foreground PDUIApp diagnostic is0/6 per arm: both full profiles time out,
-while core reaches the unchanged node/depth guard and emits no partial tree. This is
-not target-App coverage or a demonstrated success-rate improvement.
-See [current plan](ax-stability.md) and the dated evidence below.
+The further12 candidates add11 measured Apps, now20 measured Apps across35 candidates.
+All198 new deep reads pass (6/6 per old-full/new-full/core arm for each App), with
+onboarding/empty/sign-in pages explicitly labelled; Health stops at personal-profile
+setup. Original13 activation and Bitwarden auth gates remain. User-approved first-use,
+network and location setup is separate from code-version comparison. A new default
+Freeform locate comparison passes6/6 each, query median1493→174ms; large CLI wall
+tails remain. The separate PDUIApp diagnostic stays0/6 per arm (full timeouts/core
+guard) outside target-App coverage. No natural-failure success-rate improvement or
+pooled reliability rate is established. See [current plan](ax-stability.md) and the
+latest dated record for exact states, controls, topology drift and remaining gaps.
 
 ### v0.6.0 publication decision (2026-11-03)
 
@@ -8384,3 +8383,113 @@ The external setup helper now reads the actual foreground after10004 and stops f
 PID/bundle/screenshot classification before another App or cohort. This changes no
 historical classification or product code. Accept & Continue remains a separately
 pending authorization, and the network authorization file is not reused for it.
+
+
+## 2026-11-06 — Further App expansion completed: 20 measured Apps across35 candidates
+
+This record supersedes the partial coverage counts above without replacing their
+failed setup/discovery observations. Source baseline remains58e5c32; before is
+main8c227a1. arms.json's four CLI/backend hashes still match. Host is
+macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32; the sole allocated device is
+12mini, CoreDevice1D533177-5153-5A0C-9102-8D0A8ADDAEFB,
+iPhone13,1/iOS27.0/24A437. No other device or production/test/build source changed.
+
+Eleven of the12 further candidates now have actual target-main-PID observations,
+adding198 accepted/state-valid deep reads,6/6 per arm in every row,0 state-invalid.
+Together with the original nine Apps this is20 measured Apps across35 candidates.
+Snapshot medians below are successful native snapshot ms, not CLI wall latency.
+
+| App / observed state | Records | Old full ms | New full ms | Core ms |
+| --- | ---: | ---: | ---: | ---: |
+| Tips: Content home | 108 | 546.8 | 542.1 | 135.6 |
+| iTunes Store: Store catalog | 144–146 | 664.1 | 664.3 | 154.0 |
+| Preview: No Recents (main graph) | 54 | 447.0 | 443.9 | 87.2 |
+| Podcasts: Home | 147 | 657.5 | 653.4 | 170.1 |
+| TV/Videos: Empty library | 69 | 369.8 | 366.9 | 121.2 |
+| Watch: Unpaired landing | 91 | 457.2 | 465.5 | 118.7 |
+| Fitness: Welcome information | 52 | 389.1 | 391.1 | 82.8 |
+| Freeform: Empty canvas | 131 | 1496.7 | 1500.3 | 175.1 |
+| Voice Memos: No Recordings | 58 | 426.5 | 428.2 | 123.2 |
+| Compass: Dial | 10 | 88.6 | 97.4 | 64.4 |
+| Games: Game Center sign-in landing | 42 | 222.4 | 218.6 | 96.5 |
+
+Empty/onboarding/sign-in states are only those states' coverage. Preview's visible
+main title point(.5,.16) verifies mainPID17190; centre hits its embedded document
+helper, which is not claimed as main-graph coverage. Fitness' actual Welcome Continue
+point(.5,.92) verifies mainPID17279 without pressing it. Games' title(.5,.36) verifies
+mainPID17305 despite error8 at the blank centre; the sign-in button is not pressed.
+All queries retain explicit main PID and strict root/schema/profile/cleanup guards.
+Failed centre-point readiness cohorts remain0 measured attempts, not AX failures,
+replacement trials or version recoveries. Complete markers and pre/post screenshots
+were checked; rc0 alone was not used as success.
+
+First-use data-use Accept & Continue, wireless-data WLAN & Cellular and location
+Allow While Using App were separately approved by the user. Compass' actual matching
+location and network cards are each pressed once through the product modal guard;
+both receipts verify the original card disappears. Voice Memos' earlier location
+card disappears before its authorized choice is sent, so no location click or OS
+setting change is claimed for it. Only this task's newly launched old Voice Memos
+process is terminated during that gate recovery, with fresh ownership/process proof;
+no shared helper or existing user process is killed. Its later No Recordings page
+is measured with no recording action. Freeform's optional iCloud invitation is
+dismissed using Not Now, then its automatically presented empty canvas is read.
+No login, cloud-sync enabling, pairing, playback, purchase or profile submission occurs.
+No notification permission button is explicitly chosen; Home dismissal does not
+establish an OS permission value. Health stops at the prefilled personal-profile form,
+with no target AX measurements or entered/submitted values; its private defaults
+are not retained in committed evidence. The original13 activation refusals and
+Bitwarden authentication gate remain separate and unexplained by later setup success.
+
+Two setup taps were visibly above the actual Fitness/Freeform informational Continue
+buttons and had no observed effect. Their receipts are kept as coordinate setup
+errors; new correctly targeted actions are based on fresh screenshots, not automatic
+replay after an uncertain semantic action. They are not measured AX failures.
+
+Same-block child-index path/unreachable-count topology comparisons show no drift
+in ten new Apps (6/6 matching per arm pair). iTunes Store has one old-full/new-full,
+two old-full/core and one new-full/core drift pairs out of6 each, with144–146 records;
+local IDs, attributes and text are not part of this topology hash. This does not prove
+all values/identities are identical. Across the11 cohorts the first arm is core4,
+new-full4, old-full3. Core's previous arm is none4/old-full29/new-full33; core-after-core
+remainsN0. These small, shared-host carryover strata do not establish drain or causal
+failure probabilities. The new largest deep graph is147, below the existing279.
+
+The same6/arm permutations, rotated first arm, fresh PID inventory,3s requested gap,
+actual previous-arm/gap and shared-host load logging remain in force. Foreground is
+verified at cohort boundaries, not every read; between blocks only lock state is
+checked. Native drain and independent trials are not proven. The separate PDUI
+18-call diagnostic and its previously audited bounded sampling revision remain
+outside target-App coverage; it is not silently pooled with these successes.
+
+One extra same-default-path Freeform locate experiment uses the predeclared unique
+identifier Freeform.CRLiOSBoardView/class UINavigationBar from all six old-full
+canvas discovery snapshots. Both default CLI arms pass6/6, with0 state-invalid,
+unique target and closed connection/tunnel. Query median/range ms are old
+1493.137/[1481.082,2074.478], new174.343/[168.215,181.230] (about8.6x median).
+CLI wall median/range s are old2.583/[2.316,12.674], new1.201/[1.145,2.388].
+Old ordinal9 and10 take12.674/8.170s overall despite much shorter query time;
+shared-host load is recorded but the residual cost is not assigned to a cause.
+No samples are removed and no tail guarantee is made. This extends default locate
+to six App states plus the earlier separate permission card; it does not compare
+wait/press/end-to-end input effects. The explicit deep-core result is a different
+requested-attribute contract and is not substituted for default full.
+
+The11 new deep cohorts plus this locator add210 registered measurements/210 accepted.
+The original heterogeneous504/413 plus this increment is714/623; adding the separate
+PDUI18/0 gives732/623. These are bookkeeping totals, never a pooled success rate;
+setup/preflight CLI reads and zero-measurement gates are not included. No improvement
+in natural-failure success is demonstrated. The controlled background nil remains
+0/18 per arm; the initial search timeout does not recur in30/arm confirmation.
+Largest accepted state is still279 records. Other devices,300–512 records, complete
+Web content, cold-first reliability and the supported full physical HID/media gate
+remain unverified. Production remains the same tested58e5c32 package; any later CI
+package is a separate, not device-tested artifact.
+
+Evidence remains outside Git in the0700 matrix directory: sanitized-consented-
+expansion-results.json (metadata-only extraction, 来源：peer; key rows/guards and
+receipts checked by main), expand2-* cohorts,36/42 permission authorizations,
+41 process ownership,44–51 readiness/setup,47 locator plan,52 point-check delta,
+and53-final-home. Raw screenshots/AX labels/values and ad hoc scripts are not committed.
+The12mini is restored to Home with screenshot and stableSpringBoard37 hit; all
+measurement jobs have completed. Actual Opus final interpretation review is recorded
+below after completion; no merge or release is performed.

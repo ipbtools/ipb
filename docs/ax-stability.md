@@ -53,159 +53,106 @@ foreground App/page setup and AX sampling on that device.13Pro belongs to the ac
 PocketAgent latency comparison; other devices/simulators remain excluded. No production
 code, timeout, graph budget or action guard is changed for the matrix.
 
-## Expanded physical App matrix (2026-11-06)
+## Physical matrix method and scope
 
-Purpose: determine whether omitting2025 improves real accepted-snapshot success,
-not merely query duration. This is a follow-up validation of the58e5c32 baseline;
-production code, timeouts, graph budgets and action guards stay fixed.
+The before arm is main8c227a1 full; compatibility control is58e5c32 full;
+the opt-in arm is58e5c32 core. The same native install and pinned Python dependencies
+are used. Hashes, argv, raw receipts and private screenshots stay outside Git at
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-app-matrix/` (0700).
+Only the allocated wired12mini is operated: CoreDevice UUID
+1D533177-5153-5A0C-9102-8D0A8ADDAEFB, iPhone13,1/iOS27.0/24A437,
+macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32. The concurrently allocated
+13Pro is excluded. Production/tests/build source remains58e5c32.
 
-Device: explicit12mini CoreDevice UUID1D533177-5153-5A0C-9102-8D0A8ADDAEFB,
-iPhone13,1/iOS27.0/24A437, wired and unlocked, macOS27.2/26B123,
-Xcode27.2/27B52. The user confirmed this allocation. Initial screen is Home.
-13Pro belongs to the live PocketAgent latency comparison; other devices/sims are excluded.
+Each App/state receives6 attempts per arm, interleaved by all six arm permutations,
+with rotated first arm, fresh process inventory per attempt and fixed3s gap. Record
+actual gap, previous arm and shared-host load. Pre/post screenshot, unlocked state
+and stable foreground hit-PID checks bracket each cohort; between-block checks prove
+unlocked state only. A visible App-main check point can replace a blank/helper centre;
+queries still use the explicit main PID and unchanged root identity guard. Foreground
+stability between boundary checks is inferred. No automatic action/measurement replay.
+State-invalid attempts are retained separately without replacement.
 
-Predeclared broad phase:18 inventory-selected apps, each in its observed landing state:
-Settings, Calculator, Safari, AppStore, Files, Calendar, Clock, Notes, Reminders,
-Maps, Weather, Books, Shortcuts, Music, Stocks, Translate, Bitwarden and PocketAgent.
-These cover system lists/grids, WebKit, dynamic/canvas views, forms and third-party
-login/SwiftUI surfaces. App names alone do not prove framework internals; record actual
-onboarding/permission/empty/content state from captures. A launch/setup refusal is a
-matrix cell result, not silently substituted by another App or counted as a native nil.
+Success requires rc0 plus the existing compact_observe validation of the complete
+schema2 tree, device/PID/profile provenance and closed connection/tunnel. Separate
+nil, semantic timeout, graph/archive limit, identity, transport and cleanup failures.
+Only default locate is a same-default-path before/after experiment; explicit core
+omits native visibility. Report per-state denominators, latency and count/path drift.
+There is no pooled reliability rate across Apps/states or independent-trial claim.
+Spacing and a new process do not prove native work has drained.
 
-Three arms use real isolated CLI installs: main8c227a1 full (before),58e5c32 full
-(compatibility control),58e5c32 explicit core (opt-in after). Each App/state gets6
-attempts per arm, ordered by the six permutations of these arms (18 total), with a
-fixed3s inter-attempt gap and fresh one-shot USB/DTX connection. Rotate the first
-permutation by App ordinal; record ordinal, previous arm and actual process-exit gap.
-Confirm PID via fresh process inventory before each attempt. Use screenshots, lock
-state and centre hit-PID checks before/after each cell, plus non-AX lock state between
-permutation blocks. A failed state check or changed PID marks all attempts since the
-last good foreground check state-invalid, retained separately without replacement or
-inclusion in within-state success denominators. Stop on lock. Spacing is not a
-native-drain guarantee; report carryover strata and first-after-setup separately. Do not retry failed measurements.
-Store stdout/stderr, exit/status, wall time and query/snapshot timing outside Git.
+A valid target-App natural failure symmetrically selects separate30/arm confirmation,
+keeping discovery separate. Opus approved two bounded revisions: uniform fast
+background refusal uses three same-PID re-entries with foreground controls; the
+separate PDUI diagnostic stops at6/arm because returned core trees hit the unchanged
+node/depth guard. Its full timeouts are not structural findings, and that system row
+is outside target-App coverage and supports no reliability estimate. Target-App
+confirmation policy otherwise remains unchanged.
 
-Accepted success requires rc0 plus a validated complete schema2 tree, matching device
-and explicit PID, correct profile metadata and closed connection/tunnel. Count native
-nil, type2 semantic timeout, other semantic/global timeout, graph/archive budget,
-identity/selection/transport and cleanup failures separately. Report per-App/state
-numerators/denominators and latency; success-only timing never hides failed attempts.
-No aggregate across heterogeneous Apps is a universal reliability estimate.
+## Current physical findings
 
-Then add observed reachable search/keyboard, secondary-page, Web-content and overlay
-states using reversible navigation without sending messages or editing user content.
-A natural failure in any arm symmetrically selects a cell for separate confirmation;
-selection-phase observations are never pooled into its rates. After the interim data,
-Opus recommended an explicit sampling revision: uniform fast background refusal gets
-three same-PID state re-entries with foreground positive controls, rather than
-redundant30/arm. Valid foreground failures or arm/re-entry discordance retain30/arm.
-The observed foreground search timeout selected five re-entries of6/arm (30/arm),
-with rotated first arms. If a state cannot be recreated, report that explicitly.
-Read-only old/new locate samples use actual unique observed selectors on representative
-states. Whole-tree3002 comparison requires a separately labelled read-only physical
-experiment; product input is not a read-only snapshot command and is not auto-replayed.
+The first23 candidates yielded nine actual target Apps: Settings, Calculator, Safari,
+App Store, Maps, PocketAgent diagnostics, LocalDevVPN dashboard, Phone and Stash
+What's New. Thirteen other Apps had CoreDevice10004 before AX; Bitwarden was
+FaceID/auth-gated. Those failures are retained, with no retrospective cause assigned.
 
-Opus reviews the matrix before the broad run and the actual findings afterward. Reuse
-the current tested install; no new product test infrastructure or device app is added.
-Use the existing compact_observe validator uniformly for all successful observations.
-Old full versus new full is a compatibility/noise control, old full versus opt-in core
-is a requested-attribute tradeoff, and only old/new locate is the same-default-path
-before/after comparison. Report graph-count/path drift on adjacent successful samples.
-Activate with devicectl process launch --activate without --terminate-existing.
-Record shared-host load; the13Pro task can affect host timing even on a different phone.
-Scripts and detailed personal AX/screenshot evidence stay outside Git; this plan and
-verification.md retain only condensed, verified findings and artefact references.
+The user requested12 more inventory-selected candidates: Tips, Compass, Podcasts,
+TV/Videos, Games, Preview, Freeform, Watch, Fitness, Voice Memos, Health and iTunes
+Store. First-use/system-helper gates are distinct from target-App measurements.
+The user separately authorized this round's data-use Accept & Continue, wireless-data
+WLAN & Cellular, and location Allow While Using App. Record exact one-shot receipts;
+other TCC, login, purchases and profile submission remain excluded. Optional iCloud
+Not Now and onboarding dismissal defer setup; they do not establish permission state.
+An observed10004 now stops for fresh foreground/component/screenshot classification
+before another App is launched. Setup changes never count as a code-version recovery.
 
-## Physical findings and remaining coverage
+Eleven additional Apps complete198 deep reads,6/6 per arm in every state, bringing
+the measured total to20 Apps across35 candidates. Exact results are maintained in
+the latest dated verification record. Empty/onboarding/authentication landing states count only for
+that observed state, not the App's full business workflow. Preview's embedded helper
+is not main-PID graph coverage. Health stops at the personal-profile form without
+entering/submitting values. Notification choices are not sent. Voice Memos' old
+location card disappears before the newly authorized choice could be sent; no OS
+permission change is inferred. Compass' actual matching location card is explicitly
+accepted once. No recording, playback, pairing, purchase or login is performed.
 
-The user requested another expansion after the completed23-candidate run. A fresh
-12mini all-App inventory still contains76 entries; the default developer-only list
-contains four and is not the all-App inventory. The next12 candidates are Tips,
-Compass, Podcasts, TV, Games, Preview, Freeform, Watch, Fitness, Voice Memos, Health
-and iTunes Store. They add landing-page coverage without replacing any prior refusal.
-Use the same6/arm controls, guards and failure denominators; do not start recording,
-playback, purchases or authentication. The first Tips launch is blocked by its wireless-
-data card before measurement. Home leaves that card visible. No permission button was
-explicitly selected at that checkpoint and the OS setting was not queried. The user
-then explicitly chose WLAN & Cellular for this round's new App wireless-data prompts.
-Tips' exact alert was freshly validated and pressed once with nativeAccepted=true;
-the resulting screenshot/hit confirms Tips foreground. Earlier Stash local-network
-authorization remains a separate category.
-Once authorized, record the wireless-data title/button/receipt per App; other privacy
-categories still stop. Use a new cohort after setup changes even when the old cell
-has no complete marker. Inspect every summary and screenshot: rc0 does not imply all
-measurements passed or an unobscured content page. Retain the fixed6/arm discovery
-counts and select separate confirmation on a valid foreground failure, rather than
-retrying until success. This follow-up remains pinned to the manifests above and
-excludes13Pro. All12 additional candidates have been attempted. Tips' content landing
-page passes6/6 per arm in a fresh cohort, retaining its earlier0-attempt gate.
-The other11 have CoreDevice10004 receipts and0 target-App measurements. Compass and
-current iTunes screenshots reveal first-use disclosure screens hosted by PDUIApp;
-do not infer every10004 has this cause. Further setup must inspect the actual
-foreground/first-use gate before moving on, rather than blindly accumulating launches.
-User consent to this separate data-use screen category is pending. An independent
-system-component diagnostic finds both full profiles0/6 (type2 timeout) and core0/6
-(node/depth guard); no partial tree or target-App success is accepted.
-Opus accepts a bounded data-after-sampling revision: the core read received a tree
-which hit the unchanged guard, so its diagnostic stops at6/arm. Full remains0/12
-timeouts, not a structural finding; it is not expanded because this row is outside
-target-App coverage and makes no reliability claim. The earlier target-App confirmation
-policy stays unchanged. Cohort-boundary foreground checks do not prove every read's
-foreground stability. Any subsequent10004 now stops for a fresh foreground check
-and PID/bundle/screenshot classification before another App or cohort is started.
+The default locate comparison on the original five App states passes6/6 old/new;
+query medians fall from221–1033ms to111–166ms (about1.7–6.6x). A separate permission
+card is also6/6 each. The additional Freeform locator, preselected uniquely from
+its old-full snapshots, passes6/6 per default arm: query median1493→174ms; CLI
+wall median2.583→1.201s and max12.674→2.388s, with tails retained. Explicit core deep
+reads are cheaper in the measured states; default full remains the compatibility
+control. These successes do not demonstrate improved natural-failure success.
 
-The permission blocker is resolved. The user authorized Allow, but the guarded action
-found no visible alert and sent nothing; a screenshot then confirmed the card had
-already disappeared. This does not prove that this task changed the OS permission.
-LocalDevVPN's dashboard is now measured separately from the permission overlay.
+Settings→Calculator→read the still-running Settings explicit PID reproduces fast
+nil0/18 per arm across three re-entries; same-PID foreground controls recover.
+Core does not fix this background refusal. Only one App pair was tested; Apple
+internal cause and its relationship to simulator roughly3s nil remain unknown.
 
-Old/new default locate comparisons on Settings, Calculator, Safari tab overview,
-Maps and PocketAgent diagnostics, plus the permission card, each pass6/6 per arm.
-Query medians fall from221–1033ms to111–166ms on the five App states. The explicit
-core deep comparisons likewise show lower cost; default full remains the compatibility
-control. These successful samples do not establish improved natural-failure success.
-Only locate has a physical before/after comparison here; wait, press and end-to-end
-input share the request change but were not compared, and no product `ui input` was sent.
+The read-only focused-search3002 discovery has one first-arm old-full type2 timeout
+(5/6 versus6/6 new-full/core). Five same-PID re-entries then pass30/30 in every arm,
+with279 records and passing responder resolver. Medians are2244/2247/508ms.
+The field is visually empty but native value is the fixed Search placeholder, length6.
+Guarded setup may warm the path; five first-after-setup reads are not a cold-start
+rate. This is not end-to-end input evidence. An earlier query-a exploration remains
+separately excluded; the task's HID query was cleared without clipboard/business text.
 
-A reproducible nil path now exists independently of the permission card: activate
-Settings, activate Calculator, then query the still-running Settings PID explicitly.
-Three same-PID re-entries produce0/18 accepted reads in each arm, all fast native
-nil. Old-full/new-core foreground controls before and after every entry pass with the
-same Settings PID. Core does not recover this background refusal; the Apple internal
-cause and relationship to the simulator's roughly3s nil remain unproven.
-Only one target/occluder pair was tested. This path requires an explicit PID; it is a
-deterministic refusal in this observed state, not a foreground reliability rate.
+Loaded Safari exposes64 native framework records including AXRemoteElement, not the
+complete article body. One after-core implicit-selection call hits WebContent but
+root identifies Safari and is correctly rejected; old/full implicit selection is
+unmeasured. Explicit main PID/chrome-point reads preserve that guard. iTunes'
+144–146 record/path changes are disclosed as dynamic graph drift, not deduplicated.
+Largest accepted state remains279;300–512, complete Web content, other devices,
+cold-first reliability and the full supported HID/media matrix remain unverified.
+Phone's first core read takes2.020s versus0.194s median: no uniform tail guarantee.
 
-The read-only focused-search3002 workload initially gives old-full5/6 (one first-arm
-type2 timeout), new-full6/6 and core6/6. Five same-PID re-entries of visually empty
-search are30/30 in every arm, all279 records, with the real responder resolver passing
-30/30 per arm. Snapshot medians are2244/2247/508ms (old/full/core). Thus the isolated
-initial timeout is not attributable to a code version: new-full sends the same request.
-Setup uses guarded press and can warm the app; there are only five first-after-setup
-reads, so a cold-first timeout rate is not excluded. No success-rate difference is
-established. Native value is the fixed `Search` placeholder (length6), not an empty
-string; screenshots show no query. No product input or clipboard call is represented
-by this experiment. Placeholder and resolver passes are not end-to-end input evidence.
-One own local HID query `a` was cleared; its
-accidentally retained setup cohort is labelled separately and excluded from confirmation.
+The separate PDUIApp diagnostic is0/6 per arm: both full profiles type2 attribute52
+time out; core reaches the unchanged node/depth guard with no partial tree emitted.
+The exact size/bound is unknown (request maxDepth48, local depth32/512 records).
+Do not infer that a full tree would exceed the same bound or that2025 alone causes
+its timeout. Error-path cleanup is not reported by those receipts. This is neither
+target-App success nor a success-rate improvement.
 
-The loaded public Swift Concurrency page exposes64 native Safari records with an
-AXRemoteElement, not the article's complete Web content. Implicit selection hits the
-WebContent PID but the snapshot root identifies Safari. This is one actual after-core
-`ui --deep --native-profile core --json` call without `--pid`, rejected by the root
-guard; old/full implicit selection was not measured. Explicit Safari PID/chrome-point
-sampling preserves the strict guard. Settings Apps (129 records) is a completed cell;
-General (102) is discovery only;300–512 coverage is still missing.
-
-All23 predeclared candidates were attempted: nine have measured App states (six of
-the original18, three of the additional five). Third-party coverage is PocketAgent
-diagnostics, LocalDevVPN dashboard and Stash3.6 What's New, not their entire flows.
-Thirteen Apps fail activation with CoreDevice10004 and zero AX attempts; the cause
-is unknown. Eleven failures precede the first permission-card capture, while Contacts/Photos fail
-after it disappeared. Bitwarden remains auth-gated; no authentication is bypassed.
-The device is restored to Home with screenshot/hit-PID evidence. The supported
-HID/media gate is separate;300–512 and full Web content remain unverified.
-
-Raw plans, isolated before/after installs and private AX/screenshot data stay outside
-Git at `/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-app-matrix/` (directory0700).
-See verification.md for completed cells, separate denominators and dated evidence.
+Actual Opus reviews cover the implementation, matrix method and bounded interpretation;
+source/host/package CI, physical AX evidence and the full supported HID/media gate
+remain separate proof layers. No merge or release is part of this follow-up.
