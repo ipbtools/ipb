@@ -163,8 +163,8 @@ remain separate proof layers. No merge or release is part of this follow-up.
 ## Follow-up: background Settings nil (2026-11-06)
 
 The user explicitly requested a real acquisition-failure investigation/fix, starting
-from the stable Settings→Calculator→explicit Settings PID reproduction. Current head
-is28582fc; the first complete source baseline58e5c32 stays fixed. Only12mini is
+from the stable Settings→Calculator→explicit Settings PID reproduction. Investigation
+started at28582fc; the first complete source baseline58e5c32 stays fixed. Only12mini is
 operated; the13Pro thread is freshly confirmed active on its own device.
 
 Fresh passive wire capture confirms type1 still returns the same application root
@@ -197,12 +197,18 @@ small existing-fixture regression for device selection and unchanged App argumen
 A nil snapshot gets conditional explicit-recovery guidance without a read retry,
 action, timeout/budget change or successful replacement tree.
 
-Validation is three same-PID Settings recovery cycles plus one inverse Calculator
-cycle, preserving pre/post screenshots, foreground/lock checks, full/core graph and
-cleanup validation. Failed background reads remain failures; recovered reads are
-foreground reads. Retain the original zero-measurement parser failure separately.
-Opus reviews the narrow source change and the actual recovery observations before
-final delivery. The original source acceptance baseline58e5c32 stays fixed.
+Validation atc8a76ff completes three same-PID Settings recovery cycles and one
+inverse Calculator cycle. All eight background full/core reads fail; all eight
+post-activation full/core reads pass graph/provenance/cleanup validation. Settings
+returns129 records, Calculator45; each matches its pre-occlusion count and ordered
+paths, with preserved visible page/value in screenshots. These are explicit
+foreground recoveries, not reliability estimates or background successes. The
+original zero-measurement parser failure is retained.91 AX/10 interface host tests
+and SMOKE_AX_ONLY pass; full HID/media remains unrun. Actual Opus5.5 accepts the
+c8a76ff source diff. Main applies its optional authorization wording, checks the
+focused failure regression and the final real nil cue without changing foreground,
+then restores Home. This later wording does not change the recovered request path.
+The original source acceptance baseline58e5c32 stays fixed.
 
 The last bounded launch experiment does not supply a background route. Omitting
 --activate uses CoreDevice's documented default true. Explicit --no-activate records

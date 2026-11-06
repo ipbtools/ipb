@@ -50,7 +50,8 @@ NATIVE_ATTRS = "UIAccessibilitySnapshotKeyAttributes"
 def snapshot_nodes(snapshot, root, *, requested=SNAPSHOT_ATTRS):
     """Keep native path occurrences; handles can legitimately have two parents."""
     if snapshot is None:
-        raise ValueError("AX snapshot unavailable: device returned nil; if the target app is in the background, "
+        raise ValueError("AX snapshot unavailable: device returned nil; if the target app is in the background "
+                         "and changing the foreground is authorized, "
                          "activate it explicitly without terminating it, then take a fresh snapshot using "
                          "the PID in the activation receipt (see docs/ui.md)")
     if not isinstance(snapshot, dict):

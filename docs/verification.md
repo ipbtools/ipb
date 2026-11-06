@@ -71,8 +71,9 @@ error17 (APT maps underlying AXRuntime no-port status-25215). The same-DTX foreg
 A suspended-PID gate is one static no-port path, not a proven runtime predicate.
 No original-position background read succeeds. The user has authorized explicit nonterminating foreground recovery; ui remains
 read-only. The documented passthrough launch first exposed an argument-placement
-bug (exit64 before activation), now fixed narrowly for that launch path; physical
-recovery validation is in progress.
+bug (exit64 before activation), fixed narrowly for that launch path. Three Settings recoveries and one inverse
+Calculator recovery preserve PID and visible state; eight recovered full/core reads
+pass. Background reads still fail, and the full HID/media matrix remains unrun.
 
 ### v0.6.0 publication decision (2026-11-03)
 
@@ -8634,3 +8635,74 @@ Evidence:11-without-activation and12-no-activate receipts/hit/capture,10-opus-fo
 in the same0700 external directory. Earlier passive-wire and no-port evidence remain
 valid. The preceding proposal for a new activate command is superseded by reuse of
 the existing passthrough/owning physical adapter.
+
+
+## 2026-11-06 — Authorized explicit foreground AX recovery verified
+
+The user explicitly selected “允许显式激活恢复（推荐）”. The delivered behavior is
+explicit activation followed by a fresh read; ui itself stays read-only. Current
+source fixes a reachable CLI failure in that recovery entry, rather than claiming
+original-position background AX support. The first complete source baseline58e5c32
+is retained. Investigation checkpoints areb2f6888/abe996e; source fix isc8a76ff.
+
+**Reproduction and fix:** the first source-CLI recovery attempt uses the documented
+ipb devicectl device process launch --activate … bundle form. The old passthrough
+appends --device after the bundle, so CoreDevice treats it as an App argument and
+exits64, Missing expected argument --device. No activation is sent and no recovery
+read is attempted in that cell. The fix puts the selected device before user arguments
+only for the exact device/process/launch prefix; other raw routes remain unchanged.
+Quoted argument forwarding is preserved. No activate command, automatic AX fallback,
+connection cache, timeout/budget increase or native identity relaxation is added.
+
+A conditional nil hint now points to explicit nonterminating foreground recovery and
+the new activation receipt's PID. It does not diagnose every nil as background or
+suspension. Existing session tests additionally require requests=[1,2], zero actions
+and closed connections on nil/timeout. The existing interface test suite gains one
+standard REMAINDER-parser regression for the real device-before-App-arguments boundary
+and unchanged App payload. It fails with the prior argument order and passes with
+the fixed order. Native production source is unchanged.
+
+**Physical run:** sourcec8a76ff, same12mini/CoreDevice UUID
+1D533177-5153-5A0C-9102-8D0A8ADDAEFB, iPhone13,1/iOS27.0/24A437;
+macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32. The source CLI/backend is
+hash-bound in the run plan, with the unchanged verified58e5c32 native helper and
+pinned Python/pymobiledevice3.13Pro remains assigned to the other active task.
+Each cycle prepares the target, reads a full foreground control, activates the
+occluder, checks lock/foreground, performs one failing full and core read, explicitly
+activates the target once via the fixed CLI, then validates fresh full/core snapshots.
+There are no action/read retries, replacement trials or business-content edits.
+
+| Target / observed state | Recovery cycles | Background full / core | Recovered full / core | Records |
+| --- | ---: | --- | --- | ---: |
+| Settings / Apps | 3 | 0/3 and0/3 | 3/3 and3/3 | 129 |
+| Calculator / existing calculation display | 1 | 0/1 and0/1 | 1/1 and1/1 | 45 |
+
+All four activation receipts retain the pre-occlusion PID, with activatedWhenStarted
+true and terminateExistingInstances false. Before/after screenshots confirm the
+Settings page and Calculator display value are preserved. Similar/identical target
+frames are expected because activation preserves that page; intervening occluder
+checks confirm the background state. All recovered graphs match their foreground
+control's record count and ordered child-index paths and pass compact_observe with
+closed connection/tunnel. This topology comparison does not prove every attribute
+is unchanged. These few state transitions are not independent reliability trials,
+a general activation guarantee, or a fix for native background reads. All eight
+background reads still fail and emit no successful/partial tree.
+
+**Other checks:**91 AX host tests and10 interface tests pass. SMOKE_AX_ONLY passes
+on the same source/device with ordinary AX, deep full, full-state and graph/cleanup
+contracts; the full HID/media gate is not run. Actual claude-opus-5-5 accepts the
+c8a76ff source diff without mandatory findings (16-opus-source*); it performs static
+review, not the device run. Main applies its nonblocking suggestion to qualify the
+nil hint with authorization, then reruns the existing focused nil/timeout regression
+and checks the final live error: rc1/result null with the qualified cue, Calculator
+still foreground before/after. This final text-only refinement does not alter the
+activation/read wire path. No subsequent native/backend behavior changes are made.
+
+Evidence stays outside Git under the0700 background-nil directory:14-authorized-
+recovery retains the zero-read parser failure and user approval;15-verified-recovery
+contains exact source hashes, activation receipts, complete rows and pre/post images;
+16-* contains Opus source review;17-ax-smoke contains the gate;18-final-cue-and-home
+contains the final cue/source hashes and stableSpringBoard37 Home proof. Raw user
+AX/screenshot content and ad hoc scripts are not committed. The task's device
+operations are finished. PR15 records the final CI/artifact links; a new CI artifact
+is a separate build and is not a device-tested package. No merge/release is performed.
