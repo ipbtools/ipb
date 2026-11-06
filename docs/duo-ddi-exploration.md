@@ -28,7 +28,8 @@ Existing AX PR15/f767bab is a separate explicit foreground-recovery path, not a
 scene selector or in-place background AX fix (来源：peer; owning source checked).
 
 New evidence at `/Users/borealin/Documents/Codex/2026-11-07/ipb-duo-state/`:
-Apple's `devicectl` already exposes appResize info/observe/start/set. Its target is
+Apple's `devicectl device appResize` exposes observe/start/set, and
+`devicectl device info appResize` queries the session. Its target is
 a display named "Resizable", not arbitrary Duo panes. Bounded simulator observe
 received noForeground→Preferences foreground; the intended10s deadline exits2,
 not a successful one-shot CLI. Session query fails24004 without an active session.

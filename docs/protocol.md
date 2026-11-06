@@ -3875,9 +3875,9 @@ DDI metadata and matching simulator cache source are retained under
   `com.apple.coredevice.resizableappmanagement`. The independent named XPC-service
   implementation exists. This does not establish its physical RSD advertisement,
   exact createservicesocket input or the RemoteXPC dictionary envelope.
-- Shipped `devicectl device appResize` offers info/observe/start/set. It selects a
-  display whose name contains "Resizable"; start's assertion lasts until command
-  exit. This is not an arbitrary display/pane launch selector. On the dedicated
+- Shipped `devicectl device appResize` offers observe/start/set;
+  `devicectl device info appResize` queries the session. The CLI selects a display
+  whose name contains "Resizable"; start's assertion lasts until command exit. This is not an arbitrary display/pane launch selector. On the dedicated
   simulator, info without a session returns24004; observe receives noForeground
   then Preferences foreground after one explicit fixture launch. Its deliberate
   bounded timeout exits2 and is not converted into successful one-shot completion.
