@@ -52,6 +52,12 @@ content remain unverified. One after-core default-selection call on a loaded Saf
 page hits a WebContent PID and fails the Safari root identity guard; old/full implicit
 selection was not measured. Explicit Safari PID reads expose64 native framework records
 including an AXRemoteElement. See the final dated record for separate denominators.
+
+The user requested more Apps after that run. Twelve additional landing-page
+candidates are predeclared in the current plan. Tips launches but its wireless-data
+permission card owns the foreground, so the first cell stops before any measurement.
+Home does not dismiss the card. A choice for this category of new App network prompt
+is pending; it is distinct from the earlier Stash local-network authorization.
 See [current plan](ax-stability.md) and the dated evidence below.
 
 ### v0.6.0 publication decision (2026-11-03)
@@ -8254,3 +8260,33 @@ rows/stdout/stderr/screenshots, controlled-background/, confirm-focused-input-v2
 20-opus-stage*/23-opus-final*. Final Home is screenshot-confirmed with stable SpringBoard37 hit
 (21-final-*); no task-owned sampling job/caffeinate remains. No other device, local
 Homebrew install, production source, timeout, budget or action guard was changed.
+
+
+## 2026-11-06 — Further App expansion, wireless-data readiness gate
+
+After the completed23-candidate matrix, the user requested more Apps. Twelve new
+candidates are selected in the current plan; the existing before8c227a1 /after58e5c32
+installs remain hash-matched to arms.json. Fresh all-App inventory is76 entries; the
+default developer-only query returns four and must not be treated as full inventory.
+No placeholder/launchable metadata field is present. This is not evidence that all
+inventory entries can launch. Host remains macOS27.2/26B123, Xcode27.2/27B52 and
+CoreDevice651.32; only the same allocated12mini is operated.
+
+Tips launches asPID17137, but its pre-state hitsSpringBoard37: screenshot and native
+alert label show `Allow “Tips” to use wireless data?`, with WLAN & Cellular /WLAN Only /
+Don’t Allow. The first cell stops with0 measured attempts. One Home action leaves the
+card visible; no permission button was explicitly selected, and the actual OS setting
+was not queried. This is a setup gate, not native nil or CoreDevice10004. The other11
+candidates remain unattempted. The user was asked how to handle this category of new
+App network choice; the earlier Stash local-network authorization is separate.
+
+Opus5.5's expansion review confirms the external executor differs only in the appended
+candidate list and fresh inventory source (29-opus-expansion*). Its operating corrections
+are reflected in the current plan: record each authorized wireless-data decision,
+stop on other permission categories, inspect summaries even when rc0, use new cohort
+names after setup changes, and inspect actual screenshots for overlays/onboarding.
+Fixed-count discovery failures remain failures and trigger separate confirmation.
+No production change, new completed App measurement, supported acceptance, PR push or
+additional CI run is claimed by this checkpoint. Evidence is outside Git in the same
+0700 matrix directory:25-fresh-*,26-additional-app-plan.json /26-host-seed.json,
+27-additional-results.json,expand2-tips/,28-* and29-opus-expansion*.
