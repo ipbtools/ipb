@@ -3819,3 +3819,87 @@ The integrated `ui alert-press` controls on source and isolated installation als
 confirm disappearance. Its postcondition observation is bounded to2s and read-only:
 the immediate snapshot can still contain a closing modal after native acceptance.
 Unknown/read-error/timeout is never interpreted as disappearance.
+
+## DDI27B52 service inventory and simulator window-scoped AX (2026-11-05)
+
+**Source/seed:** macOS27.2/26B123, Xcode27.2/DDI27B52, host/DDI CoreDevice651.32;
+Public DDI build189 image `iOS_DDI/Restore/022-22446-061.dmg`. Owning metadata is
+`Library/LaunchDaemons/com.apple.coredevice.{dtappserviced,dtdeviceinfod,
+dtscreencaptured,dtuhidd}.plist` inside that image; symbols come from
+`Library/Frameworks/CoreDeviceUtilities.framework/CoreDeviceUtilities`, server
+strings from `usr/libexec/dtappserviced`. Extracted originals and hashes are retained
+outside Git in the research evidence below. These are additions to ipb's evidence,
+not a proven Apple version delta.
+
+- `resizableappmanagement` / `streamresizabilitystate` are dtappserviced MachServices
+  entries, absent from its `RemoteServices.appservice.Features`. DDI Swift enum
+  symbols define get scene state, adjust display geometry, cancel scene session and
+  move frontmost apps to a display. Scene state includes cornerRadius and
+  min/max/preferred/resolved sizes. Server/session/SBSAppResizingService strings
+  substantiate an implementation; no captured routable request or Duo pane effect.
+- `streamapplist` and `streamprocesslist` are advertised appservice remote features.
+  Deviceinfo advertises `getdisplayinfo` / `displayinfoupdates`. The distinct
+  `screencaptureservice` advertises `capturescreenshot` under the display entitlement.
+- `hid.universalhid` advertises both `remote.hid.keyboard` and `remote.universalhid`
+  under `com.apple.private.CoreDevice.hid`. No separate keyboard transport follows.
+  `remote.hid.pointer` is absent from this DDI plist. Earlier beta2 host-symbol
+  negatives elsewhere in this document remain qualified by their older seed.
+
+**AX runtime evidence is separate:** Duo simulator24B91016s on CoreSimulator1174.21
+accepts the existing type2/attribute52 snapshot request on an actual window token,
+returning a subtree rooted at that window. Main's application request can include
+multiple same-PID windows and terminal foreign AXRemoteElement references. Native
+root/window frames remain mixed; per-window requests do not establish global origin.
+Host AXPT591.4.5 (UUID16162041-96F3-3F3C-B532-053DED8F2603) disassembly maps
+`_windowContextId` to type2/attribute12 and frontmost-with-display to type4/displayId;
+`accessibilityHitTest:withDisplayId:contextId:` builds type6 with point/displayId/contextId.
+Simulator replies confirm nonzero visible-window context samples, but contextId does
+not eliminate the measured native-coordinate transform. Type4 returns the same
+Settings application for display0/1/3 and is not a pane selector.
+
+Exact experiments, failure observations and source paths are in
+[the current research plan](duo-ddi-exploration.md). Raw evidence lives at
+`/Users/borealin/Documents/Codex/2026-11-05/ipb-duo-ddi-exploration/`.
+No physical AX mapping, CoreDevice resize wire, stable window token, generic
+semantic postcondition or new product command is established by this run.
+
+## Dynamic Duo observation follow-up (2026-11-07)
+
+**Source/seed:** same macOS27.2/26B123, Xcode27.2/27B52/CoreDevice651.32,
+DDI Public189 and simulator24B91016s. Raw shipped CLI help, host getters/symbols,
+DDI metadata and matching simulator cache source are retained under
+`/Users/borealin/Documents/Codex/2026-11-07/ipb-duo-state/`.
+
+- Exported ResizableAppManagementRequest getters on651.32 return feature
+  `com.apple.coredevice.feature.resizableappmanagement` and logical remote service
+  `com.apple.coredevice.resizableappmanagement`. The independent named XPC-service
+  implementation exists. This does not establish its physical RSD advertisement,
+  exact createservicesocket input or the RemoteXPC dictionary envelope.
+- Shipped `devicectl device appResize` offers observe/start/set;
+  `devicectl device info appResize` queries the session. The CLI selects a display
+  whose name contains "Resizable"; start's assertion lasts until command exit. This is not an arbitrary display/pane launch selector. On the dedicated
+  simulator, info without a session returns24004; observe receives noForeground
+  then Preferences foreground after one explicit fixture launch. Its deliberate
+  bounded timeout exits2 and is not converted into successful one-shot completion.
+- Host symbols expose `observeFrontmostAppResizability()` as an AsyncThrowingStream
+  of noForeground/locked/invalidOrientation/unavailable/resizing and foreground
+  App bundle states. Request Codable keys partially visible in metadata do not
+  establish their complete wire format. No early-break cleanup claim is made.
+- FBSDisplayLayoutMonitorConfiguration transitionHandler has three object arguments:
+  monitor, layout, transitionContext. Simulator runtime type strings and matching
+  cache callsite confirm this. Modern configured monitors reject legacy addObserver;
+  the experiment uses only the configuration handler. Outer and opened inner
+  subscriptions both get nil layout/context; the service log explicitly reports
+  initial main-display timeout/publishing nil. Existing simulator-only test/launch
+  entitlements do not provide a layout in that experiment; root cause is unresolved.
+- FBSDisplayIdentity.type7 and legacy LayoutMonitor displayType are different domains:
+  the latter constructs unknown(7). External-display configuration accepts an
+  isExternal FBSDisplayIdentity and formats its rootIdentity into the endpoint;
+  the inner identity is nonexternal. No invented UUID endpoint/type fallback.
+
+FBS display inventory supplies logical bounds/display IDs but nil UUIDs in this run.
+No scene/App-to-global-region association is established. An equal display-metadata
+fingerprint can miss Partially Open or intervening changes and is not a generation.
+The [experimental observation API](duo-ddi-exploration.md#experimental-observation-api-current-candidate)
+therefore exports unknown binding/region/input transform and grants no actions.
+No physical device operation, resize/move request or automatic activation was used.

@@ -2,7 +2,36 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-11-03. This section is overwritten; dated records below are append-only.**
+**Updated 2026-11-07. This section is overwritten; dated records below are append-only.**
+
+### Dynamic Duo observation candidate (2026-11-07)
+
+A standalone simulator-only [read-only probe](duo-ddi-exploration.md) brackets live
+CoreDevice displays and bounded FBS observation. No fixed pane table or App action.
+Closed→Open changes invalidate expected display metadata; equal Open/Partially Open
+samples still cannot establish posture, App/scene ownership or input mapping.
+FBS main-display layout remains nil with an initial-timeout service log. This is a
+hard blocker for automatic App/window targeting; no guessed endpoint or same-PID
+fallback. The candidate is excluded from normal build/install/package. Native
+probe build and three host contract tests pass; full product/hardware gates are not
+implied. Separate AX recovery and PocketAgent integration tasks retain ownership.
+PR16's first two CI runs passed native/host/package gates but timed out while
+cloning homebrew/core before ipb installation. The minimal correction clears the
+forced non-API flag; real install/test/hash checks and deadlines remain intact.
+CI42259214280 at efb311d now passes all gates, including the actual Homebrew
+install/test/product hashes. Hardware acceptance remains separate.
+
+### Duo DDI / native AX research (2026-11-05)
+
+Main `8c227a1` native snapshot semantics have bounded Duo simulator evidence;
+see [current exploration](duo-ddi-exploration.md). Window-subtree snapshots work,
+but mixed frame spaces, error0/nil Safari replies, an application tree beyond the
+512-record budget and SwiftUI handle changes remain open. A separate user-requested
+AX task owns reproduction/root cause and the dedicated simulator. No production
+AX guard was relaxed, no new product capability was accepted, and no physical
+operation occurred in this run. DDI scene-resizing types/service evidence exists;
+host reachability and Duo effects remain unverified. Existing Duo integration PR
+work is deferred while these concerns are clarified.
 
 ### v0.6.0 publication decision (2026-11-03)
 
@@ -7728,3 +7757,135 @@ Formula-only PR#6 passes CI39574491943 and merges at
 Release asset exactly. Full reports/downloads and model-usage metadata remain outside Git
 in the local v0.5.0 release state directory. This record documents publication, not
 new physical acceptance.
+
+## 2026-11-05 — DDI27B52 inventory and main-native AX on Duo simulator
+
+**Baseline/scope:** main `8c227a1`; macOS27.2/26B123, Xcode27.2/27B52,
+CoreDevice651.32, DDI Public/build189/27B52. Dedicated simulator
+`1CA07373-09AA-4E38-82BD-937711C73565`, Duo24B91016s, inner landscapeRight,
+CoreSimulator1174.21/SimulatorKit1005.14, live displayId3. No physical-device
+operation or product implementation change.
+
+Read-only DDI extraction confirms resizable scene request/response types and
+`dtappserviced` implementation strings, with MachServices/RemoteServices routing
+disagreement still open. Display-update/capture and keyboard service mappings were
+checked in the actual launchd plists. The task's read-only image mounts were detached;
+other simulator runtime mounts were retained. Guest SBSAppResizingService metadata
+exists; a1.5s status-only sample stays Initializing, without an established observer
+handshake or resize assertion. No resize effect or reachable host request is claimed.
+
+CoreSimulator native52 produces Settings224/130 and Safari492/452 path/unique-handle
+records, compared with13/22 ordinary AXChildren. The overlapping numerical frames
+agree and main's semantic parser accepts the native records. Safari Bookmarks547
+records hit main's512 guard; window-scoped native requests return176/118/118/122
+records. Context/display probes and screenshots establish the narrower boundaries
+in the [research plan](duo-ddi-exploration.md); they do not solve global geometry.
+
+Independent screenshots show semantic Back/Sidebar effects. A one-shot scroll shows
+Keyboard y668.6667→372 with a different fresh row handle, so same-identity product
+postconditions are not accepted. Safari has both successful and error0/nil snapshot
+observations; nil persists in the final read despite a normal rendered screen and
+unchanged final PID inventory. No retries of submitted actions or hidden fallback.
+Root cause remains open and was handed to the separately requested AX stability task.
+
+Final layout restored to Settings left/Safari right; editing dismissed, settled full
+frame manually reviewed. Settings scroll changed; no exact-view restoration claim.
+Original SpringBoard/Settings/Safari PIDs2736/6971/9282 remain in final inventory.
+The AX task now owns the dedicated simulator. Raw evidence stays outside Git at
+`/Users/borealin/Documents/Codex/2026-11-05/ipb-duo-ddi-exploration/`
+(owning plists/symbols in `raw-ddi27b52/`; samples01–30, final30-preview.png).
+This research is not SMOKE_AX, a product simulator deep gate or hardware acceptance.
+
+## 2026-11-07 — Read-only dynamic Duo observation candidate
+
+**Scope/seed:** baseline main8c227a1 plus this research branch; macOS27.2/26B123,
+Xcode27.2/27B52/CoreDevice651.32, runtime24B91016s. A new owned clone
+`1F52A8E8-1857-46AD-9695-8CEEAD3B971E` was created from this task's Shutdown
+research instance8A3DA97A. The old1CA/AX/RustDesk/other simulators were not operated;
+no physical device request, resize/move or model phone round was sent.
+
+`make duo-state-probe` compiles the optional read-only guest. The two host contracts
+pass: changed/mid-read display metadata rejects preconditions without generation
+claims, and matching metadata/nil layout never yields binding/region/input authority.
+Independent Codex static review finds no material issue (来源：peer; scope four
+candidate files). Real Opus5.5 architecture advice was received, actual model
+claude-opus-5-5/exit0; its fixed-source code-review output is retained separately.
+
+Live candidate CLI:17 Closed observes active1;18 Open with Closed expectation exits6
+and expectedMatch=false;19 fresh Open expectation exits0 with expectedMatch=true,
+actionable=false and nil FBS layout.20 Partially Open has a visible host hinge change
+but the same selected display fingerprint/active3; the probe deliberately does not
+claim fold posture or split mode. Required source errors remain nonzero. The Apple
+orientation setter's16 result says landscapeLeft, but subsequent samples have
+landscapeRight; cause not assigned, and no rotation/input acceptance follows.
+
+The correct three-object FBS configuration callback returns nil in both outer and
+opened inner states. The source log states initial main-display timeout/publishing
+nil. Same simulator test/launch entitlement control also yields nil; it does not
+prove a permission cause. FBS identities/configuration bounds are readable but
+UUIDs are nil. Cache disassembly rules out treating identity.type7 as LayoutMonitor
+type and rules out the external factory for a nonexternal inner identity.
+
+DDI/CoreDevice getters identify the resizable feature and separate logical service;
+exact physical socket/envelope still unverified. Apple CLI info returns24004 for no
+active session. Its bounded observer receives noForeground→Preferences foreground,
+then intentionally exits2 on10s timeout. This proves receipt of events, not a clean
+one-shot stream teardown or arbitrary-pane control. No start/set/move was sent.
+
+Raw evidence, prototypes, correct-ABI/cache sources, actual Opus results and
+screenshots remain outside Git under
+`/Users/borealin/Documents/Codex/2026-11-07/ipb-duo-state/`.
+This is experimental observation/API evidence, not product AX/HID/media acceptance.
+
+The initial real Opus code review requests exact Xcode-seed matching and explicit
+supported device-type provenance. Those are corrected, and layoutStatus/typed ARC
+allocation clarify the same candidate without a new state mechanism. The added
+third host contract rejects wrong device type or a build-prefix lookalike before
+any display/guest request. All3 host contracts and the rebuilt guest pass. Final
+CLI21/22 retests pass stale→exit6 and matching→exit0 with layoutStatus unavailable
+and actionable false. The earlier recorded Closed metadata is re-normalized with
+the newly explicit device-type seed; no old fingerprint string is reused as if it
+had the new scope. Code review raw outputs and exact per-file hashes remain in the
+external evidence directory; no build/device acceptance is inferred from review.
+
+Real Claude Opus5.5 focused follow-up exits0 and returns ACCEPT in the read-only
+candidate scope, actual returned model claude-opus-5-5. Its initial seed/provenance
+points are resolved; real post-correction CLI21/22 verify the exact live seed,
+not a model's environment assumptions. The final rejection diagnostic includes
+actual seed values; success path/protocol is unchanged and all3 host contracts
+pass. Separate Codex review found no material issues. Raw model replies/source
+hashes are external. The task's1F52 simulator is now Shutdown; inventory23 confirms
+older1CA/98D/iPhone18Pro Booted states remain. No task listener remains. No merge,
+publication, product installation or physical device operation occurred.
+
+## PR16 Homebrew CI installation blocker (2026-11-07)
+
+[Run42256579484](https://github.com/ipbtools/ipb/actions/runs/42256579484)
+at3262310 and [run42257306342](https://github.com/ipbtools/ipb/actions/runs/42257306342)
+at21c6298 both pass Apple environment, native build, host regressions and staged
+package verification. On each disposable macOS27 ARM64 CI VM, the install step
+prints `Tapping homebrew/core` and cloning its repository, then raises
+`subprocess.TimeoutExpired` at the existing180s `brew install` deadline. It never
+reaches the ipb install/test/hash success receipt. The script/formula were unchanged
+from main, so neither run is full CI acceptance of the candidate.
+
+Homebrew's shipped `env_config.rb` documents that `HOMEBREW_NO_INSTALL_FROM_API`
+selects large local core/cask checkouts. Its `Formulary::FromAPILoader` only matches
+core names; [official tap documentation](https://docs.brew.sh/Taps) retains fully
+qualified third-party formula installation. Clearing the forced/inherited flag
+therefore removes the unrelated core clone while retaining
+`ipbtools/ci-package/ipb`, the generated archive URL, real install/test and all
+installed product hashes. No timeout, CI-only guard or success condition is relaxed.
+Local release tests10/10, observation tests3/3, Python compilation and diff checks
+pass. The correction awaits its own terminal CI result; no local Homebrew install ran.
+
+The separate `xcodebuild -version | head -1` emits an NSFileHandle Broken pipe in
+the environment step, but that step succeeds in both runs. Its source pipeline
+can close stdout early; it is not evidence for the later Homebrew timeout and
+remains an independent pre-existing diagnostic, without a change in this PR.
+Raw logs stay outside Git under the existing2026-11-07 evidence directory.
+
+Follow-up: [CI42259214280](https://github.com/ipbtools/ipb/actions/runs/42259214280)
+at efb311d completes successfully, including actual Homebrew install/test/product
+hashes and package upload. This closes the core-checkout CI blocker without a
+deadline or success-condition change; it adds no device acceptance.
