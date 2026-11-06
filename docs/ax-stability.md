@@ -38,63 +38,20 @@ have truncated children and lack responder traits/value.
 - This provides a cheaper explicit observation path; it does not claim to cure all
   legacy full-profile nils, oversized graphs or identity changes after scroll.
 
-## Stages and supervision
+## Implementation and delivery baseline
 
-1. **Evidence and design:** use only task-owned simulator state, fixed-count
-   independent full/core comparisons and core+3002 timing. Seek a<=512-record
-   reachable failing state; distinguish empirical benefit from unverified scope.
-   Opus reviews the concrete evidence and design before production edits.
-2. **Unused-state queries:** implement operation-specific core requests; reproduce
-   the nil contract through the existing host transport fixture and retain guards.
-   Commit code, focused tests and confirmed verification; Opus checks this stage.
-3. **Explicit observations:** add CLI/MCP core profile and provenance with matching
-   help, completion, user/protocol documentation and existing-fixture regressions.
-   Commit the complete implementation; Opus reviews the complete fixed diff.
-4. **Delivery:** finish relevant host/package/CI checks, record their actual results,
-   resolve confirmed findings, and open a PR. Do not merge or publish a release.
+Source baseline58e5c32 is the first complete implementation offered for acceptance;
+it stays fixed across follow-up validation. Stage1 cadcefa and stage2 are accepted
+by actual Opus5.5 source reviews, including the final delivery boundary review.
+[PR15](https://github.com/ipbtools/ipb/pull/15) contains the implementation. Native
+host, isolated package and CI/Homebrew gates pass; see verification.md for exact
+revisions and artifacts. These are not supported physical HID/media acceptance.
 
-## Validation boundaries
-
-Pin three observable contracts using the existing AX/MCP fixtures: expensive-state
-failure versus successful cheap requests; unchanged pre-submit guards and one-shot
-post-submit failures; honest core provenance with unchanged default output. Keep
-tests compact and reuse existing negatives. No new phone app/test framework.
-
-Simulator probes are external experiments, not a new product backend. The earlier
-implementation stage excluded phone operations. On November6 the user explicitly
-requested a broader physical App matrix and selected12mini; that authorizes foreground
-App/page setup and AX sampling on that device.13Pro is assigned to the concurrent
-PocketAgent task and remains untouched. AX-only results do not close the supported
-HID/media smoke matrix. Keep legacy deep nils explicitly open.
-
-## Current state
-
-Stage1 cadcefa is accepted by actual Opus5.5 source review with no blocking finding.
-Its existing-fixture regression failed before the production change; the integrated
-implementation now passes91 AX,44 MCP,9 interface tests and the complete native host
-gate. Stage2 implements the explicit CLI/MCP profile and provenance, requested/result
-validation, help/completion and documentation. Its complete fixed diff is the first
-complete implementation offered for review; later fixes retain this scope baseline.
-
-Task-owned simulator9FE94853-1660-4DB1-98D8-C22A608CC76A shows lower cost within512
-records, including core+3002, and the real captured responder passes the input resolver.
-No natural nil was found in that clean state; later activations did not add scenes.
-The simulator is now shut down. No physical-device acceptance is claimed.
-
-Opus5.5 accepts the complete implementation58e5c32 without blocking findings. Its
-wording suggestion is incorporated: traversal/options are the same, while separate
-observations may differ. The isolated package passes layout/signature/checksum and
-extracted startup checks. Host results apply to this unchanged production source;
-the subsequent checkpoint changes documentation only.
-
-Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15).
-[CI run42077704751](https://github.com/ipbtools/ipb/actions/runs/42077704751) passes
-native builds, host regressions, package verification, precompiled Homebrew install/test
-and product hashes, and artifact upload. The first run's homebrew/core clone timeout
-does not recur; no workflow change was needed. The dated verification record contains
-the exact revision and package reference. Opus's delivery review preserves source ACCEPT
-and confirms the evidence boundary. Default full nil and physical acceptance remain open;
-merge requires the supported gate or an explicit maintainer exception.
+The initial implementation used only a task-owned simulator. The user subsequently
+requested a broader physical App matrix and explicitly selected12mini. That authorizes
+foreground App/page setup and AX sampling on that device.13Pro belongs to the active
+PocketAgent latency comparison; other devices/simulators remain excluded. No production
+code, timeout, graph budget or action guard is changed for the matrix.
 
 ## Expanded physical App matrix (2026-11-06)
 
@@ -107,7 +64,7 @@ iPhone13,1/iOS27.0/24A437, wired and unlocked, macOS27.2/26B123,
 Xcode27.2/27B52. The user confirmed this allocation. Initial screen is Home.
 13Pro belongs to the live PocketAgent latency comparison; other devices/sims are excluded.
 
-Predeclared broad phase:18 launchable apps, each in its observed landing state:
+Predeclared broad phase:18 inventory-selected apps, each in its observed landing state:
 Settings, Calculator, Safari, AppStore, Files, Calendar, Clock, Notes, Reminders,
 Maps, Weather, Books, Shortcuts, Music, Stocks, Translate, Bitwarden and PocketAgent.
 These cover system lists/grids, WebKit, dynamic/canvas views, forms and third-party
@@ -154,3 +111,31 @@ Activate with devicectl process launch --activate without --terminate-existing.
 Record shared-host load; the13Pro task can affect host timing even on a different phone.
 Scripts and detailed personal AX/screenshot evidence stay outside Git; this plan and
 verification.md retain only condensed, verified findings and artefact references.
+
+## Physical matrix progress and current blocker
+
+First completed cells: Settings root list, Calculator keypad, Safari tab overview,
+AppStore onboarding, Maps landing and PocketAgent diagnostics. Each has6 accepted
+snapshots in every arm. The existing Stash local-network permission overlay is a
+separate SpringBoard-PID cell, also6/6 in each arm; it is not Stash content coverage.
+Thus126 accepted measured reads currently show lower core cost, without a natural
+nil/timeout or a demonstrated success-rate improvement. More states are still pending.
+
+Files, Calendar, Clock, Notes, Reminders, Weather, Books, Shortcuts, Music, Stocks and
+Translate return CoreDevice10004 before a process PID is obtained. The cause is unknown;
+these are setup failures with no AX attempts, retained rather than counted as nil or
+success. Bitwarden's initial state shows FaceID and hit-test error8. Stash/LocalDevVPN
+are occluded by the unresolved Stash permission card: centre hit returns its embedded
+CoreLocation map-plugin PID, while button hit returns SpringBoard37.
+
+Five additional inventory candidates (Stash, LocalDevVPN, Phone, Contacts, Photos) were
+predeclared without replacing failures; the last three have not run yet. The system
+permission request persists after Home and cleanup of this task's newly launched
+Stash main/Intents/Widget processes (absence in initial inventory checked). No permission
+choice was selected. User choice is pending before continuing Phone/Contacts/Photos,
+actual old/new default locate comparisons, secondary/Web/search states and read-only
+whole-tree3002 experiments. Do not bypass authentication or alter the other phone.
+
+Raw plans, isolated before/after installs and private AX/screenshot data are outside
+Git at `/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-app-matrix/` (directory0700).
+This partial checkpoint must not be called completed6-per-arm coverage for every App.
