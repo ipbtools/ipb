@@ -62,7 +62,8 @@ are used. Hashes, argv, raw receipts and private screenshots stay outside Git at
 Only the allocated wired12mini is operated: CoreDevice UUID
 1D533177-5153-5A0C-9102-8D0A8ADDAEFB, iPhone13,1/iOS27.0/24A437,
 macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32. The concurrently allocated
-13Pro is excluded. Production/tests/build source remains58e5c32.
+13Pro is excluded. That completed matrix uses production/tests/build source58e5c32.
+The later explicit-recovery follow-up is recorded separately below.
 
 Each App/state receives6 attempts per arm, interleaved by all six arm permutations,
 with rotated first arm, fresh process inventory per attempt and fixed3s gap. Record
@@ -182,12 +183,26 @@ gate and normal lookup failure can both produce no port. The requesting-client o
 and allows-suspended-server byte are separate in the inspected code. No supported
 remote setter or successful original-position background-read path is established.
 
-Next decision is user-owned: whether explicit activation recovery may bring the
-target App to the foreground. Existing ui stays read-only; activation is not
-background-read success. The current branch's generic devicectl passthrough can
-already call process launch --activate without --terminate-existing. The separate
-Duo physical adapter also owns nonterminating activation; do not add a duplicate
-activate command. No product change or automatic recovery is made pending this choice.
+The user now explicitly authorizes foreground activation recovery. Existing ui
+remains read-only; activation is not background-read success. Reuse the generic
+devicectl passthrough without --terminate-existing, and use the new activation
+receipt's PID for the next snapshot. Do not add a duplicate activate command or
+change the separate Duo physical adapter's nonterminating activation.
+
+The first real passthrough run exposes a CLI bug: appending --device after the
+bundle puts it in launch's remaining App arguments, so CoreDevice exits64 for a
+missing device before activation. For the device/process/launch passthrough only,
+place --device before user arguments. Retain other passthrough behavior. Add a
+small existing-fixture regression for device selection and unchanged App arguments.
+A nil snapshot gets conditional explicit-recovery guidance without a read retry,
+action, timeout/budget change or successful replacement tree.
+
+Validation is three same-PID Settings recovery cycles plus one inverse Calculator
+cycle, preserving pre/post screenshots, foreground/lock checks, full/core graph and
+cleanup validation. Failed background reads remain failures; recovered reads are
+foreground reads. Retain the original zero-measurement parser failure separately.
+Opus reviews the narrow source change and the actual recovery observations before
+final delivery. The original source acceptance baseline58e5c32 stays fixed.
 
 The last bounded launch experiment does not supply a background route. Omitting
 --activate uses CoreDevice's documented default true. Explicit --no-activate records

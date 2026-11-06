@@ -50,7 +50,9 @@ NATIVE_ATTRS = "UIAccessibilitySnapshotKeyAttributes"
 def snapshot_nodes(snapshot, root, *, requested=SNAPSHOT_ATTRS):
     """Keep native path occurrences; handles can legitimately have two parents."""
     if snapshot is None:
-        raise ValueError("AX snapshot unavailable: device returned nil")
+        raise ValueError("AX snapshot unavailable: device returned nil; if the target app is in the background, "
+                         "activate it explicitly without terminating it, then take a fresh snapshot using "
+                         "the PID in the activation receipt (see docs/ui.md)")
     if not isinstance(snapshot, dict):
         raise ValueError("invalid AX snapshot record")
     actual_root, expected_root = identity(snapshot.get(ELEMENT)), identity(root)

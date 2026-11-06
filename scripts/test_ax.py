@@ -1232,6 +1232,8 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                 result, state, error = await self.run_capture(mode, deep=True)
                 self.assertIsNone(result)
                 self.assertIn(expected, str(error))
+                self.assertEqual(state["requests"], [1, 2])
+                self.assertEqual(state["action_submissions"], 0)
                 self.assertTrue(state["closed"] and state["dtx_closed"])
 
     async def test_full_state_supplement_is_per_unique_handle_and_keeps_native_fields(self):

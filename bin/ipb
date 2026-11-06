@@ -1269,7 +1269,13 @@ case "$cmd" in
   unpair)      devicectl manage unpair --device "$DEVICE" ;;
   devicectl)
     [[ $# -ge 1 ]] || { usage; exit 2; }
-    devicectl "$@" --device "$DEVICE"
+    if [[ "$1" == device && "${2:-}" == process && "${3:-}" == launch ]]; then
+      # launch treats everything after the bundle as App arguments, including flags.
+      shift 3
+      devicectl device process launch --device "$DEVICE" "$@"
+    else
+      devicectl "$@" --device "$DEVICE"
+    fi
     ;;
   raw)
     [[ $# -ge 2 ]] || { usage; exit 2; }

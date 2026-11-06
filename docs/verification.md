@@ -69,8 +69,10 @@ returned, then type2 replies error0/resultData UID0 in6–7ms. Ordinary type5 re
 error17 (APT maps underlying AXRuntime no-port status-25215). The same-DTX foreground
 →background→foreground experiment and clientType0/2 control reproduce the refusal.
 A suspended-PID gate is one static no-port path, not a proven runtime predicate.
-No original-position background read succeeds. Explicit nonterminating activation as
-a recovery is awaiting the user's behavior choice; ui remains read-only.
+No original-position background read succeeds. The user has authorized explicit nonterminating foreground recovery; ui remains
+read-only. The documented passthrough launch first exposed an argument-placement
+bug (exit64 before activation), now fixed narrowly for that launch path; physical
+recovery validation is in progress.
 
 ### v0.6.0 publication decision (2026-11-03)
 

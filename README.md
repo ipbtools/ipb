@@ -187,6 +187,11 @@ explicit; timeout recovery on a fresh connection is not implemented.
 See [the UI guide](docs/ui.md) for setup, JSON fields, text policy, bounds and the AX/XCTest
 comparison. Availability depends on the [installation channel](#installation-channels).
 
+Background App AX reads can fail with a native nil or error17. When changing the
+foreground is authorized, use the [explicit foreground recovery](docs/ui.md#explicit-foreground-recovery)
+to activate without requesting termination and then read using the new receipt's PID.
+`ui` itself remains read-only; this is not background AX support.
+
 ### Agent tools (`ipb mcp`)
 
 v0.6.0 provides a bounded stdio MCP server: `ipb mcp`. Configure a client

@@ -48,6 +48,40 @@ A keyboard/overlay can select a different process.
 Hit-test selection currently requires portrait `rot0`; explicit PID reads retain the raw
 AX coordinate space. Failed or nil hit tests fail the command, with no automatic replay.
 
+### Explicit foreground recovery
+
+On the verified 12 mini / iOS 27.0 (24A437), a still-running Settings process returns
+a native nil snapshot while Calculator is foreground; ordinary AX also refuses the
+read with error17. Returning Settings to the foreground restores its AX tree with
+the same PID. This is an explicit foreground recovery, not original-position
+background AX support. A nil result alone does not establish that an app is suspended.
+
+When changing the foreground App is authorized, use the existing CoreDevice
+passthrough to activate the target without requesting process termination:
+
+```sh
+# Set IPB_RECOVERY_DEVICE to the selected CoreDevice UUID.
+ipb -s "$IPB_RECOVERY_DEVICE" devicectl device process launch --activate \
+  --json-output activation.json com.apple.Preferences
+```
+
+Proceed only after that command succeeds. Read `result.process.processIdentifier`
+from the new `activation.json` receipt and set `IPB_RECOVERY_PID` to that value.
+Check the visible target App with a screenshot or a hit test on one of its visible
+elements; activation can expose an onboarding or system prompt. Then read anew:
+
+```sh
+ipb -s "$IPB_RECOVERY_DEVICE" ui --deep --pid "$IPB_RECOVERY_PID" --json
+```
+
+Use the receipt's PID rather than a cached value: the process might have exited
+before activation. The command above omits `--terminate-existing`; this branch's
+ordinary `ipb launch` includes it and must not be substituted when preserving a
+running process/page is required. Do not replay an activation with an uncertain
+outcome. `ui` never activates or retries automatically, and a failed read emits no
+replacement tree. The observed `--no-activate` receipt did not keep Settings in the
+background on this seed, so it is not an alternative background-read recipe.
+
 ## Returned graph and text policy
 
 Ordinary dumps keep JSON schema 1 and the existing AXChildren/Description-first contract.
