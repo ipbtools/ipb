@@ -36,12 +36,16 @@ Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15).
 [CI run42077704751](https://github.com/ipbtools/ipb/actions/runs/42077704751) passes
 native build, host regressions, package and precompiled Homebrew install/test/hash checks;
 the first run's homebrew/core clone timeout does not recur. The supported physical
-HID/media/AX matrix remains unrun. The user subsequently requested physical App-matrix
-validation and selected12mini. Six App states plus the permission-overlay state each
-pass6/6 per arm (126 measured reads), showing lower core latency but no observed natural
-nil or success-rate improvement. Startup failures and auth/permission gates are recorded
-separately. User choice on a persistent Stash local-network permission card is pending
-before more states/default-locate/input-workload comparisons can continue.
+HID/media gate remains unrun. The user subsequently selected12mini for expanded AX
+sampling. Default locate on five App states and a permission card passes6/6 old/new,
+with lower query cost. The permission card has disappeared; no choice is pending.
+Controlled Settings→Calculator switching reproduces background Settings nil in all
+three arms (0/18 each across three re-entries); foreground controls recover with the
+same PID. This failure is not fixed by core, and its internal cause is unknown.
+A foreground read-only search3002 workload has one initial old-full type2 timeout,
+but independent empty-search confirmation is30/30 per arm with valid responder guards.
+This proves reduced workload, not improved natural-failure success. Dense300–512 and
+complete Web-content coverage remain missing; activation/auth gates stay separate.
 See [current plan](ax-stability.md) and the dated evidence below.
 
 ### v0.6.0 publication decision (2026-11-03)

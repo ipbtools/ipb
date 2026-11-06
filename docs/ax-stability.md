@@ -94,9 +94,13 @@ No aggregate across heterogeneous Apps is a universal reliability estimate.
 
 Then add observed reachable search/keyboard, secondary-page, Web-content and overlay
 states using reversible navigation without sending messages or editing user content.
-A natural failure in any arm symmetrically selects a cell for a separate, pre-fixed
-30 attempts per arm and three independent state re-entries (rotating the first arm).
-Do not pool selection-phase observations into confirmation rates; if a state cannot be recreated, report that explicitly.
+A natural failure in any arm symmetrically selects a cell for separate confirmation;
+selection-phase observations are never pooled into its rates. After the interim data,
+Opus recommended an explicit sampling revision: uniform fast background refusal gets
+three independent state re-entries with foreground positive controls, rather than
+redundant30/arm. Valid foreground failures or arm/re-entry discordance retain30/arm.
+The observed foreground search timeout selected five re-entries of6/arm (30/arm),
+with rotated first arms. If a state cannot be recreated, report that explicitly.
 Read-only old/new locate samples use actual unique observed selectors on representative
 states. Whole-tree3002 comparison requires a separately labelled read-only physical
 experiment; product input is not a read-only snapshot command and is not auto-replayed.
@@ -112,30 +116,45 @@ Record shared-host load; the13Pro task can affect host timing even on a differen
 Scripts and detailed personal AX/screenshot evidence stay outside Git; this plan and
 verification.md retain only condensed, verified findings and artefact references.
 
-## Physical matrix progress and current blocker
+## Physical findings and remaining coverage
 
-First completed cells: Settings root list, Calculator keypad, Safari tab overview,
-AppStore onboarding, Maps landing and PocketAgent diagnostics. Each has6 accepted
-snapshots in every arm. The existing Stash local-network permission overlay is a
-separate SpringBoard-PID cell, also6/6 in each arm; it is not Stash content coverage.
-Thus126 accepted measured reads currently show lower core cost, without a natural
-nil/timeout or a demonstrated success-rate improvement. More states are still pending.
+The permission blocker is resolved. The user authorized Allow, but the guarded action
+found no visible alert and sent nothing; a screenshot then confirmed the card had
+already disappeared. This does not prove that this task changed the OS permission.
+LocalDevVPN's dashboard is now measured separately from the permission overlay.
 
-Files, Calendar, Clock, Notes, Reminders, Weather, Books, Shortcuts, Music, Stocks and
-Translate return CoreDevice10004 before a process PID is obtained. The cause is unknown;
-these are setup failures with no AX attempts, retained rather than counted as nil or
-success. Bitwarden's initial state shows FaceID and hit-test error8. Stash/LocalDevVPN
-are occluded by the unresolved Stash permission card: centre hit returns its embedded
-CoreLocation map-plugin PID, while button hit returns SpringBoard37.
+Old/new default locate comparisons on Settings, Calculator, Safari tab overview,
+Maps and PocketAgent diagnostics, plus the permission card, each pass6/6 per arm.
+Query medians fall from221–1033ms to111–166ms on the five App states. The explicit
+core deep comparisons likewise show lower cost; default full remains the compatibility
+control. These successful samples do not establish improved natural-failure success.
 
-Five additional inventory candidates (Stash, LocalDevVPN, Phone, Contacts, Photos) were
-predeclared without replacing failures; the last three have not run yet. The system
-permission request persists after Home and cleanup of this task's newly launched
-Stash main/Intents/Widget processes (absence in initial inventory checked). No permission
-choice was selected. User choice is pending before continuing Phone/Contacts/Photos,
-actual old/new default locate comparisons, secondary/Web/search states and read-only
-whole-tree3002 experiments. Do not bypass authentication or alter the other phone.
+A reproducible nil path now exists independently of the permission card: activate
+Settings, activate Calculator, then query the still-running Settings PID explicitly.
+Three independent re-entries produce0/18 accepted reads in each arm, all fast native
+nil. Old-full/new-core foreground controls before and after every entry pass with the
+same Settings PID. Core does not recover this background refusal; the Apple internal
+cause and relationship to the simulator's roughly3s nil remain unproven.
 
-Raw plans, isolated before/after installs and private AX/screenshot data are outside
+The read-only focused-search3002 workload initially gives old-full5/6 (one first-arm
+type2 timeout), new-full6/6 and core6/6. A separate five-entry empty-search confirmation
+is30/30 in every arm, all279 records, with the real responder resolver also passing
+30/30 per arm. Snapshot medians are2244/2247/508ms (old/full/core). Thus the isolated
+timeout is not a stable success-rate improvement. No product input or clipboard call
+is represented by this experiment. One own local HID query `a` was cleared; its
+accidentally retained setup cohort is labelled separately and excluded from confirmation.
+
+The loaded public Swift Concurrency page exposes64 native Safari records with an
+AXRemoteElement, not the article's complete Web content. Implicit selection hits the
+WebContent PID but the snapshot root identifies Safari; the root mismatch is retained.
+Explicit Safari PID/chrome-point sampling preserves the strict guard. General and
+Apps secondary-page discovery yields102/129 records;300–512 coverage is still missing.
+
+Eleven initial activation failures precede the first permission-card capture. Their
+CoreDevice10004 cause remains unknown and they have zero AX attempts. Bitwarden is
+auth-gated; no authentication is bypassed. Phone/Contacts/Photos and post-card Stash
+sampling remain pending at this checkpoint. The supported HID/media gate is separate.
+
+Raw plans, isolated before/after installs and private AX/screenshot data stay outside
 Git at `/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-app-matrix/` (directory0700).
-This partial checkpoint must not be called completed6-per-arm coverage for every App.
+See verification.md for completed cells, separate denominators and dated evidence.
