@@ -45,7 +45,9 @@ if tap.exists():
 (tap / "Formula/ipb.rb").write_text(formula)
 subprocess.run(["git", "init", str(tap)], check=True, stdout=subprocess.DEVNULL)
 name = "ipbtools/ci-package/ipb"
-env = dict(os.environ, HOMEBREW_NO_AUTO_UPDATE="1", HOMEBREW_NO_INSTALL_FROM_API="1", HOMEBREW_NO_ANALYTICS="1")
+env = dict(os.environ, HOMEBREW_NO_AUTO_UPDATE="1", HOMEBREW_NO_ANALYTICS="1")
+# The fully qualified CI formula is local; core/cask metadata can use the API.
+env.pop("HOMEBREW_NO_INSTALL_FROM_API", None)
 try:
     subprocess.run(["brew", "install", name], env=env, check=True, timeout=180)
     subprocess.run(["brew", "test", name], env=env, check=True, timeout=60)

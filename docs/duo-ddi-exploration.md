@@ -119,6 +119,15 @@ call was corrected, and a deprecated observer used with a modern monitor was
 removed in favor of the proven3-argument handler. Neither path remains in the
 candidate. No production fallback or legacy observer was added.
 
+PR16 CI at3262310 and21c6298 passed native, host and package checks but failed
+the actual Homebrew installation gate: forcing `HOMEBREW_NO_INSTALL_FROM_API`
+made `brew install` clone homebrew/core and hit the existing180s deadline before
+installing ipb. The minimal CI correction clears that flag, including inherited
+values. It keeps the fully qualified temporary tap/local archive, real install/test,
+file hashes, original deadlines and CI-only boundary; the next CI must verify it.
+The environment step's separate `xcodebuild | head` Broken pipe was nonblocking in
+both runs and is recorded without an environment-script change in this PR.
+
 ## Current result and implementation direction
 
 The strongest DDI lead is **resizable scene management**. Shipped types, launchd

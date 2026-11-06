@@ -15,6 +15,10 @@ hard blocker for automatic App/window targeting; no guessed endpoint or same-PID
 fallback. The candidate is excluded from normal build/install/package. Native
 probe build and three host contract tests pass; full product/hardware gates are not
 implied. Separate AX recovery and PocketAgent integration tasks retain ownership.
+PR16's first two CI runs passed native/host/package gates but timed out while
+cloning homebrew/core before ipb installation. The minimal correction clears the
+forced non-API flag; real install/test/hash checks and deadlines remain intact.
+An actual successful install gate is still required; see the dated record below.
 
 ### Duo DDI / native AX research (2026-11-05)
 
@@ -7852,3 +7856,30 @@ pass. Separate Codex review found no material issues. Raw model replies/source
 hashes are external. The task's1F52 simulator is now Shutdown; inventory23 confirms
 older1CA/98D/iPhone18Pro Booted states remain. No task listener remains. No merge,
 publication, product installation or physical device operation occurred.
+
+## PR16 Homebrew CI installation blocker (2026-11-07)
+
+[Run42256579484](https://github.com/ipbtools/ipb/actions/runs/42256579484)
+at3262310 and [run42257306342](https://github.com/ipbtools/ipb/actions/runs/42257306342)
+at21c6298 both pass Apple environment, native build, host regressions and staged
+package verification. On each disposable macOS27 ARM64 CI VM, the install step
+prints `Tapping homebrew/core` and cloning its repository, then raises
+`subprocess.TimeoutExpired` at the existing180s `brew install` deadline. It never
+reaches the ipb install/test/hash success receipt. The script/formula were unchanged
+from main, so neither run is full CI acceptance of the candidate.
+
+Homebrew's shipped `env_config.rb` documents that `HOMEBREW_NO_INSTALL_FROM_API`
+selects large local core/cask checkouts. Its `Formulary::FromAPILoader` only matches
+core names; [official tap documentation](https://docs.brew.sh/Taps) retains fully
+qualified third-party formula installation. Clearing the forced/inherited flag
+therefore removes the unrelated core clone while retaining
+`ipbtools/ci-package/ipb`, the generated archive URL, real install/test and all
+installed product hashes. No timeout, CI-only guard or success condition is relaxed.
+Local release tests10/10, observation tests3/3, Python compilation and diff checks
+pass. The correction awaits its own terminal CI result; no local Homebrew install ran.
+
+The separate `xcodebuild -version | head -1` emits an NSFileHandle Broken pipe in
+the environment step, but that step succeeds in both runs. Its source pipeline
+can close stdout early; it is not evidence for the later Homebrew timeout and
+remains an independent pre-existing diagnostic, without a change in this PR.
+Raw logs stay outside Git under the existing2026-11-07 evidence directory.
