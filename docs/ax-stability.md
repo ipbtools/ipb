@@ -97,7 +97,7 @@ states using reversible navigation without sending messages or editing user cont
 A natural failure in any arm symmetrically selects a cell for separate confirmation;
 selection-phase observations are never pooled into its rates. After the interim data,
 Opus recommended an explicit sampling revision: uniform fast background refusal gets
-three independent state re-entries with foreground positive controls, rather than
+three same-PID state re-entries with foreground positive controls, rather than
 redundant30/arm. Valid foreground failures or arm/re-entry discordance retain30/arm.
 The observed foreground search timeout selected five re-entries of6/arm (30/arm),
 with rotated first arms. If a state cannot be recreated, report that explicitly.
@@ -128,32 +128,47 @@ Maps and PocketAgent diagnostics, plus the permission card, each pass6/6 per arm
 Query medians fall from221–1033ms to111–166ms on the five App states. The explicit
 core deep comparisons likewise show lower cost; default full remains the compatibility
 control. These successful samples do not establish improved natural-failure success.
+Only locate has a physical before/after comparison here; wait, press and end-to-end
+input share the request change but were not compared, and no product `ui input` was sent.
 
 A reproducible nil path now exists independently of the permission card: activate
 Settings, activate Calculator, then query the still-running Settings PID explicitly.
-Three independent re-entries produce0/18 accepted reads in each arm, all fast native
+Three same-PID re-entries produce0/18 accepted reads in each arm, all fast native
 nil. Old-full/new-core foreground controls before and after every entry pass with the
 same Settings PID. Core does not recover this background refusal; the Apple internal
 cause and relationship to the simulator's roughly3s nil remain unproven.
+Only one target/occluder pair was tested. This path requires an explicit PID; it is a
+deterministic refusal in this observed state, not a foreground reliability rate.
 
 The read-only focused-search3002 workload initially gives old-full5/6 (one first-arm
-type2 timeout), new-full6/6 and core6/6. A separate five-entry empty-search confirmation
-is30/30 in every arm, all279 records, with the real responder resolver also passing
+type2 timeout), new-full6/6 and core6/6. Five same-PID re-entries of visually empty
+search are30/30 in every arm, all279 records, with the real responder resolver passing
 30/30 per arm. Snapshot medians are2244/2247/508ms (old/full/core). Thus the isolated
-timeout is not a stable success-rate improvement. No product input or clipboard call
-is represented by this experiment. One own local HID query `a` was cleared; its
+initial timeout is not attributable to a code version: new-full sends the same request.
+Setup uses guarded press and can warm the app; there are only five first-after-setup
+reads, so a cold-first timeout rate is not excluded. No success-rate difference is
+established. Native value is the fixed `Search` placeholder (length6), not an empty
+string; screenshots show no query. No product input or clipboard call is represented
+by this experiment. Placeholder and resolver passes are not end-to-end input evidence.
+One own local HID query `a` was cleared; its
 accidentally retained setup cohort is labelled separately and excluded from confirmation.
 
 The loaded public Swift Concurrency page exposes64 native Safari records with an
 AXRemoteElement, not the article's complete Web content. Implicit selection hits the
-WebContent PID but the snapshot root identifies Safari; the root mismatch is retained.
-Explicit Safari PID/chrome-point sampling preserves the strict guard. General and
-Apps secondary-page discovery yields102/129 records;300–512 coverage is still missing.
+WebContent PID but the snapshot root identifies Safari. This is one actual after-core
+`ui --deep --native-profile core --json` call without `--pid`, rejected by the root
+guard; old/full implicit selection was not measured. Explicit Safari PID/chrome-point
+sampling preserves the strict guard. Settings Apps (129 records) is a completed cell;
+General (102) is discovery only;300–512 coverage is still missing.
 
-Eleven initial activation failures precede the first permission-card capture. Their
-CoreDevice10004 cause remains unknown and they have zero AX attempts. Bitwarden is
-auth-gated; no authentication is bypassed. Phone/Contacts/Photos and post-card Stash
-sampling remain pending at this checkpoint. The supported HID/media gate is separate.
+All23 predeclared candidates were attempted: nine have measured App states (six of
+the original18, three of the additional five). Third-party coverage is PocketAgent
+diagnostics, LocalDevVPN dashboard and Stash3.6 What's New, not their entire flows.
+Thirteen Apps fail activation with CoreDevice10004 and zero AX attempts; the cause
+is unknown. Eleven failures precede the first permission-card capture, while Contacts/Photos fail
+after it disappeared. Bitwarden remains auth-gated; no authentication is bypassed.
+The device is restored to Home with screenshot/hit-PID evidence. The supported
+HID/media gate is separate;300–512 and full Web content remain unverified.
 
 Raw plans, isolated before/after installs and private AX/screenshot data stay outside
 Git at `/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-app-matrix/` (directory0700).

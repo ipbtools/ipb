@@ -43,9 +43,15 @@ Controlled Settings→Calculator switching reproduces background Settings nil in
 three arms (0/18 each across three re-entries); foreground controls recover with the
 same PID. This failure is not fixed by core, and its internal cause is unknown.
 A foreground read-only search3002 workload has one initial old-full type2 timeout,
-but independent empty-search confirmation is30/30 per arm with valid responder guards.
-This proves reduced workload, not improved natural-failure success. Dense300–512 and
-complete Web-content coverage remain missing; activation/auth gates stay separate.
+but five same-PID re-entries are30/30 per arm with passing responder guards. The
+visually empty field exposes the native `Search` placeholder; guarded setup can warm
+the app. This shows lower read cost, not improved natural-failure success or cold-start
+reliability. Nine of23 candidates have measured App states;13 have activation failures
+and Bitwarden is auth-gated. The largest state is279 records;300–512 and complete Web
+content remain unverified. One after-core default-selection call on a loaded Safari
+page hits a WebContent PID and fails the Safari root identity guard; old/full implicit
+selection was not measured. Explicit Safari PID reads expose64 native framework records
+including an AXRemoteElement. See the final dated record for separate denominators.
 See [current plan](ax-stability.md) and the dated evidence below.
 
 ### v0.6.0 publication decision (2026-11-03)
@@ -8102,3 +8108,149 @@ overlay-network-permission/, interim-results.json,03-* setup/cleanup evidence an
 04-locate-plan.json. No personal AX bodies/screenshots are committed. This is a
 partial physical AX checkpoint, not full supported HID/media acceptance or proof of
 improved natural-failure success rate. No production source or default install changed.
+
+
+## 2026-11-06 — Expanded 12 mini AX matrix, completed available-device run
+
+This follow-up finishes the predeclared 23-candidate run on the same wired 12 mini:
+iPhone13,1 / iOS27.0 /24A437, CoreDevice UUID1D533177-5153-5A0C-9102-8D0A8ADDAEFB,
+macOS27.2 /26B123, Xcode27.2 /27B52, CoreDevice651.32. Before is main8c227a1;
+after is the checksum-verified58e5c32 package. Production/tests/build configuration
+remain unchanged. The actual before/after manifests and state/order rules are in
+arms.json and the existing [plan](ax-stability.md). The concurrently owned 13 Pro
+was not operated. Host load is shared, not an isolated timing benchmark.
+
+Nine of23 candidates have measured App states: six of the initial18 and three of the
+additional five. The table gives snapshotMs medians (ms); every cell is6/6 accepted
+in **each** arm. Old/full/core means old default full, new default full compatibility
+control, and new opt-in core. Core omits native visibility, so these are different
+observation semantics. snapshotMs includes client-side work, not pure native CPU time.
+
+| Actual state | Records | Old full | New full | New core |
+| --- | ---: | ---: | ---: | ---: |
+| Settings root list | 171 | 1027 | 1025 | 171 |
+| Calculator keypad | 45 | 222 | 223 | 124 |
+| Safari tab overview | 66 | 407 | 410 | 116 |
+| App Store onboarding | 64 | 259 | 259 | 91 |
+| Maps landing | 132 | 525 | 525 | 143 |
+| PocketAgent diagnostics | 217 | 1023 | 1019 | 152 |
+| LocalDevVPN connected dashboard | 40 | 179 | 179 | 83 |
+| Phone Calls/Recents | 159 | 890 | 895 | 194 |
+| Stash3.6 What's New | 125 | 411 | 406 | 164 |
+| Settings Apps secondary list | 129 | 692 | 691 | 159 |
+| Safari loaded Swift Concurrency page, native framework only | 64 | 293 | 291 | 108 |
+| SpringBoard local-network permission overlay, separate from App content | 133 | 656 | 657 | 120 |
+
+Phone's first measured core read takes2020ms snapshot /2.674s CLI wall, well above
+its194ms snapshot median. Lower medians are not a uniform tail-latency guarantee.
+
+Thirteen candidates fail activation with CoreDevice10004 before a PID, with zero AX
+measurements: Files, Calendar, Clock, Notes, Reminders, Weather, Books, Shortcuts,
+Music, Stocks, Translate, Contacts and Photos. The first11 failure receipts precede
+the first Stash permission-card capture; Contacts/Photos fail after it disappeared.
+The launch cause is unknown, not established as a crash or AX failure. Bitwarden
+remains FaceID-gated with hit-test refusal8 and no measured App snapshots. Onboarding,
+diagnostics and native Web framework states are not complete business-flow coverage.
+
+The user authorized Allow for Stash. The guarded alert action found no visible alert
+and sent nothing; the next screenshot showed the card already gone. This does not
+prove that this task changed the OS permission. No VPN control or auth flow was used.
+
+**Same default-path comparison:** real old/new `ui locate`, unique preselected exact
+selectors,6/6 success in each arm. QueryMs and complete CLI wall medians are separate:
+
+| State | Query old→new (ms) | Wall old→new (s) |
+| --- | ---: | ---: |
+| Settings | 1024→166 | 1.660→0.796 |
+| Calculator | 221→128 | 0.857→0.750 |
+| Safari tab overview | 408→111 | 1.022→0.724 |
+| Maps | 527→140 | 1.191→0.758 |
+| PocketAgent diagnostics | 1033→156 | 1.633→0.756 |
+| Existing permission overlay | 659→120 | 1.276→0.736 |
+
+Only locate has a physical old/new operation comparison. Wait, press and end-to-end
+input share the attribute change but were not compared here. Setup press receipts
+are navigation evidence, not action reliability or input benchmarks.
+
+**Reproducible failure, not recovered:** activate Settings, obtain its current PID,
+activate Calculator without terminating Settings, then run `ipb -s UUID ui --deep
+--pid SETTINGS_PID --json` (add `--native-profile core` for that arm). Three same-PID
+re-entries, rotating first arm, give0/18 accepted per arm, all fast native nil
+(about0.64s wall). Each entry's old-full/new-core foreground reads before and after
+pass with the same PID7976:12 positive controls, outside measured denominators.
+Only this target/occluder pair was tested. This explicit-PID background refusal is
+not a foreground reliability estimate and does not establish the internal Apple
+cause or explain the simulator's roughly3s nil. Earlier Settings/PocketAgent reads
+under the permission overlay are separate joint-condition cohorts:0/6 per arm per
+App,36 more fast nils. Their foreground check expects SpringBoard, not the target App.
+
+**Read-only whole-tree3002 experiment:** real backends with full/core plus3002,
+unchanged limits, operation=None. No product `ui input`, text setter or clipboard call.
+Initial visually empty Settings search gives old5/6, new-full6/6, core6/6; the initial
+old first read times out on AX type2 attribute52. New-full sends the same request, so
+this cannot be attributed to a code version. Five further same-PID close/reopen entries,
+6/arm each with rotated first arm, are30/30 accepted per arm and30/30 passing the real
+responder resolver. All have279 records. The native value is the fixed `Search`
+placeholder (length6), not an empty string; screenshots show no user query.
+Placeholder and resolver passes are not end-to-end input evidence.
+
+| Arm | Snapshot median/max (ms) | Query max (ms) | CLI wall median/max (s) |
+| --- | ---: | ---: | ---: |
+| Old full+3002 | 2244 /2294 | 2295 | 2.803 /3.090 |
+| New full+3002 | 2247 /2283 | 2283 | 2.811 /2.975 |
+| New core+3002 | 508 /527 | 527 | 1.066 /1.288 |
+
+Only five reads are first-after-setup: old2246.5/2274.0ms, new-full2244.7/2246.9ms,
+core516.7ms (snapshotMs). Guarded setup press itself reads a snapshot and may warm
+native state. These correlated same-PID samples do not exclude a cold-first timeout
+rate or support an independent-trial reliability bound. The largest measured state
+is279 records;300–512 near-deadline states remain unverified. General secondary-page
+discovery has102 records and is not a completed6/arm cell.
+
+One own local HID query `a` was subsequently cleared. A setup command incorrectly
+combined mutually exclusive `--pid` and `--point`, so it failed before device access;
+the first attempted confirmation actually retained that query (228 records,6/6 per
+arm). It remains separately labelled exploratory, excluded from the30/arm confirmation.
+The corrected setup uses `--pid` alone; all five final close receipts are accepted.
+No message, call, form submission or user-content edit was performed.
+
+**Safari default-selection failure:** one real after CLI call without `--pid`,
+`ipb -s UUID ui --deep --native-profile core --json`, on the loaded public page
+`https://docs.swift.org/swift-book/documentation/the-swift-programming-language/concurrency/`
+fails root identity validation: selected WebContent PID15930, snapshot root Safari7978.
+Old/full implicit selection was not measured. Explicit Safari7978 reads pass, with
+chrome hit-point .84/.93 pre/post checks;64 records include WKContentView and an
+AXRemoteElement, not the complete article body. No identity guard was relaxed.
+
+Manifest accounting is30 completed cells /504 measured calls:216 normal deep App or
+overlay reads,72 default locate reads,126 input-workload reads (initial search cell,
+five confirmation entries and separately labelled query-a), and90 intentional background
+diagnostic reads.
+There are413 accepted reads,90 native nil and one type2 timeout, with no state-invalid
+measurement rows. These heterogeneous counts are bookkeeping, **not a pooled success
+rate**. No measurement was retried or silently replaced. Metadata-only ordered-child
+path checks find no count/hash drift in110 adjacent new-full/core pairs (40–279 records);
+99 additional old-full/core pairs also match, reported separately. No new-core read
+immediately followed new-core (N0), so fixed spacing is not evidence of native drain. Shape equality
+alone does not prove semantic, geometry or cross-snapshot identity equality.
+
+Actual Opus5.5 supervised the design and interim findings, then required the placeholder,
+first-read/tail, stale-summary and Safari-failure corrections above (20-opus-stage*).
+Its final review accepts the result interpretation/documentation scope after explicit
+placeholder/input-evidence wording corrections; no further review is required for
+those edits (23-opus-final*). The peer's final summary refresh is complete.
+The local extraction peer supplied metadata-only grouping (来源：peer); key totals,
+failures, placeholder and timing/control evidence were checked in the main session.
+The conclusion is lower read cost, including the changed default locate path, with
+**no demonstrated natural-failure success-rate improvement**. Supported HID/media,
+complete Web content, dense300–512, cold-first and other devices remain unverified.
+This matrix does not authorize merge or release.
+
+Evidence is outside Git in the0700 directory
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-app-matrix/`: arms.json,
+sanitized-final-results.json, per-cohort
+rows/stdout/stderr/screenshots, controlled-background/, confirm-focused-input-v2/,
+15-setup-correction.json,17-*/18-* discovery,19-remaining-apps-results.json and
+20-opus-stage*/23-opus-final*. Final Home is screenshot-confirmed with stable SpringBoard37 hit
+(21-final-*); no task-owned sampling job/caffeinate remains. No other device, local
+Homebrew install, production source, timeout, budget or action guard was changed.
