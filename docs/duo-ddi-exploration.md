@@ -4,6 +4,117 @@
 “New” below means newly explored relative to ipb's recorded evidence. This is not
 an Apple release-to-release diff. This research makes no product support expansion.
 
+## 2026-11-07 continuation: dynamic observation, not fixed panes
+
+User-authorized continuation coordinates with PocketAgent's dynamic-state task.
+The tool task owns protocol exploration and a new independent simulator
+`1F52A8E8-1857-46AD-9695-8CEEAD3B971E`; older AX/other simulators are untouched.
+No physical device operations, merge or release are authorized in this continuation.
+
+Deliver a minimal **read-only experimental JSON probe** for live display metadata
+and bounded guest FrontBoard observation. It must keep App/window/scene binding,
+global region, touch transform and overlays unknown when their sources are absent.
+A display metadata fingerprint detects differences only; equality never authorizes
+input or promises that no intermediate layout change happened. No input/activation
+or fixed left/right selector belongs in this probe. A changed expected display
+fingerprint must return nonzero. Update this section with actual validation results.
+
+Real Claude Opus5.5 (`claude-opus-5-5`, actual returned model, exit0) recommends
+per-display FBS first and observation-only delivery until ownership/input spaces
+are proven. Accepted: source-qualified unknowns, no authoritative generation and
+no same-PID ownership fallback. Narrowing: this new probe does not disable earlier
+separately validated fixed-seed commands; it adds no automatic action permission.
+Existing AX PR15/f767bab is a separate explicit foreground-recovery path, not a
+scene selector or in-place background AX fix (来源：peer; owning source checked).
+
+New evidence at `/Users/borealin/Documents/Codex/2026-11-07/ipb-duo-state/`:
+Apple's `devicectl` already exposes appResize info/observe/start/set. Its target is
+a display named "Resizable", not arbitrary Duo panes. Bounded simulator observe
+received noForeground→Preferences foreground; the intended10s deadline exits2,
+not a successful one-shot CLI. Session query fails24004 without an active session.
+No resize/move was sent. The independent stream/service route and exact raw XPC
+encoding must be kept separate.
+
+The exported651.32 getters identify feature
+`com.apple.coredevice.feature.resizableappmanagement` and logical remote service
+`com.apple.coredevice.resizableappmanagement`. The framework contains separate
+capability/XPC-service types; this is evidence for a distinct named route, not a
+captured physical RSD socket or envelope. Exported typed API
+`observeFrontmostAppResizability()` returns an AsyncThrowingStream of states with
+optional foreground bundle ID. Early-break stream teardown has not been verified;
+the candidate does not implement it or parse human CLI output.
+
+The correct three-object FBS transition callback delivers nil layout/context on
+both closed outer and opened inner states. Its own service log reports initial
+main-display layout timeout/publishing nil. Existing simulator test/launch
+entitlements do not establish a layout result. No permission root cause is proven.
+FBS display inventory works but UUIDs are nil. Identity.type7 is **not** a legacy
+LayoutMonitor type: that factory builds unknown(7). External configuration requires
+an isExternal identity; the inner display is not external. No guessed endpoint or
+publisher instance is used. App/scene→global region remains a hard blocker.
+
+## Experimental observation API (current candidate)
+
+```sh
+make duo-state-probe
+python3 Experiments/duo-state/observe.py --simulator "$BOOTED_UUID" > state.json
+python3 Experiments/duo-state/observe.py --simulator "$BOOTED_UUID" \
+  --expect-display-fingerprint "$PREVIOUS_DISPLAY_FINGERPRINT"
+```
+
+This is a standalone experiment, excluded from `bin/ipb`, normal build/install and
+release packages. It validates an explicit Booted simulator and the verified
+host/Xcode/runtime/device-type seed, brackets an owned bounded FrontBoard reader with two
+CoreDevice display queries, and never boots, activates or sends input to a device.
+No fixed pane sizes, model geometry table, inferred split mode or guessed endpoint.
+The guest helper has an8s watchdog and closes its monitors; host commands have
+independent12s bounds. Build target compiles only this simulator guest.
+
+| JSON field | Contract |
+| --- | --- |
+| `displays`, `orientation`, `activeDisplayIds` | Actual selected CoreDevice display metadata, with explicit source/backend/seed. No primary-display fallback. |
+| `displayMetadataMatchesAcrossRead` | Two selected display-metadata samples are equal. Not continuous stability, atomicity or a generation. |
+| `displayFingerprint` | SHA256 of device+seed+the selected fields listed in `DISPLAY_FIELDS`, sorted by displayID. No App/scene/window/AX/content guarantee. |
+| `expectedDisplayFingerprintMatch` | null without expectation; false returns exit6 with the current complete observation. Equality never grants action permission. |
+| `frontboard.layoutStatus/raw` | `unavailable` for actual nil layout; raw native display inventory is separate. Nil is not an empty successful layout. |
+| `sceneBinding`, `bindingFingerprint`, `targetRegion`, `touchTransform` | Always null in this candidate. No source has established them. |
+| `actionable`, `blockers` | Always false plus explicit unproven ownership/input/overlay reasons. Existing fixed-seed tools are separate; this probe grants no actions. |
+
+Exit0 means the bounded observation was collected, including explicitly unavailable
+sources. Changed expected metadata, different bracketing samples, transport/helper
+failure, missing required metadata or unsupported seed returns nonzero. Source
+failures are never converted to an actionable state. A metadata difference can
+invalidate a caller's old observation; matching endpoints cannot detect an A→B→A
+transition or an App/window movement invisible to these fields.
+
+### Candidate verification (2026-11-07)
+
+`make duo-state-probe` and three host observation-contract tests pass. Live CLI
+samples on the owned simulator prove Closed active1→Open active3 invalidates the
+old expected display fingerprint (exit6 with current JSON). A fresh matching Open
+expectation returns0 while actionable stays false and FBS layout stays unavailable.
+Device Hub's Partially Open control has a visible hinge change, but the selected
+display metadata/fingerprint remains equal to Open (exit0, still nonactionable).
+Therefore this probe does not classify fold posture or fullscreen/split mode.
+
+The official orientation setter reports landscapeLeft; the subsequent samples
+are landscapeRight again and match the earlier fingerprint. Cause is not assigned.
+This reinforces that equal samples are not continuous stability or a generation;
+no other-orientation input support is accepted from that command's rc0.
+
+The independent Codex code review found no material findings (来源：peer; main
+session arbitrates). Real Opus design discussion completed successfully; the
+separate fixed-source code review status is recorded with the final verification
+record. Initial source review found seed/provenance ambiguities: the current
+candidate records/rejects the unsupported device type and matches the full Xcode
+version lines exactly. The support-profile guard is not a pane/model geometry
+classifier. FrontBoard `layoutStatus` explicitly separates layout availability from
+its readable display inventory; ARC allocation uses the typed Objective-C family.
+Raw initial prototype faults are not protocol failures: an ARC void-return
+call was corrected, and a deprecated observer used with a modern monitor was
+removed in favor of the proven3-argument handler. Neither path remains in the
+candidate. No production fallback or legacy observer was added.
+
 ## Current result and implementation direction
 
 The strongest DDI lead is **resizable scene management**. Shipped types, launchd

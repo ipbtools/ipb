@@ -2,7 +2,19 @@
 
 ## Open items — current state (living section)
 
-**Updated 2026-11-05. This section is overwritten; dated records below are append-only.**
+**Updated 2026-11-07. This section is overwritten; dated records below are append-only.**
+
+### Dynamic Duo observation candidate (2026-11-07)
+
+A standalone simulator-only [read-only probe](duo-ddi-exploration.md) brackets live
+CoreDevice displays and bounded FBS observation. No fixed pane table or App action.
+Closed→Open changes invalidate expected display metadata; equal Open/Partially Open
+samples still cannot establish posture, App/scene ownership or input mapping.
+FBS main-display layout remains nil with an initial-timeout service log. This is a
+hard blocker for automatic App/window targeting; no guessed endpoint or same-PID
+fallback. The candidate is excluded from normal build/install/package. Native
+probe build and three host contract tests pass; full product/hardware gates are not
+implied. Separate AX recovery and PocketAgent integration tasks retain ownership.
 
 ### Duo DDI / native AX research (2026-11-05)
 
@@ -7778,3 +7790,55 @@ The AX task now owns the dedicated simulator. Raw evidence stays outside Git at
 `/Users/borealin/Documents/Codex/2026-11-05/ipb-duo-ddi-exploration/`
 (owning plists/symbols in `raw-ddi27b52/`; samples01–30, final30-preview.png).
 This research is not SMOKE_AX, a product simulator deep gate or hardware acceptance.
+
+## 2026-11-07 — Read-only dynamic Duo observation candidate
+
+**Scope/seed:** baseline main8c227a1 plus this research branch; macOS27.2/26B123,
+Xcode27.2/27B52/CoreDevice651.32, runtime24B91016s. A new owned clone
+`1F52A8E8-1857-46AD-9695-8CEEAD3B971E` was created from this task's Shutdown
+research instance8A3DA97A. The old1CA/AX/RustDesk/other simulators were not operated;
+no physical device request, resize/move or model phone round was sent.
+
+`make duo-state-probe` compiles the optional read-only guest. The two host contracts
+pass: changed/mid-read display metadata rejects preconditions without generation
+claims, and matching metadata/nil layout never yields binding/region/input authority.
+Independent Codex static review finds no material issue (来源：peer; scope four
+candidate files). Real Opus5.5 architecture advice was received, actual model
+claude-opus-5-5/exit0; its fixed-source code-review output is retained separately.
+
+Live candidate CLI:17 Closed observes active1;18 Open with Closed expectation exits6
+and expectedMatch=false;19 fresh Open expectation exits0 with expectedMatch=true,
+actionable=false and nil FBS layout.20 Partially Open has a visible host hinge change
+but the same selected display fingerprint/active3; the probe deliberately does not
+claim fold posture or split mode. Required source errors remain nonzero. The Apple
+orientation setter's16 result says landscapeLeft, but subsequent samples have
+landscapeRight; cause not assigned, and no rotation/input acceptance follows.
+
+The correct three-object FBS configuration callback returns nil in both outer and
+opened inner states. The source log states initial main-display timeout/publishing
+nil. Same simulator test/launch entitlement control also yields nil; it does not
+prove a permission cause. FBS identities/configuration bounds are readable but
+UUIDs are nil. Cache disassembly rules out treating identity.type7 as LayoutMonitor
+type and rules out the external factory for a nonexternal inner identity.
+
+DDI/CoreDevice getters identify the resizable feature and separate logical service;
+exact physical socket/envelope still unverified. Apple CLI info returns24004 for no
+active session. Its bounded observer receives noForeground→Preferences foreground,
+then intentionally exits2 on10s timeout. This proves receipt of events, not a clean
+one-shot stream teardown or arbitrary-pane control. No start/set/move was sent.
+
+Raw evidence, prototypes, correct-ABI/cache sources, actual Opus results and
+screenshots remain outside Git under
+`/Users/borealin/Documents/Codex/2026-11-07/ipb-duo-state/`.
+This is experimental observation/API evidence, not product AX/HID/media acceptance.
+
+The initial real Opus code review requests exact Xcode-seed matching and explicit
+supported device-type provenance. Those are corrected, and layoutStatus/typed ARC
+allocation clarify the same candidate without a new state mechanism. The added
+third host contract rejects wrong device type or a build-prefix lookalike before
+any display/guest request. All3 host contracts and the rebuilt guest pass. Final
+CLI21/22 retests pass stale→exit6 and matching→exit0 with layoutStatus unavailable
+and actionable false. The earlier recorded Closed metadata is re-normalized with
+the newly explicit device-type seed; no old fingerprint string is reused as if it
+had the new scope. Code review raw outputs and exact per-file hashes remain in the
+external evidence directory; no build/device acceptance is inferred from review.

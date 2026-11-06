@@ -29,9 +29,17 @@ DEVICE_LDFLAGS = \
 
 PREFIX ?= /usr/local
 
-.PHONY: all clean smoke install check-reports check-host
+.PHONY: all clean smoke install check-reports check-host duo-state-probe
 
 all: check-reports $(TARGET) $(VIDEO_TARGET) $(MIRROR_TARGET) $(MIRROR_PROBE_TARGET)
+
+# Experimental read-only simulator guest, deliberately outside all/install/packages.
+duo-state-probe: $(BUILD_DIR)/ipb-duo-state-guest
+
+$(BUILD_DIR)/ipb-duo-state-guest: Experiments/duo-state/guest.m | $(BUILD_DIR)
+	DEVELOPER_DIR="$(XCODE_PATH)/Contents/Developer" xcrun --sdk iphonesimulator clang \
+		-target arm64-apple-ios27.2-simulator -fobjc-arc -fblocks -Wall -Wextra -Werror \
+		-framework Foundation -framework UIKit $< -o $@
 
 # Every hardcoded report allocation must cover its own HID descriptor. This is
 # a build step, not a test, because the failure it catches is invisible at
