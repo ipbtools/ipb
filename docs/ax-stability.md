@@ -114,15 +114,17 @@ is not main-PID graph coverage. Health stops at the personal-profile form withou
 entering/submitting values. Notification choices are not sent. Voice Memos' old
 location card disappears before the newly authorized choice could be sent; no OS
 permission change is inferred. Compass' actual matching location card is explicitly
-accepted once. No recording, playback, pairing, purchase or login is performed.
+accepted once, followed by its separately authorized network card. No recording, playback, pairing, purchase or login is performed.
 
 The default locate comparison on the original five App states passes6/6 old/new;
 query medians fall from221–1033ms to111–166ms (about1.7–6.6x). A separate permission
 card is also6/6 each. The additional Freeform locator, preselected uniquely from
 its old-full snapshots, passes6/6 per default arm: query median1493→174ms; CLI
-wall median2.583→1.201s and max12.674→2.388s, with tails retained. Explicit core deep
-reads are cheaper in the measured states; default full remains the compatibility
-control. These successes do not demonstrate improved natural-failure success.
+wall median2.583→1.201s and max12.674→2.388s; the residual wall cost is
+unattributed and there is no tail guarantee. Explicit core deep snapshot medians are
+lower in all11 new states; this is not a uniform wall-time or maximum-latency result.
+Compass core wall median0.883s exceeds old full0.810s, and its snapshot maximum
+exceeds both full arms. Default full remains the compatibility control. These successes do not demonstrate improved natural-failure success.
 
 Settings→Calculator→read the still-running Settings explicit PID reproduces fast
 nil0/18 per arm across three re-entries; same-PID foreground controls recover.

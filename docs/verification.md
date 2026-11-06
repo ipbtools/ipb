@@ -8493,3 +8493,45 @@ and53-final-home. Raw screenshots/AX labels/values and ad hoc scripts are not co
 The12mini is restored to Home with screenshot and stableSpringBoard37 hit; all
 measurement jobs have completed. Actual Opus final interpretation review is recorded
 below after completion; no merge or release is performed.
+
+
+## 2026-11-06 — Final Opus interpretation review and clarifications
+
+Actual claude-opus-5-5 reads all six explicitly supplied metadata/plan/record/PR/delta
+files bound to139f626 (56-opus-review-binding.json). Its result is conditional ACCEPT
+for interpretation/delivery scope, with two required wording corrections: limit core
+improvement to snapshot medians, and state that residual wall tails are unattributed
+with no tail guarantee. Main applies and checks both corrections in the current plan
+and PR description; this is not a new Opus review of a later commit or full supported
+matrix/merge approval. It does not audit the full verification.md, authorization text,
+raw process evidence or the old504-call source; those remain earlier/main proof layers.
+
+All11 new deep snapshot medians are lower with core. This does not imply lower wall
+medians or maxima: Compass core wall median0.8825s exceeds old-full0.810s, and its
+snapshot maximum exceeds both full arms. The locator's12.674s wall maximum has no
+assigned cause and is not a tail guarantee; no sample is removed.
+
+Read “sole allocated device” in the preceding record as “only device operated by
+this task”:13Pro remains allocated to another concurrent task. Fitness has exactly
+one missed setup tap above Continue, followed only by a read-only hit at its actual
+Continue button and the Welcome-page cohort; no correctly targeted Continue tap is
+sent. Freeform has exactly one above-button miss, then one freshly targeted Continue
+tap before its optional iCloud Not Now action. Thus there are two coordinate misses
+total, and the earlier plural “correctly targeted actions” does not mean Fitness was
+advanced. Compass has both separately authorized location and network actions.
+TV's measured state is the empty library. Metadata privacy statements mean no private
+content is included in that sanitized file, not that all local raw screenshots were
+deleted. Raw private evidence remains outside Git under the existing retention scope.
+
+The deep-only first-arm/previous-arm strata above must not be applied to the locator.
+Freeform locate ordinal order is new,old,old,new,new,old,old,new,new,old,old,new,
+where old/new mean default CLI arms; each has6 samples. Query/wall observations and
+actual previous-arm/gap are retained in rows.json and the sanitized metadata. Consecutive
+old arms, high shared-host load and unproven native drain limit causal interpretation.
+
+CI run42190368556 on139f626 passes native build, host regressions and staged package,
+then fails while cloning homebrew/core during the existing180s brew-install deadline.
+The failed log does not demonstrate a product regression. No timeout/build/test source
+is changed; the final documentation commit receives a fresh normal CI run. The full
+physical matrix remains a separate unrun gate. Review receipts and the failed CI result
+stay in56-opus-final* /57-ci-* outside Git; final CI status is linked in PR15.
