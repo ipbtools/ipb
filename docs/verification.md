@@ -53,11 +53,16 @@ page hits a WebContent PID and fails the Safari root identity guard; old/full im
 selection was not measured. Explicit Safari PID reads expose64 native framework records
 including an AXRemoteElement. See the final dated record for separate denominators.
 
-The user requested more Apps after that run. Twelve additional landing-page
-candidates are predeclared in the current plan. Tips launches but its wireless-data
-permission card owns the foreground, so the first cell stops before any measurement.
-Home does not dismiss the card. A choice for this category of new App network prompt
-is pending; it is distinct from the earlier Stash local-network authorization.
+The user requested more Apps after that run. All12 additional candidates have now
+been attempted. The explicitly authorized WLAN & Cellular choice clears Tips' exact
+wireless-data prompt, and its content landing page is6/6 per arm in a new cohort.
+The other11 launch commands return CoreDevice10004 with0 target-App measurements.
+At least the observed Compass/iTunes screens show a separate first-use disclosure
+hosted by PDUIApp; do not treat every10004 as an App crash, absence or AX failure.
+Consent to these first-use data-use screens is pending, separate from network access.
+An isolated foreground PDUIApp diagnostic is0/6 per arm: both full profiles time out,
+while core reaches the unchanged node/depth guard and emits no partial tree. This is
+not target-App coverage or a demonstrated success-rate improvement.
 See [current plan](ax-stability.md) and the dated evidence below.
 
 ### v0.6.0 publication decision (2026-11-03)
@@ -8290,3 +8295,68 @@ No production change, new completed App measurement, supported acceptance, PR pu
 additional CI run is claimed by this checkpoint. Evidence is outside Git in the same
 0700 matrix directory:25-fresh-*,26-additional-app-plan.json /26-host-seed.json,
 27-additional-results.json,expand2-tips/,28-* and29-opus-expansion*.
+
+
+## 2026-11-06 — Additional Apps: Tips measured, first-use disclosure gates
+
+The user explicitly selected WLAN & Cellular for this round's new-App wireless-data
+prompts. The exact Tips alert is freshly checked and pressed once through the product
+alert guard, returning nativeAccepted=true. Pre/post screenshot and hit-PID checks show
+its content landing page. A new cohort, expand2-authorized-tips, preserves the earlier
+expand2-tips readiness failure with0 measurements instead of overwriting it.
+
+Tips has108 records and6/6 accepted per arm. Snapshot median/max ms are old full
+546.807/560.240, new full542.076/547.544, core135.638/175.469; CLI wall median/max s
+are1.232/1.396,1.208/1.452 and0.818/0.881. All18 pass the existing schema/profile/PID
+and cleanup validator, with0 state-invalid rows. Six adjacent new-full/core pairs have
+identical record counts and ordered-child path hashes. Core-after-core remains N0;
+these are not independent trials or a general success-rate improvement.
+
+The remaining11 new launch commands return CoreDevice10004 with0 target-App AX
+measurements: Compass, Podcasts, TV, Games, Preview, Freeform, Watch, Fitness,
+Voice Memos, Health and iTunes Store. These receipts do not prove an App crash or
+absence. Compass' captured transition shows a Welcome/Accept page; later ordinary AX
+and screenshot show Welcome to iTunes hosted byPID1336, matched to the running
+`/Applications/PDUIApp.app/PDUIApp`. The ordinary tree also retains a Weather disclosure.
+This identifies a first-use readiness gate in the observed cases; the other cases and
+historical13 launch failures are not retroactively assigned the same cause. Future
+10004 setup must inspect foreground/component/screenshots before further launches.
+
+A separate PDUIApp diagnostic uses the same real old/full/core installs,6 reads/arm,
+with no input during measurements. Both full arms are0/6, all AX type2 attribute52
+timeouts; core is0/6, all `AX snapshot limit reached; no partial tree emitted`.
+The core guard rejects depth>32 or a traversal beyond512 records; the exact bound
+responsible and graph size are unknown. Native request maxDepth48 is unchanged.
+The full timeout does not establish that a returned full tree would exceed that guard,
+and cannot be attributed to visibility computation alone. No partial tree is accepted.
+
+Foreground PDUIApp and the iTunes page are checked only at cohort boundaries;
+unchanged foreground during every read is an inference, not per-read proof. The
+error receipts do not report cleanup, so error-path cleanup and native drain are
+unverified. Wall median/max s are old5.532/7.502, new-full5.508/7.349 and core4.717/4.826;
+all are failed calls, not successful latency measurements. The single earlier full
+preflight timeout is excluded. This system-component row is not target-App coverage.
+
+Stopping this diagnostic at6/arm rather than the earlier30/arm foreground policy is
+a proposed data-after-sampling revision, based on the returned core tree hitting an
+unchanged acceptance guard, not on a reliability bound from0/6. Opus5.5's source-level
+method review permits this bounded revision; its first pass did not locate the external
+files, so the numerical evidence audit was explicitly rerun with absolute paths
+(33-opus-pdui* /35-opus-evidence-correction*, audit pending at this checkpoint).
+No budget/deadline, deduplication, action guard or product source is changed.
+
+Only one additional target App has completed: Tips, making10 target Apps across35
+attempted candidates so far. There are36 new measurements:18 accepted Tips reads and
+18 failed PDUI reads. Old504 plus new36 yields540 calls/431 accepted for bookkeeping
+only, not a pooled reliability rate. The metadata-only extraction peer supplied this
+separate increment (来源：peer), and main-session checks confirmed key counts/errors.
+Its sanitized-expansion-results.json leaves the old final summary unchanged.
+
+The user has been asked whether to accept the separate first-use data-use disclosures
+for the pending system Apps. No Accept & Continue or Close action was sent; network
+authorization does not imply this consent, login, purchases or independent TCC grants.
+Current exact button/frame was read only for a reviewable setup action (34-*).
+Further target-App sampling is pending that choice. Evidence stays in the same0700
+external matrix directory, including30-network-authorization.json,expand2-setup/,
+31-*/32-*,pdui-consent-discovery/,33-*/34-* and the separate sanitized increment.
+This checkpoint contains no PR push, new CI run, merge or release.

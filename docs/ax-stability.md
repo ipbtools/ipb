@@ -126,16 +126,26 @@ and iTunes Store. They add landing-page coverage without replacing any prior ref
 Use the same6/arm controls, guards and failure denominators; do not start recording,
 playback, purchases or authentication. The first Tips launch is blocked by its wireless-
 data card before measurement. Home leaves that card visible. No permission button was
-explicitly selected and the OS setting was not queried. The user's choice for this
-category is pending; earlier Stash local-network authorization does not cover it.
+explicitly selected at that checkpoint and the OS setting was not queried. The user
+then explicitly chose WLAN & Cellular for this round's new App wireless-data prompts.
+Tips' exact alert was freshly validated and pressed once with nativeAccepted=true;
+the resulting screenshot/hit confirms Tips foreground. Earlier Stash local-network
+authorization remains a separate category.
 Once authorized, record the wireless-data title/button/receipt per App; other privacy
 categories still stop. Use a new cohort after setup changes even when the old cell
 has no complete marker. Inspect every summary and screenshot: rc0 does not imply all
 measurements passed or an unobscured content page. Retain the fixed6/arm discovery
 counts and select separate confirmation on a valid foreground failure, rather than
 retrying until success. This follow-up remains pinned to the manifests above and
-excludes13Pro. Twelve candidates are selected; Tips is setup-blocked,11 are unattempted,
-and no new App measurement is complete yet.
+excludes13Pro. All12 additional candidates have been attempted. Tips' content landing
+page passes6/6 per arm in a fresh cohort, retaining its earlier0-attempt gate.
+The other11 have CoreDevice10004 receipts and0 target-App measurements. Compass and
+current iTunes screenshots reveal first-use disclosure screens hosted by PDUIApp;
+do not infer every10004 has this cause. Further setup must inspect the actual
+foreground/first-use gate before moving on, rather than blindly accumulating launches.
+User consent to this separate data-use screen category is pending. An independent
+system-component diagnostic finds both full profiles0/6 (type2 timeout) and core0/6
+(node/depth guard); no partial tree or target-App success is accepted.
 
 The permission blocker is resolved. The user authorized Allow, but the guarded action
 found no visible alert and sent nothing; a screenshot then confirmed the card had
