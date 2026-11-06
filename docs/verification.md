@@ -36,7 +36,12 @@ Delivery is [PR#15](https://github.com/ipbtools/ipb/pull/15).
 [CI run42077704751](https://github.com/ipbtools/ipb/actions/runs/42077704751) passes
 native build, host regressions, package and precompiled Homebrew install/test/hash checks;
 the first run's homebrew/core clone timeout does not recur. The supported physical
-HID/media/AX matrix remains unrun; no physical operation is part of this task.
+HID/media/AX matrix remains unrun. The user subsequently requested physical App-matrix
+validation and selected12mini. Six App states plus the permission-overlay state each
+pass6/6 per arm (126 measured reads), showing lower core latency but no observed natural
+nil or success-rate improvement. Startup failures and auth/permission gates are recorded
+separately. User choice on a persistent Stash local-network permission card is pending
+before more states/default-locate/input-workload comparisons can continue.
 See [current plan](ax-stability.md) and the dated evidence below.
 
 ### v0.6.0 publication decision (2026-11-03)
@@ -8037,3 +8042,59 @@ result; production/tests/build configuration remain identical to the accepted so
 Later automatic CI on this documentation is tracked on PR15. Default full nil,
 oversized graphs, changed scroll identities and supported physical acceptance remain
 open. No local Homebrew install, physical operation, merge or release occurred.
+
+
+## 2026-11-06 — Expanded12mini AX matrix, first physical checkpoint
+
+The user requested a broader App/state matrix and explicitly chose12mini first.
+Target is wired CoreDevice1D533177-5153-5A0C-9102-8D0A8ADDAEFB /iPhone13,1,
+iOS27.0/24A437, macOS27.2/26B123, Xcode27.2/27B52, CoreDevice651.32.
+13Pro belongs to the concurrent PocketAgent latency task and was not operated.
+Shared-host load is recorded per attempt; no isolated-host timing claim is made.
+
+Before main8c227a1 uses its verbatim wrapper/AX backend in a private temporary prefix;
+after58e5c32 uses its checksum-verified development package. Native binaries and pinned
+AX dependencies are shared/unchanged. The three arms are old default full, new default
+full, and new opt-in core; the last comparison changes requested visibility semantics,
+so it is not a claim of improved default deep behavior. Source hashes are in arms.json.
+
+18 inventory candidates plus5 additional Apps were predeclared, without replacing
+failed cells. Each valid cell uses6 attempts/arm in six rotated permutations, fresh
+PID inventory and one-shot USB/DTX sessions, fixed3s gaps with actual gaps/previous arm
+recorded, pre/post screenshot+lock+hit-PID checks and between-block lock checks. The
+same production compact_observe validator checks all successful deep responses.
+Invalid states would remain separate without replacement; no failed query was retried.
+Opus5.5 reviewed the design with three required state/order/confirmation corrections,
+which were applied; the peer statically checked both execution paths (来源：peer).
+
+Completed App states are Settings root list, Calculator keypad, Safari tab overview,
+AppStore onboarding, Maps landing and PocketAgent diagnostics. Each arm is6/6 in every
+cell. A separate existing local-network permission overlay, targeting SpringBoard37
+via its button area rather than embedded map PID17026, is also6/6 per arm. Thus126
+measured reads are accepted and no natural nil, semantic timeout or graph-budget
+failure appears in this checkpoint. This does not estimate general reliability;
+Even under independent-trial assumptions,0/6 failures still permits a one-sided95%
+upper bound of about39%; shared native work can correlate these observations.
+
+Files, Calendar, Clock, Notes, Reminders, Weather, Books, Shortcuts, Music, Stocks and
+Translate fail activation with CoreDevice10004 before a PID is obtained; cause unknown,
+zero AX attempts, not successful reads or native nils. Bitwarden's first state shows
+FaceID and hit-test refusal8. Stash/LocalDevVPN are covered by a Stash local-network
+permission request: centre hit selects CoreLocationMapLNPromptPlugin17026, while
+Allow/Don’t Allow hit points select SpringBoard37. These readiness gates are retained
+and excluded from within-state AX denominators, not hidden as successful coverage.
+
+The permission card persists after Home and termination of only this task's new
+Stash main17023 and new Intents17025/Widget17027 extensions; their absence from the
+initial inventory was checked. No privacy button or authentication was selected.
+The user was asked how to resolve it. Phone/Contacts/Photos, old/new default locate,
+secondary/Web/search and read-only whole-tree3002 sampling remain pending. No message-sending,
+text-entry or clipboard command ran; the standalone3002 probe has not run yet.
+
+Evidence remains in the0700 external directory
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-app-matrix/`: arms.json,
+00-opus-matrix*, broad-* per-attempt receipts/stdout/stderr/screenshots/rows,
+overlay-network-permission/, interim-results.json,03-* setup/cleanup evidence and
+04-locate-plan.json. No personal AX bodies/screenshots are committed. This is a
+partial physical AX checkpoint, not full supported HID/media acceptance or proof of
+improved natural-failure success rate. No production source or default install changed.
