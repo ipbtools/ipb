@@ -118,9 +118,14 @@ matrix cell result, not silently substituted by another App or counted as a nati
 Three arms use real isolated CLI installs: main8c227a1 full (before),58e5c32 full
 (compatibility control),58e5c32 explicit core (opt-in after). Each App/state gets6
 attempts per arm, ordered by the six permutations of these arms (18 total), with a
-fixed3s inter-attempt gap and fresh one-shot USB/DTX connection. Confirm PID via fresh
-process inventory before each attempt; record foreground/setup screenshots around the
-cell. Spacing is not a native-drain guarantee. Do not retry failed measurements.
+fixed3s inter-attempt gap and fresh one-shot USB/DTX connection. Rotate the first
+permutation by App ordinal; record ordinal, previous arm and actual process-exit gap.
+Confirm PID via fresh process inventory before each attempt. Use screenshots, lock
+state and centre hit-PID checks before/after each cell, plus non-AX lock state between
+permutation blocks. A failed state check or changed PID marks all attempts since the
+last good foreground check state-invalid, retained separately without replacement or
+inclusion in within-state success denominators. Stop on lock. Spacing is not a
+native-drain guarantee; report carryover strata and first-after-setup separately. Do not retry failed measurements.
 Store stdout/stderr, exit/status, wall time and query/snapshot timing outside Git.
 
 Accepted success requires rc0 plus a validated complete schema2 tree, matching device
@@ -132,13 +137,20 @@ No aggregate across heterogeneous Apps is a universal reliability estimate.
 
 Then add observed reachable search/keyboard, secondary-page, Web-content and overlay
 states using reversible navigation without sending messages or editing user content.
-Natural failure cells receive fixed additional30 attempts per arm and three independent
-state re-entries when reachable; if a state cannot be recreated, report that explicitly.
+A natural failure in any arm symmetrically selects a cell for a separate, pre-fixed
+30 attempts per arm and three independent state re-entries (rotating the first arm).
+Do not pool selection-phase observations into confirmation rates; if a state cannot be recreated, report that explicitly.
 Read-only old/new locate samples use actual unique observed selectors on representative
 states. Whole-tree3002 comparison requires a separately labelled read-only physical
 experiment; product input is not a read-only snapshot command and is not auto-replayed.
 
 Opus reviews the matrix before the broad run and the actual findings afterward. Reuse
 the current tested install; no new product test infrastructure or device app is added.
+Use the existing compact_observe validator uniformly for all successful observations.
+Old full versus new full is a compatibility/noise control, old full versus opt-in core
+is a requested-attribute tradeoff, and only old/new locate is the same-default-path
+before/after comparison. Report graph-count/path drift on adjacent successful samples.
+Activate with devicectl process launch --activate without --terminate-existing.
+Record shared-host load; the13Pro task can affect host timing even on a different phone.
 Scripts and detailed personal AX/screenshot evidence stay outside Git; this plan and
 verification.md retain only condensed, verified findings and artefact references.
