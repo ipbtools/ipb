@@ -146,6 +146,13 @@ foreground/first-use gate before moving on, rather than blindly accumulating lau
 User consent to this separate data-use screen category is pending. An independent
 system-component diagnostic finds both full profiles0/6 (type2 timeout) and core0/6
 (node/depth guard); no partial tree or target-App success is accepted.
+Opus accepts a bounded data-after-sampling revision: the core read received a tree
+which hit the unchanged guard, so its diagnostic stops at6/arm. Full remains0/12
+timeouts, not a structural finding; it is not expanded because this row is outside
+target-App coverage and makes no reliability claim. The earlier target-App confirmation
+policy stays unchanged. Cohort-boundary foreground checks do not prove every read's
+foreground stability. Any subsequent10004 now stops for a fresh foreground check
+and PID/bundle/screenshot classification before another App or cohort is started.
 
 The permission blocker is resolved. The user authorized Allow, but the guarded action
 found no visible alert and sent nothing; a screenshot then confirmed the card had

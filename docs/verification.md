@@ -8360,3 +8360,27 @@ Further target-App sampling is pending that choice. Evidence stays in the same07
 external matrix directory, including30-network-authorization.json,expand2-setup/,
 31-*/32-*,pdui-consent-discovery/,33-*/34-* and the separate sanitized increment.
 This checkpoint contains no PR push, new CI run, merge or release.
+
+
+## 2026-11-06 — PDUI diagnostic evidence audit and bounded sampling revision
+
+Opus5.5's35-opus-evidence-correction review uses absolute paths and checks the
+sanitized increment and permission preparation code. It accepts the bounded
+interpretation with corrections; it does not independently read raw receipts.
+The returned tree in core reads triggers the unchanged guard, which justifies ending
+that diagnostic at6/arm. The full arms are0/12 deadline timeouts, not structural
+failures; they are not expanded because this PDUI row is outside target-App coverage
+and supports no reliability estimate. The original target-App confirmation policy
+remains unchanged. Only cohort-boundary foreground is verified; per-read stability
+is an inference. Error-path cleanup and native drain remain unverified.
+
+Excluding this new18-call PDUI diagnostic, bookkeeping is old504 plus18 Tips calls,
+522 calls/431 accepted; this still includes the heterogeneous prior categories and
+is not a pooled success rate. The all-call540/431 figure above includes the separate
+PDUI diagnostic. The external increment now marks the bounded sampling revision
+accepted, while first-use user consent remains pending.
+
+The external setup helper now reads the actual foreground after10004 and stops for
+PID/bundle/screenshot classification before another App or cohort. This changes no
+historical classification or product code. Accept & Continue remains a separately
+pending authorization, and the network authorization file is not reused for it.
