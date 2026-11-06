@@ -18,7 +18,8 @@ implied. Separate AX recovery and PocketAgent integration tasks retain ownership
 PR16's first two CI runs passed native/host/package gates but timed out while
 cloning homebrew/core before ipb installation. The minimal correction clears the
 forced non-API flag; real install/test/hash checks and deadlines remain intact.
-An actual successful install gate is still required; see the dated record below.
+CI42259214280 at efb311d now passes all gates, including the actual Homebrew
+install/test/product hashes. Hardware acceptance remains separate.
 
 ### Duo DDI / native AX research (2026-11-05)
 
@@ -7883,3 +7884,8 @@ the environment step, but that step succeeds in both runs. Its source pipeline
 can close stdout early; it is not evidence for the later Homebrew timeout and
 remains an independent pre-existing diagnostic, without a change in this PR.
 Raw logs stay outside Git under the existing2026-11-07 evidence directory.
+
+Follow-up: [CI42259214280](https://github.com/ipbtools/ipb/actions/runs/42259214280)
+at efb311d completes successfully, including actual Homebrew install/test/product
+hashes and package upload. This closes the core-checkout CI blocker without a
+deadline or success-condition change; it adds no device acceptance.

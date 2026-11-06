@@ -124,7 +124,8 @@ the actual Homebrew installation gate: forcing `HOMEBREW_NO_INSTALL_FROM_API`
 made `brew install` clone homebrew/core and hit the existing180s deadline before
 installing ipb. The minimal CI correction clears that flag, including inherited
 values. It keeps the fully qualified temporary tap/local archive, real install/test,
-file hashes, original deadlines and CI-only boundary; the next CI must verify it.
+file hashes, original deadlines and CI-only boundary. CI42259214280 at efb311d
+passes all gates, including the real install/test/product hashes and package upload.
 The environment step's separate `xcodebuild | head` Broken pipe was nonblocking in
 both runs and is recorded without an environment-script change in this PR.
 
