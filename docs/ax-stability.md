@@ -158,3 +158,35 @@ target-App success nor a success-rate improvement.
 Actual Opus reviews cover the implementation, matrix method and bounded interpretation;
 source/host/package CI, physical AX evidence and the full supported HID/media gate
 remain separate proof layers. No merge or release is part of this follow-up.
+
+## Follow-up: background Settings nil (2026-11-06)
+
+The user explicitly requested a real acquisition-failure investigation/fix, starting
+from the stable Settings→Calculator→explicit Settings PID reproduction. Current head
+is28582fc; the first complete source baseline58e5c32 stays fixed. Only12mini is
+operated; the13Pro thread is freshly confirmed active on its own device.
+
+Fresh passive wire capture confirms type1 still returns the same application root
+identity, while background type2/attribute52 replies in6–7ms with error0 and actual
+keyed-archive resultData UID0. Full/core both fail. Ordinary type5 returns error17
+and only a few synthetic/basic fields; no valid ordinary graph is recovered. A single
+DTX session spanning foreground129-node snapshot→Calculator→background type5/type2
+→Settings again gives the same failures and then129 nodes. A new root on that same
+connection also fails in the background. clientType0/2 research controls agree.
+These exclude a host decoder/selection explanation and connection retention as the
+recovery, without proving the Apple process-suspension predicate was true.
+
+Matching-product24A437 APT maps underlying signed status-25215 to error17. AXRuntime
+returns that status when the required AX server port is unavailable; a suspended-PID
+gate and normal lookup failure can both produce no port. The requesting-client override
+and allows-suspended-server byte are separate in the inspected code. No supported
+remote setter or successful original-position background-read path is established.
+
+Next decision is user-owned: whether an explicit activation recovery may bring the
+target App to the foreground. Existing ui stays read-only, and activation must not be
+reported as background-read success. The proposed separate activate command must
+preserve the existing process; launch currently terminates it. No new production
+change is made pending this behavior choice and Opus's evidence discussion.
+
+Detailed raw archives, probes and sanitized findings remain outside Git under
+`/Users/borealin/Documents/Codex/2026-11-06/ipb-ax-background-nil/` (0700).

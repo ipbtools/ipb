@@ -64,6 +64,14 @@ guard) outside target-App coverage. No natural-failure success-rate improvement 
 pooled reliability rate is established. See [current plan](ax-stability.md) and the
 latest dated record for exact states, controls, topology drift and remaining gaps.
 
+The background-nil follow-up now has fresh wire evidence: the same Settings root is
+returned, then type2 replies error0/resultData UID0 in6–7ms. Ordinary type5 returns
+error17 (APT maps underlying AXRuntime no-port status-25215). The same-DTX foreground
+→background→foreground experiment and clientType0/2 control reproduce the refusal.
+A suspended-PID gate is one static no-port path, not a proven runtime predicate.
+No original-position background read succeeds. Explicit nonterminating activation as
+a recovery is awaiting the user's behavior choice; ui remains read-only.
+
 ### v0.6.0 publication decision (2026-11-03)
 
 The maintainer explicitly decided: “实机先不测了，让 Opus 5.5 review 下这两个 PR，
@@ -8535,3 +8543,60 @@ The failed log does not demonstrate a product regression. No timeout/build/test 
 is changed; the final documentation commit receives a fresh normal CI run. The full
 physical matrix remains a separate unrun gate. Review receipts and the failed CI result
 stay in56-opus-final* /57-ci-* outside Git; final CI status is linked in PR15.
+
+
+## 2026-11-06 — Background Settings nil: wire and AX server-port boundary
+
+The user requested further acquisition-failure diagnosis and repair. Source stays
+58e5c32 at documentation head28582fc. Host macOS27.2/26B123, Xcode27.2/27B52,
+CoreDevice651.32; device12mini/iPhone13,1/iOS27.0/24A437, explicit CoreDevice
+UUID1D533177-5153-5A0C-9102-8D0A8ADDAEFB. The active PocketAgent task remains
+on13Pro; only12mini is operated. Initial screenshot/hit confirms Home/SpringBoard37.
+
+An external passive request/decode tap preserves the hash-verified product backend,
+all options and decoder. Settings PID7976 is129 nodes with both full/core; after
+nonterminating Calculator activation, explicit Settings reads fail in both profiles.
+Raw type1 replies still provide the same PID/application flag/objectID. Raw type2
+replies have attribute52, matching associated identity, error0, and resultData pointing
+to archive UID0 (not a missing key or host decode substitution), in6–7ms. The whole
+CLI takes0.764/0.817s. Ordinary type5 returns error17 with only fields45/27/30/51;
+it is rejected and no graph is accepted. Calculator foreground is checked before/after.
+Returning Settings to foreground retains PID7976/root identity and restores129 nodes.
+
+A separate external experiment keeps one DTX connection and root across foreground
+full129→Calculator foreground hit→type5 error17→same-root type2 nil→fresh-root
+type2 nil→Settings foreground hit→same-root full129. The final restored schema/profile
+and closed connection/tunnel pass compact_observe. Its duration includes setup and is
+not a product latency sample. A separate isolated clientType2 research override,
+based on shipped Xcode client metadata, leaves deep nil/ordinary17 unchanged versus
+clientType0; this is not a proposed production fix. These are layered diagnostics,
+not independent reliability trials or additional successes in the earlier matrix.
+
+Static evidence uses the actual product's iPhone13,1 27.0 (24A437)/Symbols frameworks:
+APT UUID AA0429D2-50DA-3B83-9C2A-A8D9E752581D, AXRuntime
+6A0D8F1C-E84D-3040-90DC-881A282774AF and UIAccessibility
+A6B3716C-8C01-3104-87F6-18F7F7B1D819.14,2 files share UUIDs but differ in hashes
+and some VM addresses, so13,1 paths are rechecked rather than reusing addresses.
+APT's multiple-attribute status table maps signed-25215 (0xffff9d81) to17. AXRuntime
+CopyAttribute no-port branch returns-0x627f; __AXGetPortFromCache can return zero
+when the allows-suspended byte is false and its PID-suspended predicate is true, or
+when ordinary lookup fails. Thus no-port is supported, but the exact runtime cause
+and OS-process suspension are not established. Client-type override uses a separate
+global from __AXSetAllowsSuspendedAppServer; no wire setter is established. Static
+extraction is 来源：peer; main checks key branch evidence and all live wire observations.
+
+Actual Opus5.5's first discussion independently requests the ordinary and same-session
+controls; they are now executed. A follow-up discussion receives sanitized findings
+and the bounded static evidence. No original-position background acquisition or
+production repair is claimed. The user is deciding whether recovery may explicitly
+activate an App; current ui must not silently activate, replay an action or emit a
+cached/partial tree as success. Existing launch terminates a running instance and is
+not a same-PID recovery substitute. Production, timeouts, graph budgets and guards
+remain unchanged at this checkpoint.
+
+Evidence:0700 directory /Users/borealin/Documents/Codex/2026-11-06/ipb-ax-background-nil/,
+01-opus-*,02/03 host/device readiness,04-repro raw archives/summary,06-same-session,
+07 AXRuntime disassembly,08 client-type control,09 sanitized layer results,10-opus-*,
+and peer-* binary hashes/mappings. Raw user AX/screenshot data and ad hoc probes are
+not committed. This record does not supersede prior background refusal counts or
+prove full supported HID/media acceptance.
