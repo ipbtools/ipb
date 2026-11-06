@@ -118,6 +118,15 @@ verification.md retain only condensed, verified findings and artefact references
 
 ## Physical findings and remaining coverage
 
+The user requested another expansion after the completed23-candidate run. A fresh
+12mini all-App inventory still contains76 entries; the default developer-only list
+contains four and is not the all-App inventory. The next12 candidates are Tips,
+Compass, Podcasts, TV, Games, Preview, Freeform, Watch, Fitness, Voice Memos, Health
+and iTunes Store. They add landing-page coverage without replacing any prior refusal.
+Use the same6/arm controls, guards and failure denominators; do not start recording,
+playback, purchases, authentication or answer new privacy choices. This follow-up
+remains pinned to the before/after manifests above and excludes13Pro. Results pending.
+
 The permission blocker is resolved. The user authorized Allow, but the guarded action
 found no visible alert and sent nothing; a screenshot then confirmed the card had
 already disappeared. This does not prove that this task changed the OS permission.
